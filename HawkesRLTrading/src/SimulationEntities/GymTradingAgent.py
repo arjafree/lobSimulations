@@ -57,7 +57,7 @@ class RandomGymTradingAgent(GymTradingAgent):
         deltaPNL=self.statelog[-1][2] - self.statelog[-2][2]
         return deltaPNL - penalty
 
-class TWAPTradingAgent(GymTradingAgent):
+class TWAPGymTradingAgent(GymTradingAgent):
     def __init__(self, seed, log_events:bool, log_to_file:bool, strategy:str, Inventory:Optional[Dict[str, Any]], cash:int, action_freq:float, total_order_size:int, total_time:int, window_size:int, side:str, order_target:str, on_trade:bool = True):
         if side=="sell": assert Inventory[order_target] >= total_order_size, "Not enough volume in inventory to execute sell order"
         assert total_order_size%window_size == 0, f"Order size {total_order_size} cannot be executed with window size {window_size}"
