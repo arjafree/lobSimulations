@@ -4,7 +4,7 @@ from scipy.optimize import curve_fit
 from scipy import interpolate
 import matplotlib.pyplot as plt
 
-data = np.load("/Users/alirazajafree/researchprojects/Training Results/slippages/train_RLAgent_vs_TWAP_standardised_updatedslippagegraphs_profit.npy")
+data = np.load('/Users/alirazajafree/researchprojects/Training Results/slippages/Outputfile/single_runs/test_episode_buy_profit.npy')
 
 
 file_pattern = "/Users/alirazajafree/30JuneCopy/Market Impact/Price path/TWAP/*.npy"
@@ -90,7 +90,6 @@ def getSharpeNoEpisodeBoundaries(data, window_size=100):
     print(f"Single Episode Ann_sharpe: {ann_sharpe}")
     
     return sharpe, ann_sharpe
-
 
 def getSharpe():
     arr = data
@@ -239,8 +238,6 @@ def getSharpeWithTWAPSplit():
         'with_twap_sell_ann_sharpe': with_twap_sell_ann_sharpe
     }
 
-# Call the updated function
-results = getSharpeWithTWAPSplit()
 
 
 
@@ -917,4 +914,4 @@ def price_quantity_graph_predecay_mortised_starting_at_0():
 # getSharpeNoEpisodeBoundaries(data)
 
 # aggregatePricePaths_decay_fitted_propogatormodel()
-getSharpe()
+# getSharpe()

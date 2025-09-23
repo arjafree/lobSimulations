@@ -11,7 +11,7 @@ model_dir = '/home/ajafree/twap_testing_final/vs_untrainedRL/model'
 # log_dir = '/Users/alirazajafree/researchprojects/logs'
 # model_dir = '/Users/alirazajafree/researchprojects/models/icrl_ppo_model_symmetric'
 
-label = 'test_episode_buy'
+label = 'test_episodes_buy'
 layer_widths=128
 n_layers=3
 # layer_widths=512
@@ -157,8 +157,11 @@ inventory_without_twap = []
 inventory_with_twap_sell = []
 inventory_with_twap_buy = []
 
+sell_slippage = []
+buy_slippage = []
+
 twap_side = "buy"
-for episode in range(1):
+for episode in range(10):
     kwargs["GymTradingAgent"][1]["Inventory"] = {"INTC": 500}
     kwargs["GymTradingAgent"][1]["cash"] = 1000000
     kwargs["GymTradingAgent"][1]["side"] = twap_side
@@ -246,7 +249,7 @@ for episode in range(1):
                             # Slippage: (actual - benchmark) / benchmark
                             slippage = (total_earned - benchmark_earned) / benchmark_earned
                             
-                            np.save(log_dir+"sell_slippage.npy", [slippage])
+                            # np.save(log_dir+"sell_slippage.npy", [slippage])
                             # print(f"SELL - Executed: {total_executed}, Earned: {total_earned}, Benchmark: {benchmark_earned}, Slippage: {slippage}")
                     elif agent.side == "buy":
                             # TWAP started with 500 shares, calculate how many were bought
@@ -258,7 +261,7 @@ for episode in range(1):
                                 benchmark_paid = total_executed * starting_midprice
                                 # Slippage: (actual - benchmark) / benchmark
                                 slippage = (total_paid - benchmark_paid) / benchmark_paid
-                                np.save(log_dir+"buy_slippage.npy", [slippage])
+                                # np.save(log_dir+"buy_slippage.npy", [slippage])
                 
             else:
                 action_num+=1
@@ -351,7 +354,12 @@ for episode in range(1):
             print(agent.current_time)
             print(f"ACTION DONE{action_num}")
             
-            
+    if twap_side == "buy":
+        buy_slippage.append(slippage)
+        np.save(log_dir+"buyslippage.npy", np.array(buy_slippage))
+    else:
+        sell_slippage.append(slippage)
+        np.save(log_dir+"sellslippage.npy", np.array(sell_slippage))
     if termination:
         print("Termination condition reached.")
     elif truncation:
