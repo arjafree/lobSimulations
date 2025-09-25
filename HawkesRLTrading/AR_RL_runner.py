@@ -6,12 +6,12 @@ from HawkesRLTrading.src.Envs.HawkesRLTradingEnv import *
 
 import torch
 
-log_dir = '/home/ajafree/'
-model_dir = '/home/ajafree/twap_testing_final/vs_untrainedRL/model'
+log_dir = '/home/ajafree/RL_alone'
+model_dir = '/home/ajafree/RL_alone/model'
 # log_dir = '/Users/alirazajafree/researchprojects/logs'
 # model_dir = '/Users/alirazajafree/researchprojects/models/icrl_ppo_model_symmetric'
 
-label = 'test_episodes_buy'
+label = 'test_episodes_RL_alone'
 layer_widths=128
 n_layers=3
 # layer_widths=512
@@ -91,20 +91,20 @@ kwargs={
                          'start_trading_lag': 100,
                          "wake_on_MO": True,
                          "wake_on_Spread": True}
-                         ,
-                         {"cash":100,
-                          "cashlimit": 1000000000,
-                          "strategy": "TWAP",
-                          "on_trade":False,
-                          "total_order_size":300,
-                          "order_target":"INTC",
-                          "total_time":400,
-                          "window_size":50, #window size, measured in seconds
-                          "action_freq":1,
-                          "Inventory": {"INTC":500},
-                          'start_trading_lag': 100,
-                          "wake_on_MO": False,
-                          "wake_on_Spread": False}
+                        #  ,
+                        #  {"cash":100,
+                        #   "cashlimit": 1000000000,
+                        #   "strategy": "TWAP",
+                        #   "on_trade":False,
+                        #   "total_order_size":300,
+                        #   "order_target":"INTC",
+                        #   "total_time":400,
+                        #   "window_size":50, #window size, measured in seconds
+                        #   "action_freq":1,
+                        #   "Inventory": {"INTC":500},
+                        #   'start_trading_lag': 100,
+                        #   "wake_on_MO": False,
+                        #   "wake_on_Spread": False}
                           ],
     "Exchange": {"symbol": "INTC",
                  "ticksize":0.01,
@@ -148,31 +148,31 @@ cashs:Dict[int, List] = {}
 inventories:Dict[int, List] = {}
 actionss:Dict[int, List] = {}
 start_midprices = []
-twap_agent_executions_by_episode:Dict[int, List] = {}
+# twap_agent_executions_by_episode:Dict[int, List] = {}
 RLagentID = 1
 
 # start_times = np.load("/home/ajafree/twap_testing_final/start_times.npy")
 
-inventory_without_twap = []
-inventory_with_twap_sell = []
-inventory_with_twap_buy = []
+# inventory_without_twap = []
+# inventory_with_twap_sell = []
+# inventory_with_twap_buy = []
 
-sell_slippage = []
-buy_slippage = []
+# sell_slippage = []
+# buy_slippage = []
 
-twap_side = "buy"
+# twap_side = "buy"
 for episode in range(10):
-    kwargs["GymTradingAgent"][1]["Inventory"] = {"INTC": 500}
-    kwargs["GymTradingAgent"][1]["cash"] = 1000000
-    kwargs["GymTradingAgent"][1]["side"] = twap_side
-    starting_midprice = 0
-    new_midprice = True
+    # kwargs["GymTradingAgent"][1]["Inventory"] = {"INTC": 500}
+    # kwargs["GymTradingAgent"][1]["cash"] = 1000000
+    # kwargs["GymTradingAgent"][1]["side"] = twap_side
+    # starting_midprice = 0
+    # new_midprice = True
     # RLagentInstance.TWAPPresent = False
     # twap_time = start_times[episode]
-    twap_time = 250
+    # twap_time = 250
     # RLagentInstance.TWAPPresent = -1 if twap_side == "sell" else 1 #comment out for non adversarial agent
-    kwargs["GymTradingAgent"][1]["start_trading_lag"] = twap_time
-    twap_agent_executions_by_episode[episode] = []
+    # kwargs["GymTradingAgent"][1]["start_trading_lag"] = twap_time
+    # twap_agent_executions_by_episode[episode] = []
     i = 0
     action_num = 0
     env=tradingEnv(stop_time=400, wall_time_limit=23400, **kwargs)
@@ -199,9 +199,9 @@ for episode in range(10):
         AgentsIDs=[k for k,v in Simstate["Infos"].items() if v==True]
         print(f"Agents with IDs {AgentsIDs} have an action available")
         agents:List[GymTradingAgent] = [env.getAgent(ID=agentid) for agentid in AgentsIDs]
-        if isinstance(RLagentInstance, AdversarialPPOAgent):
-            if(Simstate['TimeCode'] > twap_time) and not RLagentInstance.TWAPPresent:
-                RLagentInstance.TWAPPresent = -1 if twap_side == 'sell' else 1
+        # if isinstance(RLagentInstance, AdversarialPPOAgent):
+        #     if(Simstate['TimeCode'] > twap_time) and not RLagentInstance.TWAPPresent:
+        #         RLagentInstance.TWAPPresent = -1 if twap_side == 'sell' else 1
         
         # action:list[Tuple] = []
         for agent in agents:
@@ -228,12 +228,12 @@ for episode in range(10):
 
                 diff = abs(inventories[agent.id][-1] - prev_inventory)
 
-                if(diff != 0):
-                    #inventory has changed, order has gone through
-                    if twap_side == 'sell':
-                        twap_agent_executions_by_episode[episode].append((observationsDict.get(agent.id, {}).get('LOB0', '').get('Bid_L1')[0], diff, twap_side))
-                    else:
-                        twap_agent_executions_by_episode[episode].append((observationsDict.get(agent.id, {}).get('LOB0', '').get('Ask_L1')[0], diff, twap_side))
+                # if(diff != 0):
+                #     #inventory has changed, order has gone through
+                #     if twap_side == 'sell':
+                #         twap_agent_executions_by_episode[episode].append((observationsDict.get(agent.id, {}).get('LOB0', '').get('Bid_L1')[0], diff, twap_side))
+                #     else:
+                #         twap_agent_executions_by_episode[episode].append((observationsDict.get(agent.id, {}).get('LOB0', '').get('Ask_L1')[0], diff, twap_side))
 
 
                 prev_inventory = observations['Inventory']
@@ -270,13 +270,13 @@ for episode in range(10):
                 action = (agent.id, (agentAction[0],1))
                 observations_prev = observationsDict[agent.id].copy() if i != 0 else observations.copy()
                 Simstate, observations, termination, truncation=env.step(action=action) #do not try and use this data before this line in the loop
-                if(Simstate["TimeCode"] > twap_time):
-                    if twap_side == "sell":
-                        inventory_with_twap_sell.append(observations["Inventory"])
-                    else:
-                        inventory_with_twap_buy.append(observations["Inventory"])
-                else:
-                    inventory_without_twap.append(observations["Inventory"])
+                # if(Simstate["TimeCode"] > twap_time):
+                #     if twap_side == "sell":
+                #         inventory_with_twap_sell.append(observations["Inventory"])
+                #     else:
+                #         inventory_with_twap_buy.append(observations["Inventory"])
+                # else:
+                #     inventory_without_twap.append(observations["Inventory"])
                 observationsDict.update({agent.id:observations})
                 logger.debug(f"\n Agent: {agent.id}\n Simstate: {Simstate}\nObservations: {observations}\nTermination: {termination}\nTruncation: {truncation}")
                 cashs.update({agent.id:cashs.get(agent.id, [])+[observations['Cash']]})
@@ -354,12 +354,12 @@ for episode in range(10):
             print(agent.current_time)
             print(f"ACTION DONE{action_num}")
             
-    if twap_side == "buy":
-        buy_slippage.append(slippage)
-        np.save(log_dir+"buyslippage.npy", np.array(buy_slippage))
-    else:
-        sell_slippage.append(slippage)
-        np.save(log_dir+"sellslippage.npy", np.array(sell_slippage))
+    # if twap_side == "buy":
+    #     buy_slippage.append(slippage)
+    #     np.save(log_dir+"buyslippage.npy", np.array(buy_slippage))
+    # else:
+    #     sell_slippage.append(slippage)
+    #     np.save(log_dir+"sellslippage.npy", np.array(sell_slippage))
     if termination:
         print("Termination condition reached.")
     elif truncation:

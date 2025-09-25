@@ -4,7 +4,11 @@ from scipy.optimize import curve_fit
 from scipy import interpolate
 import matplotlib.pyplot as plt
 
-data = np.load('/Users/alirazajafree/researchprojects/Training Results/slippages/Outputfile/single_runs/test_episode_buy_profit.npy')
+# data = np.load('/Users/alirazajafree/researchprojects/Training Results/slippages/Outputfile/single_runs/multiple_runs/this_cant_be_right/with_randomised_starttimestest_UNTRAINED_RL,TWAP_randomisedstart_profit.npy')
+# twap_executions_by_episode = np.load('/Users/alirazajafree/researchprojects/Training Results/slippages/Outputfile/single_runs/multiple_runs/this_cant_be_right/with_randomised_starttimestest_UNTRAINED_RL,TWAP_randomisedstart_twap_executions.npz')
+
+
+# buy_sell_runs = np.load('/Users/alirazajafree/researchprojects/Training Results/slippages/Outputfile/New_data/train_RLAgent_vs_TWAP_standardised_updatedslippagegraphs_profit.npy')
 
 
 file_pattern = "/Users/alirazajafree/30JuneCopy/Market Impact/Price path/TWAP/*.npy"
@@ -37,62 +41,10 @@ times = np.load('/Users/alirazajafree/30JuneCopy/Market Impact/Price path/times.
 # sharpe = mean/std
 # print(f"bad sharpe {sharpe}")
 
-def getSharpeNoEpisodeBoundaries(data, window_size=100):
-    """
-    Calculate Sharpe ratio for single episode data using rolling windows.
-    
-    Parameters:
-    data: numpy array with shape (2, n) where data[0] is time, data[1] is portfolio value
-    window_size: size of rolling window for calculating returns
-    
-    Returns:
-    sharpe: Sharpe ratio
-    ann_sharpe: Annualized Sharpe ratio
-    """
-    times = data[0]
-    portfolio_values = data[1]
-    
-    # Method 1: Use rolling windows to calculate returns
-    log_returns = []
-    
-    for i in range(window_size, len(portfolio_values), window_size):
-        start_val = portfolio_values[i - window_size]
-        end_val = portfolio_values[i]
-        if start_val > 0:  # Avoid log(0) or negative values
-            log_returns.append(np.log(end_val / start_val))
-    
-    # If we don't have enough data for rolling windows, use consecutive periods
-    if len(log_returns) < 2:
-        log_returns = []
-        for i in range(1, len(portfolio_values)):
-            if portfolio_values[i-1] > 0:
-                log_returns.append(np.log(portfolio_values[i] / portfolio_values[i-1]))
-    
-    log_returns = np.array(log_returns)
-    
-    if len(log_returns) == 0:
-        print("No valid returns calculated")
-        return 0, 0
-    
-    # Calculate Sharpe ratio
-    mean_return = np.mean(log_returns)
-    std_return = np.std(log_returns)
-    
-    if std_return == 0:
-        sharpe = 0
-    else:
-        sharpe = mean_return / std_return
-    
-    # Annualize (assuming your time units and scaling)
-    ann_sharpe = sharpe * np.sqrt(6.5 * 12 * 252)
-    
-    print(f"Single Episode Sharpe: {sharpe}")
-    print(f"Single Episode Ann_sharpe: {ann_sharpe}")
-    
-    return sharpe, ann_sharpe
 
-def getSharpe():
+def getSharpe(data):
     arr = data
+    print(np.shape(data))
     episode_boundaries = np.where(np.diff(arr[0]) <0)[0]
     start_idxs = episode_boundaries[:-1] + 1
     end_idxs = episode_boundaries[1:]
@@ -105,13 +57,15 @@ def getSharpe():
     print(f"Sharpe: {sharpe}")
     print(f"Ann_sharpe: {ann_sharpe}")
 
-def getSharpeWithTWAPSplit():
+
+
+def getSharpeWithTWAPSplit_buysell(data):
     """
     Calculate separate Sharpe ratios for periods without TWAP, with TWAP buy, and with TWAP sell.
     First half of each episode: WITHOUT TWAP
     Second half of each episode: WITH TWAP (split by buy/sell episodes)
     
-    Buy episodes: 3, 4, 5, 7, 9, 18, 20, 25, 26
+    Buy episodes: 3, 4, 5, 7, 9, 18, 20, 25, 26, 34
     Sell episodes: all others
     """
     arr = data
@@ -128,8 +82,8 @@ def getSharpeWithTWAPSplit():
         start_idxs = np.array([0])
         end_idxs = np.array([len(arr[0]) - 1])
     
-    # Define buy and sell episodes
-    buy_episodes = {3, 4, 5, 7, 9, 18, 20, 25, 26}
+    # Define buy and sell episodes (matching splitBuySellRunsByEpisodes)
+    buy_episodes = {3, 4, 5, 7, 9, 18, 20, 25, 26, 34}
     
     without_twap_log_returns = []     # First half - RL agent trading alone
     with_twap_buy_log_returns = []    # Second half - RL agent + TWAP buying
@@ -137,7 +91,7 @@ def getSharpeWithTWAPSplit():
     
     print(f"Found {len(start_idxs)} episodes")
     print(f"Buy episodes: {sorted(buy_episodes)}")
-    print(f"Total episodes expected: 31")
+    print(f"Total episodes expected: 35")
     
     for episode_idx, (s, e) in enumerate(zip(start_idxs, end_idxs)):
         episode_length = e - s + 1
@@ -205,23 +159,23 @@ def getSharpeWithTWAPSplit():
     print(f"\n=== RESULTS ===")
     print(f"WITHOUT TWAP (First Half - RL Solo):")
     print(f"  Episodes: {len(without_twap_log_returns)}")
-    print(f"  Mean Return: {np.mean(without_twap_log_returns):.6f}")
-    print(f"  Std Return: {np.std(without_twap_log_returns):.6f}")
-    print(f"  Sharpe: {without_twap_sharpe:.4f}")
+    # print(f"  Mean Return: {np.mean(without_twap_log_returns):.6f}")
+    # print(f"  Std Return: {np.std(without_twap_log_returns):.6f}")
+    # print(f"  Sharpe: {without_twap_sharpe:.4f}")
     print(f"  Ann_sharpe: {without_twap_ann_sharpe:.4f}")
     
     print(f"\nWITH TWAP BUY (Second Half - RL vs TWAP Buying):")
     print(f"  Episodes: {len(with_twap_buy_log_returns)} (from {len(buy_episodes)} buy episodes)")
-    print(f"  Mean Return: {np.mean(with_twap_buy_log_returns) if len(with_twap_buy_log_returns) > 0 else 0:.6f}")
-    print(f"  Std Return: {np.std(with_twap_buy_log_returns) if len(with_twap_buy_log_returns) > 0 else 0:.6f}")
-    print(f"  Sharpe: {with_twap_buy_sharpe:.4f}")
+    # print(f"  Mean Return: {np.mean(with_twap_buy_log_returns) if len(with_twap_buy_log_returns) > 0 else 0:.6f}")
+    # print(f"  Std Return: {np.std(with_twap_buy_log_returns) if len(with_twap_buy_log_returns) > 0 else 0:.6f}")
+    # print(f"  Sharpe: {with_twap_buy_sharpe:.4f}")
     print(f"  Ann_sharpe: {with_twap_buy_ann_sharpe:.4f}")
     
     print(f"\nWITH TWAP SELL (Second Half - RL vs TWAP Selling):")
     print(f"  Episodes: {len(with_twap_sell_log_returns)} (from {31 - len(buy_episodes)} sell episodes)")
-    print(f"  Mean Return: {np.mean(with_twap_sell_log_returns) if len(with_twap_sell_log_returns) > 0 else 0:.6f}")
-    print(f"  Std Return: {np.std(with_twap_sell_log_returns) if len(with_twap_sell_log_returns) > 0 else 0:.6f}")
-    print(f"  Sharpe: {with_twap_sell_sharpe:.4f}")
+    # print(f"  Mean Return: {np.mean(with_twap_sell_log_returns) if len(with_twap_sell_log_returns) > 0 else 0:.6f}")
+    # print(f"  Std Return: {np.std(with_twap_sell_log_returns) if len(with_twap_sell_log_returns) > 0 else 0:.6f}")
+    # print(f"  Sharpe: {with_twap_sell_sharpe:.4f}")
     print(f"  Ann_sharpe: {with_twap_sell_ann_sharpe:.4f}")
     
     
@@ -238,6 +192,412 @@ def getSharpeWithTWAPSplit():
         'with_twap_sell_ann_sharpe': with_twap_sell_ann_sharpe
     }
 
+def splitBuySellRunsByEpisodes(data_array):
+    """
+    Split the buy_sell_runs data into two arrays based on episode indices.
+    
+    Args:
+        data_array: numpy array with shape (2, n) where data_array[0] is time, data_array[1] is portfolio values
+    
+    Returns:
+        dict: Contains two arrays - one for specified episodes and one for remaining episodes
+    """
+    print("=== SPLITTING BUY_SELL_RUNS BY EPISODES ===")
+    print(f"Input data shape: {data_array.shape}")
+    
+    # Define the episodes to extract
+    target_episodes = {3, 4, 5, 7, 9, 18, 20, 25, 26, 34}
+    
+    # Find episode boundaries using same logic as other functions
+    episode_boundaries = np.where(np.diff(data_array[0]) < 0)[0]
+    
+    if len(episode_boundaries) > 0:
+        start_idxs = np.concatenate([[0], episode_boundaries + 1])
+        end_idxs = np.concatenate([episode_boundaries, [len(data_array[0]) - 1]])
+    else:
+        # Single episode case
+        start_idxs = np.array([0])
+        end_idxs = np.array([len(data_array[0]) - 1])
+    
+    print(f"Found {len(start_idxs)} total episodes")
+    print(f"Target episodes to extract: {sorted(target_episodes)}")
+    
+    # Collect data for target episodes and remaining episodes
+    target_times = []
+    target_portfolios = []
+    remaining_times = []
+    remaining_portfolios = []
+    
+    target_episode_count = 0
+    remaining_episode_count = 0
+    
+    for episode_idx, (s, e) in enumerate(zip(start_idxs, end_idxs)):
+        episode_times = data_array[0][s:e+1]
+        episode_portfolios = data_array[1][s:e+1]
+        
+        if episode_idx in target_episodes:
+            target_times.extend(episode_times)
+            target_portfolios.extend(episode_portfolios)
+            target_episode_count += 1
+            print(f"Episode {episode_idx}: Added to TARGET array [{s}:{e+1}] - {len(episode_times)} points")
+        else:
+            remaining_times.extend(episode_times)
+            remaining_portfolios.extend(episode_portfolios)
+            remaining_episode_count += 1
+            print(f"Episode {episode_idx}: Added to REMAINING array [{s}:{e+1}] - {len(episode_times)} points")
+    
+    # Convert to numpy arrays
+    target_times = np.array(target_times)
+    target_portfolios = np.array(target_portfolios)
+    remaining_times = np.array(remaining_times)
+    remaining_portfolios = np.array(remaining_portfolios)
+    
+    # Build final arrays with shape (2, n)
+    target_array = np.vstack([target_times, target_portfolios]) if len(target_times) > 0 else np.array([[], []])
+    remaining_array = np.vstack([remaining_times, remaining_portfolios]) if len(remaining_times) > 0 else np.array([[], []])
+    
+    print(f"\n=== SPLIT RESULTS ===")
+    print(f"TARGET episodes ({sorted([i for i in range(len(start_idxs)) if i in target_episodes])}):")
+    print(f"  Episodes count: {target_episode_count}")
+    print(f"  Data points: {target_array.shape[1] if target_array.size > 0 else 0}")
+    print(f"  Array shape: {target_array.shape}")
+    
+    print(f"\nREMAINING episodes:")
+    print(f"  Episodes count: {remaining_episode_count}")
+    print(f"  Data points: {remaining_array.shape[1] if remaining_array.size > 0 else 0}")
+    print(f"  Array shape: {remaining_array.shape}")
+    
+    return {
+        'target_episodes_data': target_array,
+        'remaining_episodes_data': remaining_array,
+        'target_episodes': sorted([i for i in range(len(start_idxs)) if i in target_episodes]),
+        'remaining_episodes': sorted([i for i in range(len(start_idxs)) if i not in target_episodes]),
+        'target_episode_count': target_episode_count,
+        'remaining_episode_count': remaining_episode_count
+    }
+
+def getSharpeWithTWAPSplit(data_array):
+    """
+    Splits each episode into first half (without TWAP) and second half (with TWAP),
+    combining both buy and sell episodes together. Returns Sharpe ratios for comparison.
+    
+    Args:
+        data_array: numpy array with shape (2, n) where data_array[0] is time, data_array[1] is portfolio values
+    
+    Returns:
+        dict: Contains log returns and Sharpe ratios for both periods
+    """
+    # print("=== RL PERFORMANCE: WITH vs WITHOUT TWAP ===")
+    # print(f"Data array shape: {data_array.shape}")
+    
+    # Use same episode detection logic as getSharpe()
+    # episode_boundaries contains indices i where time[i+1] < time[i] (episode end at i)
+    episode_boundaries = np.where(np.diff(data_array[0]) < 0)[0]
+
+    # Correct start and end indices so episodes don't overlap:
+    # starts = [0] + (episode_boundaries + 1)
+    # ends   = episode_boundaries + [len-1]
+    if len(episode_boundaries) > 0:
+        start_idxs = np.concatenate([[0], episode_boundaries + 1])
+        end_idxs = np.concatenate([episode_boundaries, [len(data_array[0]) - 1]])
+    else:
+        # Single episode case
+        start_idxs = np.array([0])
+        end_idxs = np.array([len(data_array[0]) - 1])
+    
+    print(f"Found {len(start_idxs)} episodes. Episode boundaries: {list(zip(start_idxs[:5], end_idxs[:5]))}...")
+    
+    # Store log returns for each period
+    without_twap_log_returns = []  # First half of episodes (RL solo)
+    with_twap_log_returns = []     # Second half of episodes (RL vs TWAP)
+    
+    # Process each episode using same logic as getSharpe()
+    for episode_idx, (s, e) in enumerate(zip(start_idxs, end_idxs)):
+        episode_length = e - s + 1
+        # midpoint defines first half as s..mid-1 and second half as mid..e
+        mid_point = s + episode_length // 2
+
+        # Skip if episode is too short
+        if episode_length < 2:
+            print(f"Episode {episode_idx}: Too short ({episode_length} timesteps), skipping")
+            continue
+
+        # Define indices for halves (non-overlapping)
+        first_end_idx = mid_point - 1
+        second_start_idx = mid_point
+
+        # If first half has no length (happens when episode_length==1), skip
+        if first_end_idx < s or second_start_idx > e:
+            print(f"Episode {episode_idx}: invalid half indices, skipping")
+            continue
+
+        # First half: WITHOUT TWAP (RL agent trading alone)
+        without_twap_start_value = data_array[1][s]
+        without_twap_end_value = data_array[1][first_end_idx]
+
+        # Second half: WITH TWAP (RL vs TWAP)
+        with_twap_start_value = data_array[1][second_start_idx]
+        with_twap_end_value = data_array[1][e]
+
+        # Calculate log returns for first half (always add to without_twap)
+        without_twap_log_return = np.nan
+        with_twap_log_return = np.nan
+
+        if without_twap_start_value > 0 and without_twap_end_value > 0:
+            without_twap_log_return = np.log(without_twap_end_value / without_twap_start_value)
+            without_twap_log_returns.append(without_twap_log_return)
+
+        # Calculate log returns for second half
+        if with_twap_start_value > 0 and with_twap_end_value > 0:
+            with_twap_log_return = np.log(with_twap_end_value / with_twap_start_value)
+            with_twap_log_returns.append(with_twap_log_return)
+
+        # print(f"Episode {episode_idx}: length={episode_length}, "
+        #       f"without_twap [{s}:{first_end_idx}] = {without_twap_log_return if not np.isnan(without_twap_log_return) else 'nan'}, "
+        #       f"with_twap [{second_start_idx}:{e}] = {with_twap_log_return if not np.isnan(with_twap_log_return) else 'nan'}")
+    
+    # Convert to numpy arrays
+    without_twap_log_returns = np.array(without_twap_log_returns)
+    with_twap_log_returns = np.array(with_twap_log_returns)
+    
+    # Calculate Sharpe ratios for WITHOUT TWAP period
+    if len(without_twap_log_returns) > 0:
+        without_twap_mean = np.mean(without_twap_log_returns)
+        without_twap_std = np.std(without_twap_log_returns)
+        without_twap_sharpe = without_twap_mean / without_twap_std if without_twap_std > 0 else 0
+        without_twap_ann_sharpe = without_twap_sharpe * np.sqrt(6.5 * 12 * 252)  # Annualize
+    else:
+        without_twap_sharpe = without_twap_ann_sharpe = 0
+    
+    # Calculate Sharpe ratios for WITH TWAP period
+    if len(with_twap_log_returns) > 0:
+        with_twap_mean = np.mean(with_twap_log_returns)
+        with_twap_std = np.std(with_twap_log_returns)
+        with_twap_sharpe = with_twap_mean / with_twap_std if with_twap_std > 0 else 0
+        with_twap_ann_sharpe = with_twap_sharpe * np.sqrt(6.5 * 12 * 252)  # Annualize
+    else:
+        with_twap_sharpe = with_twap_ann_sharpe = 0
+    
+    # # Print results
+    # print(f"\n=== RESULTS ===")
+    # print(f"WITHOUT TWAP (First Half - RL Solo):")
+    # print(f"  Returns: {len(without_twap_log_returns)}")
+    # print(f"  Mean Return: {np.mean(without_twap_log_returns) if len(without_twap_log_returns) > 0 else 0:.6f}")
+    # print(f"  Std Return: {np.std(without_twap_log_returns) if len(without_twap_log_returns) > 0 else 0:.6f}")
+    # print(f"  Sharpe: {without_twap_sharpe:.4f}")
+    # print(f"  Ann_sharpe: {without_twap_ann_sharpe:.4f}")
+    
+    # print(f"\nWITH TWAP (Second Half - RL vs TWAP):")
+    # print(f"  Returns: {len(with_twap_log_returns)}")
+    # print(f"  Mean Return: {np.mean(with_twap_log_returns) if len(with_twap_log_returns) > 0 else 0:.6f}")
+    # print(f"  Std Return: {np.std(with_twap_log_returns) if len(with_twap_log_returns) > 0 else 0:.6f}")
+    # print(f"  Sharpe: {with_twap_sharpe:.4f}")
+    # print(f"  Ann_sharpe: {with_twap_ann_sharpe:.4f}")
+    
+    # Performance comparison
+    improvement = with_twap_sharpe - without_twap_sharpe if without_twap_sharpe != 0 else 0
+    ann_improvement = with_twap_ann_sharpe - without_twap_ann_sharpe if without_twap_ann_sharpe != 0 else 0
+    
+    # print(f"\n=== PERFORMANCE COMPARISON ===")
+    # print(f"Sharpe Improvement: {improvement:.4f}")
+    # print(f"Ann. Sharpe Improvement: {ann_improvement:.4f}")
+    
+    return {
+        'without_twap_returns': without_twap_log_returns,
+        'with_twap_returns': with_twap_log_returns,
+        'without_twap_sharpe': without_twap_sharpe,
+        'with_twap_sharpe': with_twap_sharpe,
+        'without_twap_ann_sharpe': without_twap_ann_sharpe,
+        'with_twap_ann_sharpe': with_twap_ann_sharpe,
+        'sharpe_improvement': improvement,
+        'ann_sharpe_improvement': ann_improvement
+    }
+
+
+
+def getSharpeWithTWAPExecutionData(data_array, twap_executions_by_episode, starting_trade_lag=100):
+    """
+    Calculate Sharpe ratios using actual TWAP execution timing and side information.
+    
+    Args:
+        data_array: numpy array with shape (2, n) where data_array[0] is time, data_array[1] is portfolio values
+        twap_executions_by_episode: dict with keys like "episode_0", "episode_1" etc.
+                                   Each value is np.array with dtype=[('price', 'f8'), ('quantity', 'f8'), ('side', 'U4')]
+        starting_trade_lag: time offset before TWAP starts (default 100)
+    
+    Returns:
+        dict: Contains log returns and Sharpe ratios for without TWAP, with TWAP buy, and with TWAP sell
+    """
+    print("=== RL PERFORMANCE: TWAP EXECUTION-BASED ANALYSIS ===")
+    print(f"Data array shape: {data_array.shape}")
+    
+    # Use same episode detection logic as getSharpe()
+    episode_boundaries = np.where(np.diff(data_array[0]) < 0)[0]
+    start_idxs = episode_boundaries[:-1] + 1
+    end_idxs = episode_boundaries[1:]
+    
+    # Add the first episode start and last episode end
+    if len(episode_boundaries) > 0:
+        start_idxs = np.concatenate([[0], start_idxs])
+        end_idxs = np.concatenate([end_idxs, [len(data_array[0]) - 1]])
+    else:
+        # Single episode case
+        start_idxs = np.array([0])
+        end_idxs = np.array([len(data_array[0]) - 1])
+    
+    print(f"Found {len(start_idxs)} episodes")
+    print(f"TWAP execution data available for {len(twap_executions_by_episode)} episodes")
+    
+    # Store log returns for each period
+    without_twap_log_returns = []      # Before TWAP starts - RL agent trading alone
+    with_twap_buy_log_returns = []     # During TWAP buying - RL agent vs TWAP buying
+    with_twap_sell_log_returns = []    # During TWAP selling - RL agent vs TWAP selling
+    
+    # Process each episode
+    for episode_idx, (s, e) in enumerate(zip(start_idxs, end_idxs)):
+        episode_key = f"episode_{episode_idx}"
+        
+        # Check if we have TWAP execution data for this episode
+        if episode_key not in twap_executions_by_episode:
+            print(f"Episode {episode_idx}: No TWAP execution data, skipping")
+            continue
+        
+        twap_executions = twap_executions_by_episode[episode_key]
+        
+        # Skip if no executions
+        if len(twap_executions) == 0:
+            print(f"Episode {episode_idx}: Empty TWAP executions, skipping")
+            continue
+        
+        # Determine TWAP side from first execution
+        twap_side = twap_executions[0]['side']
+        num_twap_executions = len(twap_executions)
+        
+        # Calculate TWAP start time index
+        # TWAP starts at: starting_trade_lag + 300 - num_twap_executions
+        twap_start_offset = starting_trade_lag + 300 - num_twap_executions
+        twap_start_idx = s + twap_start_offset
+        
+        # Ensure TWAP start is within episode bounds
+        if twap_start_idx >= e:
+            print(f"Episode {episode_idx}: TWAP start ({twap_start_idx}) beyond episode end ({e}), skipping")
+            continue
+        
+        if twap_start_idx <= s:
+            print(f"Episode {episode_idx}: TWAP start ({twap_start_idx}) before episode start ({s}), skipping")
+            continue
+        
+        # WITHOUT TWAP period: from episode start to TWAP start
+        without_twap_start_value = data_array[1][s]
+        without_twap_end_value = data_array[1][twap_start_idx]
+        
+        # WITH TWAP period: from TWAP start to episode end
+        with_twap_start_value = data_array[1][twap_start_idx]
+        with_twap_end_value = data_array[1][e]
+        
+        # Calculate log returns for WITHOUT TWAP period
+        if without_twap_start_value > 0:
+            without_twap_log_return = np.log(without_twap_end_value / without_twap_start_value)
+            without_twap_log_returns.append(without_twap_log_return)
+        else:
+            without_twap_log_return = np.nan
+        
+        # Calculate log returns for WITH TWAP period
+        if with_twap_start_value > 0:
+            with_twap_log_return = np.log(with_twap_end_value / with_twap_start_value)
+            
+            # Add to appropriate list based on TWAP side
+            if twap_side.lower() == 'buy':
+                with_twap_buy_log_returns.append(with_twap_log_return)
+            elif twap_side.lower() == 'sell':
+                with_twap_sell_log_returns.append(with_twap_log_return)
+            else:
+                print(f"Episode {episode_idx}: Unknown TWAP side '{twap_side}', skipping")
+                continue
+        else:
+            with_twap_log_return = np.nan
+        
+        print(f"Episode {episode_idx}: {twap_side.upper()} TWAP, {num_twap_executions} executions, "
+              f"TWAP starts at idx {twap_start_idx} (offset {twap_start_offset})")
+        print(f"  WITHOUT TWAP [{s}:{twap_start_idx}] = {without_twap_log_return:.6f}")
+        print(f"  WITH TWAP {twap_side.upper()} [{twap_start_idx}:{e}] = {with_twap_log_return:.6f}")
+    
+    # Convert to numpy arrays
+    without_twap_log_returns = np.array([x for x in without_twap_log_returns if not np.isnan(x)])
+    with_twap_buy_log_returns = np.array([x for x in with_twap_buy_log_returns if not np.isnan(x)])
+    with_twap_sell_log_returns = np.array([x for x in with_twap_sell_log_returns if not np.isnan(x)])
+    
+    # Calculate Sharpe ratios for WITHOUT TWAP
+    if len(without_twap_log_returns) > 1:
+        without_twap_mean = np.mean(without_twap_log_returns)
+        without_twap_std = np.std(without_twap_log_returns)
+        without_twap_sharpe = without_twap_mean / without_twap_std if without_twap_std > 0 else 0
+        without_twap_ann_sharpe = without_twap_sharpe * np.sqrt(6.5 * 12 * 252)
+    else:
+        without_twap_sharpe = without_twap_ann_sharpe = 0
+    
+    # Calculate Sharpe ratios for WITH TWAP BUY
+    if len(with_twap_buy_log_returns) > 1:
+        with_twap_buy_mean = np.mean(with_twap_buy_log_returns)
+        with_twap_buy_std = np.std(with_twap_buy_log_returns)
+        with_twap_buy_sharpe = with_twap_buy_mean / with_twap_buy_std if with_twap_buy_std > 0 else 0
+        with_twap_buy_ann_sharpe = with_twap_buy_sharpe * np.sqrt(6.5 * 12 * 252)
+    else:
+        with_twap_buy_sharpe = with_twap_buy_ann_sharpe = 0
+    
+    # Calculate Sharpe ratios for WITH TWAP SELL
+    if len(with_twap_sell_log_returns) > 1:
+        with_twap_sell_mean = np.mean(with_twap_sell_log_returns)
+        with_twap_sell_std = np.std(with_twap_sell_log_returns)
+        with_twap_sell_sharpe = with_twap_sell_mean / with_twap_sell_std if with_twap_sell_std > 0 else 0
+        with_twap_sell_ann_sharpe = with_twap_sell_sharpe * np.sqrt(6.5 * 12 * 252)
+    else:
+        with_twap_sell_sharpe = with_twap_sell_ann_sharpe = 0
+    
+    # Print results
+    print(f"\n=== RESULTS (EXECUTION-BASED TIMING) ===")
+    print(f"WITHOUT TWAP (RL Solo - Before TWAP Starts):")
+    print(f"  Returns: {len(without_twap_log_returns)}")
+    print(f"  Mean Return: {np.mean(without_twap_log_returns) if len(without_twap_log_returns) > 0 else 0:.6f}")
+    print(f"  Std Return: {np.std(without_twap_log_returns) if len(without_twap_log_returns) > 0 else 0:.6f}")
+    print(f"  Sharpe: {without_twap_sharpe:.4f}")
+    print(f"  Ann_sharpe: {without_twap_ann_sharpe:.4f}")
+    
+    print(f"\nWITH TWAP BUY (RL vs TWAP Buying):")
+    print(f"  Returns: {len(with_twap_buy_log_returns)}")
+    print(f"  Mean Return: {np.mean(with_twap_buy_log_returns) if len(with_twap_buy_log_returns) > 0 else 0:.6f}")
+    print(f"  Std Return: {np.std(with_twap_buy_log_returns) if len(with_twap_buy_log_returns) > 0 else 0:.6f}")
+    print(f"  Sharpe: {with_twap_buy_sharpe:.4f}")
+    print(f"  Ann_sharpe: {with_twap_buy_ann_sharpe:.4f}")
+    
+    print(f"\nWITH TWAP SELL (RL vs TWAP Selling):")
+    print(f"  Returns: {len(with_twap_sell_log_returns)}")
+    print(f"  Mean Return: {np.mean(with_twap_sell_log_returns) if len(with_twap_sell_log_returns) > 0 else 0:.6f}")
+    print(f"  Std Return: {np.std(with_twap_sell_log_returns) if len(with_twap_sell_log_returns) > 0 else 0:.6f}")
+    print(f"  Sharpe: {with_twap_sell_sharpe:.4f}")
+    print(f"  Ann_sharpe: {with_twap_sell_ann_sharpe:.4f}")
+    
+    # Performance comparisons
+    buy_improvement = with_twap_buy_sharpe - without_twap_sharpe if without_twap_sharpe != 0 else 0
+    sell_improvement = with_twap_sell_sharpe - without_twap_sharpe if without_twap_sharpe != 0 else 0
+    
+    print(f"\n=== PERFORMANCE COMPARISON ===")
+    print(f"Buy TWAP vs No TWAP Improvement: {buy_improvement:.4f}")
+    print(f"Sell TWAP vs No TWAP Improvement: {sell_improvement:.4f}")
+    
+    return {
+        'without_twap_returns': without_twap_log_returns,
+        'with_twap_buy_returns': with_twap_buy_log_returns,
+        'with_twap_sell_returns': with_twap_sell_log_returns,
+        'without_twap_sharpe': without_twap_sharpe,
+        'with_twap_buy_sharpe': with_twap_buy_sharpe,
+        'with_twap_sell_sharpe': with_twap_sell_sharpe,
+        'without_twap_ann_sharpe': without_twap_ann_sharpe,
+        'with_twap_buy_ann_sharpe': with_twap_buy_ann_sharpe,
+        'with_twap_sell_ann_sharpe': with_twap_sell_ann_sharpe,
+        'buy_improvement': buy_improvement,
+        'sell_improvement': sell_improvement
+    }
 
 
 
@@ -913,5 +1273,82 @@ def price_quantity_graph_predecay_mortised_starting_at_0():
 
 # getSharpeNoEpisodeBoundaries(data)
 
-# aggregatePricePaths_decay_fitted_propogatormodel()
+# print("=" * 60)
+# print("OVERALL PERFORMANCE (No TWAP Split)")
+# print("=" * 60)
 # getSharpe()
+
+
+buy_data = np.load('/Users/alirazajafree/researchprojects/Training Results/slippages/Outputfile/single_runs/multiple_runs/test_episodes_buy_profit.npy')
+sell_data = np.load('/Users/alirazajafree/researchprojects/Training Results/slippages/Outputfile/single_runs/multiple_runs/test_episodes_sell_profit.npy')
+
+print("Buy")
+res = getSharpeWithTWAPSplit(buy_data)
+without_returns = res["without_twap_ann_sharpe"]
+with_returns = res["with_twap_ann_sharpe"]
+print(f"without: {without_returns}. With: {with_returns}")
+print("Buy with/without")
+getSharpe(data=buy_data)
+print("Sell Runs")
+res = getSharpeWithTWAPSplit(sell_data)
+without_returns = res["without_twap_ann_sharpe"]
+with_returns = res["with_twap_ann_sharpe"]
+print(f"without: {without_returns}. With: {with_returns}")
+print("Sell with/without")
+getSharpe(data=sell_data)
+
+print("Buy/Sell with/without")
+combined_data = np.concatenate([buy_data, sell_data], axis=1)
+getSharpe(data=combined_data)
+
+
+
+
+
+# print("\n" + "=" * 60)
+# print("PERFORMANCE COMPARISON (With vs Without TWAP)")
+# print("=" * 60)
+# getSharpeWithTWAPSplit(data)
+
+# lists = splitBuySellRunsByEpisodes(buy_sell_runs)
+# buy_runs = lists["target_episodes_data"]
+# sell_runs = lists["remaining_episodes_data"]
+# print(f"Buy Runs")
+# res = getSharpeWithTWAPSplit(buy_runs)
+# without_returns = res["without_twap_ann_sharpe"]
+# with_returns = res["with_twap_ann_sharpe"]
+# print(f"without: {without_returns}. With: {with_returns}")
+# print("Sell Runs")
+# res = getSharpeWithTWAPSplit(sell_runs) 
+# without_returns = res["without_twap_ann_sharpe"]
+# with_returns = res["with_twap_ann_sharpe"]
+# print(f"without: {without_returns}. With: {with_returns}")
+
+# print("Combined function")
+# getSharpeWithTWAPSplit_buysell(buy_sell_runs)
+
+# data = np.load('/Users/alirazajafree/researchprojects/Training Results/slippages/Outputfile/single_runs/multiple_runs/test_episodes_sell_profit.npy')
+
+# print("Multi sell runs:")
+# res = getSharpeWithTWAPSplit(data)
+# without_returns = res["without_twap_ann_sharpe"]
+# with_returns = res["with_twap_ann_sharpe"]
+# print(f"without: {without_returns}. With: {with_returns}")
+
+# data = np.load('/Users/alirazajafree/researchprojects/Training Results/slippages/Outputfile/single_runs/multiple_runs/test_episodes_buy_profit.npy')
+
+# print("Multi buy runs: ")
+# res = getSharpeWithTWAPSplit(data)
+# without_returns = res["without_twap_ann_sharpe"]
+# with_returns = res["with_twap_ann_sharpe"]
+# print(f"without: {without_returns}. With: {with_returns}")
+
+
+# getSharpe(data)
+# getSharpeWithTWAPSplit(data)
+
+
+# getSharpeWithTWAPExecutionData(data, twap_executions_by_episode)
+
+
+# aggregatePricePaths_decay_fitted_propogatormodel()
