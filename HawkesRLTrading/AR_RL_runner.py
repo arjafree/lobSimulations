@@ -7,7 +7,7 @@ from HawkesRLTrading.src.Envs.HawkesRLTradingEnv import *
 import torch
 
 log_dir = '/home/ajafree/untrained_rl_testing'
-model_dir = '/home/ajafree/untrained_rl/model'
+model_dir = '/home/ajafree/untrained_rl_testing/model'
 # log_dir = '/Users/alirazajafree/researchprojects/logs'
 # model_dir = '/Users/alirazajafree/researchprojects/models/icrl_ppo_model_symmetric'
 
