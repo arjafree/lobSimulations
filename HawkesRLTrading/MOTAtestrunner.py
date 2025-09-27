@@ -99,7 +99,7 @@ cash_differences = 0
 
 new_mv = True
 
-env=tradingEnv(stop_time=2600, wall_time_limit=23400, seed=1, **kwargs)
+env=tradingEnv(stop_time=400, wall_time_limit=23400, seed=1, **kwargs)
 prev_inventory = 0
 
 start_midprices = []
