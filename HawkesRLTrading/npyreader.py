@@ -58,6 +58,90 @@ def getSharpe(data):
     print(f"Ann_sharpe: {ann_sharpe}")
 
 
+def getSharpeComplete(data_array):
+    """
+    Calculate Sharpe ratio including ALL episodes (first and last episodes included).
+    
+    Args:
+        data_array: numpy array with shape (2, n) where data_array[0] is time, data_array[1] is portfolio values
+    
+    Returns:
+        dict: Contains Sharpe ratio and detailed statistics
+    """
+    print("=== COMPLETE SHARPE CALCULATION (ALL EPISODES) ===")
+    print(f"Data array shape: {data_array.shape}")
+    
+    arr = data_array
+    times = arr[0]
+    values = arr[1]
+    
+    # Find episode boundaries by detecting time decreases
+    episode_boundaries = np.where(np.diff(times) < 0)[0]
+    
+    # Properly include first and last episodes
+    if len(episode_boundaries) > 0:
+        # start_idxs: [0, boundary1+1, boundary2+1, ...]
+        # end_idxs: [boundary1, boundary2, ..., len-1]
+        start_idxs = np.concatenate([[0], episode_boundaries + 1])
+        end_idxs = np.concatenate([episode_boundaries, [len(times) - 1]])
+    else:
+        # Single episode case
+        start_idxs = np.array([0])
+        end_idxs = np.array([len(times) - 1])
+    
+    print(f"Episode boundaries found: {len(episode_boundaries)}")
+    print(f"Total episodes to process: {len(start_idxs)}")
+    
+    log_returns = []
+    valid_episodes = 0
+    
+    for i, (s, e) in enumerate(zip(start_idxs, end_idxs)):
+        start_val = values[s]
+        end_val = values[e]
+        
+        if start_val > 0 and end_val > 0 and start_val != end_val:
+            log_ret = np.log(end_val / start_val)
+            log_returns.append(log_ret)
+            valid_episodes += 1
+            print(f"Episode {i}: [{s}:{e}] start={start_val:.6f} end={end_val:.6f} return={log_ret:.8f}")
+        else:
+            print(f"Episode {i}: [{s}:{e}] SKIPPED (invalid values: start={start_val}, end={end_val})")
+    
+    log_returns = np.array(log_returns)
+    
+    if len(log_returns) > 1:
+        mean_return = np.mean(log_returns)
+        std_return = np.std(log_returns)
+        
+        if std_return > 0:
+            sharpe = mean_return / std_return
+            ann_sharpe = sharpe * np.sqrt(6.5 * 12 * 252)
+        else:
+            sharpe = 0
+            ann_sharpe = 0
+    else:
+        mean_return = 0
+        std_return = 0
+        sharpe = 0
+        ann_sharpe = 0
+    
+    print(f"\n=== COMPLETE RESULTS ===")
+    print(f"Valid episodes processed: {valid_episodes} / {len(start_idxs)}")
+    print(f"Mean return: {mean_return:.8f}")
+    print(f"Std return: {std_return:.8f}")
+    print(f"Sharpe: {sharpe:.6f}")
+    print(f"Ann_sharpe: {ann_sharpe:.6f}")
+    
+    return {
+        'episodes_processed': valid_episodes,
+        'total_episodes': len(start_idxs),
+        'log_returns': log_returns,
+        'mean_return': mean_return,
+        'std_return': std_return,
+        'sharpe': sharpe,
+        'ann_sharpe': ann_sharpe
+    }
+
 
 def getSharpeWithTWAPSplit_buysell(data):
     """
@@ -1271,6 +1355,21 @@ def price_quantity_graph_predecay_mortised_starting_at_0():
 
 # price_quantity_graph_predecay_mortised_starting_at_0()
 
+# Test the new complete Sharpe function when data is available
+# Uncomment the lines below and provide the correct data variable names
+
+# print("\n" + "="*60)
+# print("TESTING COMPLETE SHARPE FUNCTION")
+# print("="*60)
+# getSharpeComplete(your_data_variable_here)
+
+# Example usage:
+# split_results = splitBuySellRunsByEpisodes(your_buy_sell_data)
+# buy_runs = split_results['target_episodes_data'] 
+# sell_runs = split_results['remaining_episodes_data']
+# getSharpeComplete(buy_runs)
+# getSharpeComplete(sell_runs)
+
 # getSharpeNoEpisodeBoundaries(data)
 
 # print("=" * 60)
@@ -1278,28 +1377,31 @@ def price_quantity_graph_predecay_mortised_starting_at_0():
 # print("=" * 60)
 # getSharpe()
 
+rl_alone_data = np.load('/Users/alirazajafree/researchprojects/RL_alone/RL_alonetest_episodes_RL_alone_profit.npy')
+getSharpe(rl_alone_data)
+getSharpeComplete(rl_alone_data)
 
-buy_data = np.load('/Users/alirazajafree/researchprojects/Training Results/slippages/Outputfile/single_runs/multiple_runs/test_episodes_buy_profit.npy')
-sell_data = np.load('/Users/alirazajafree/researchprojects/Training Results/slippages/Outputfile/single_runs/multiple_runs/test_episodes_sell_profit.npy')
+# buy_data = np.load('/Users/alirazajafree/researchprojects/Training Results/slippages/Outputfile/single_runs/multiple_runs/test_episodes_buy_profit.npy')
+# sell_data = np.load('/Users/alirazajafree/researchprojects/Training Results/slippages/Outputfile/single_runs/multiple_runs/test_episodes_sell_profit.npy')
 
-print("Buy")
-res = getSharpeWithTWAPSplit(buy_data)
-without_returns = res["without_twap_ann_sharpe"]
-with_returns = res["with_twap_ann_sharpe"]
-print(f"without: {without_returns}. With: {with_returns}")
-print("Buy with/without")
-getSharpe(data=buy_data)
-print("Sell Runs")
-res = getSharpeWithTWAPSplit(sell_data)
-without_returns = res["without_twap_ann_sharpe"]
-with_returns = res["with_twap_ann_sharpe"]
-print(f"without: {without_returns}. With: {with_returns}")
-print("Sell with/without")
-getSharpe(data=sell_data)
+# print("Buy")
+# res = getSharpeWithTWAPSplit(buy_data)
+# without_returns = res["without_twap_ann_sharpe"]
+# with_returns = res["with_twap_ann_sharpe"]
+# print(f"without: {without_returns}. With: {with_returns}")
+# print("Buy with/without")
+# getSharpe(data=buy_data)
+# print("Sell Runs")
+# res = getSharpeWithTWAPSplit(sell_data)
+# without_returns = res["without_twap_ann_sharpe"]
+# with_returns = res["with_twap_ann_sharpe"]
+# print(f"without: {without_returns}. With: {with_returns}")
+# print("Sell with/without")
+# getSharpe(data=sell_data)
 
-print("Buy/Sell with/without")
-combined_data = np.concatenate([buy_data, sell_data], axis=1)
-getSharpe(data=combined_data)
+# print("Buy/Sell with/without")
+# combined_data = np.concatenate([buy_data, sell_data], axis=1)
+# getSharpe(data=combined_data)
 
 
 

@@ -45,34 +45,38 @@ Pi_Q0= {'Ask_L1': [0.,
 kwargs={
             "TradingAgent": [],
             "GymTradingAgent":
-                                [{"cash":10000000,
+                                [
+                                {"cash":10000000,
                                 "cashlimit": 1000000000,
-                                "strategy": "POV",
+                                "strategy": "Twap", #"POV",
                                 "on_trade":False,
-                                "total_order_size":2300,
+                                "total_order_size":300,
                                 "order_target":"INTC",
-                                "participation_rate":0.05,
-                                "total_time":2600,
-                                "window_size":60, #window size, measured in seconds
+                                # "participation_rate":0.05,
+                                "total_time":400,
+                                "window_size":50, #window size, measured in seconds
                                 "side":"buy", #buy or sell
                                 "action_freq":1,
                                 "Inventory": {"INTC":0},
-                                'start_trading_lag': 300,
+                                'start_trading_lag': 100,
+                                "side":"buy",
                                 "wake_on_MO": False,
-                                "wake_on_Spread": False}],
+                                "wake_on_Spread": False}
+                                ],
             "Exchange": {"symbol": "INTC",
-            "ticksize":0.01,
-            "LOBlevels": 2,
-            "numOrdersPerLevel": 10,
-            "PriceMid0": 100,
-            "spread0": 0.03},
+                 "ticksize":0.01,
+                 "LOBlevels": 2,
+                 "numOrdersPerLevel": 10,
+                 "PriceMid0": 100,
+                 "spread0": 0.03},
             "Arrival_model": {"name": "Hawkes",
-                                "parameters": {"kernelparams": kernelparams,
-                                        "tod": tod,
-                                        "Pis": Pis,
-                                        "beta": 0.941,
-                                        "avgSpread": 0.0101,
-                                        "Pi_Q0": Pi_Q0}}
+                            "parameters": {"kernelparams": kernelparams,
+                                            "tod": tod,
+                                            "Pis": Pis,
+                                            "beta": 0.941,
+                                            "avgSpread": 0.0101,
+                                            "Pi_Q0": Pi_Q0,
+                                            'expapprox' : True}}
 
 }
 agents = kwargs['GymTradingAgent']
@@ -89,6 +93,7 @@ execution_history:List[Tuple] = []
 price_paths_non_agent = []
 times = []
 market_volumes = []
+percentage_of_volume = []
 
 cash_differences = 0
 
@@ -151,15 +156,15 @@ while Simstate["Done"]==False and termination!=True:
         #         else:
         #             market_volumes.append(120-observations["Inventory"])
         #         new_mv = False
-
-        # if(diff != 0):
-        #     #inventory has changed, order has gone through
-        #     if kwargs['GymTradingAgent'][0]["side"] == 'sell':
-        #         execution_history.append((observationsDict.get(agent.id, {}).get('LOB0', '').get('Bid_L1'), diff))  
-        #         cash_differences += (observationsDict.get(agent.id, {}).get('LOB0', '').get('Bid_L1')[0])*diff
-        #     else:
-        #         execution_history.append((observationsDict.get(agent.id, {}).get('LOB0', '').get('Ask_L1'), diff)) 
-        #         cash_differences += (observationsDict.get(agent.id, {}).get('LOB0', '').get('Ask_L1')[0])*diff
+        if(diff != 0):
+            percentage_of_volume.append(diff/observations["market_volume"])
+            #inventory has changed, order has gone through
+            if kwargs['GymTradingAgent'][0]["side"] == 'sell':
+                execution_history.append((observationsDict.get(agent.id, {}).get('LOB0', '').get('Bid_L1'), diff))  
+                cash_differences += (observationsDict.get(agent.id, {}).get('LOB0', '').get('Bid_L1')[0])*diff
+            else:
+                execution_history.append((observationsDict.get(agent.id, {}).get('LOB0', '').get('Ask_L1'), diff)) 
+                cash_differences += (observationsDict.get(agent.id, {}).get('LOB0', '').get('Ask_L1')[0])*diff
 
         prev_inventory = observations['Inventory']
         actionss.update({agent.id: actionss.get(agent.id, []) + [action[1][0]]})
@@ -182,6 +187,7 @@ while Simstate["Done"]==False and termination!=True:
 # plt.grid(True, alpha=0.3)
 # plt.tight_layout()
 # plt.show()
+np.save("percentages_of_volume.npy", np.array(percentage_of_volume))
 
 # agent_ids = set()
 # for ep in inventoryhistories:
@@ -509,5 +515,5 @@ def plot_inventory_and_participation_normalized():
     plt.show()
 
 # Call both plotting functions
-plot_inventory_with_participation_rate()
+# plot_inventory_with_participation_rate()
 # plot_inventory_and_participation_normalized()
