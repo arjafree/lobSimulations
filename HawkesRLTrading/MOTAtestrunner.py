@@ -48,7 +48,7 @@ kwargs={
                                 [
                                 {"cash":10000000,
                                 "cashlimit": 1000000000,
-                                "strategy": "Twap", #"POV",
+                                "strategy": "TWAP", #"POV",
                                 "on_trade":False,
                                 "total_order_size":300,
                                 "order_target":"INTC",
