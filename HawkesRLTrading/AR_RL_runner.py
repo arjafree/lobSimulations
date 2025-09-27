@@ -11,7 +11,7 @@ model_dir = '/home/ajafree/untrained_rl_testing/model'
 # log_dir = '/Users/alirazajafree/researchprojects/logs'
 # model_dir = '/Users/alirazajafree/researchprojects/models/icrl_ppo_model_symmetric'
 
-label = 'test_untrained_RL_versus_buy'
+label = 'test_untrained_RL_versus_sell'
 layer_widths=128
 n_layers=3
 # layer_widths=512
@@ -163,7 +163,7 @@ buy_slippage = []
 percentage_of_volume = []
 
 
-twap_side = "buy"
+twap_side = "sell"
 for episode in range(10):
     kwargs["GymTradingAgent"][1]["Inventory"] = {"INTC": 500}
     kwargs["GymTradingAgent"][1]["cash"] = 1000000
