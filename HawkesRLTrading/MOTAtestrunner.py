@@ -187,8 +187,8 @@ while Simstate["Done"]==False and termination!=True:
 # plt.grid(True, alpha=0.3)
 # plt.tight_layout()
 # plt.show()
-np.save("percentages_of_volume.npy", np.array(percentage_of_volume))
-np.save("market_volumes", np.array(market_volumes))
+np.save("/home/ajafree/twap_volume_testing/percentages_of_volume.npy", np.array(percentage_of_volume))
+np.save("/home/ajafree/twap_volume_testing/market_volumes.npy", np.array(market_volumes))
 
 # agent_ids = set()
 # for ep in inventoryhistories:
