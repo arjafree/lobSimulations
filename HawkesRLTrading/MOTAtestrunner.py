@@ -145,7 +145,7 @@ while Simstate["Done"]==False and termination!=True:
 
         diff = abs(inventories[agent.id][-1] - prev_inventory)
 
-
+        market_volumes.append(observations["market_volume"])
         # if((observations["current_time"]-100)%60 == 0):
         #     new_mv = True
 
@@ -188,6 +188,7 @@ while Simstate["Done"]==False and termination!=True:
 # plt.tight_layout()
 # plt.show()
 np.save("percentages_of_volume.npy", np.array(percentage_of_volume))
+np.save("market_volumes", np.array(market_volumes))
 
 # agent_ids = set()
 # for ep in inventoryhistories:
