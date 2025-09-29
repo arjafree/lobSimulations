@@ -44,7 +44,7 @@ times = np.load('/Users/alirazajafree/30JuneCopy/Market Impact/Price path/times.
 
 def getSharpe(data):
     arr = data
-    print(np.shape(data))
+    # print(np.shape(data))
     episode_boundaries = np.where(np.diff(arr[0]) <0)[0]
     start_idxs = episode_boundaries[:-1] + 1
     end_idxs = episode_boundaries[1:]
@@ -68,8 +68,8 @@ def getSharpeComplete(data_array):
     Returns:
         dict: Contains Sharpe ratio and detailed statistics
     """
-    print("=== COMPLETE SHARPE CALCULATION (ALL EPISODES) ===")
-    print(f"Data array shape: {data_array.shape}")
+    # print("=== COMPLETE SHARPE CALCULATION (ALL EPISODES) ===")
+    # print(f"Data array shape: {data_array.shape}")
     
     arr = data_array
     times = arr[0]
@@ -89,8 +89,8 @@ def getSharpeComplete(data_array):
         start_idxs = np.array([0])
         end_idxs = np.array([len(times) - 1])
     
-    print(f"Episode boundaries found: {len(episode_boundaries)}")
-    print(f"Total episodes to process: {len(start_idxs)}")
+    # print(f"Episode boundaries found: {len(episode_boundaries)}")
+    # print(f"Total episodes to process: {len(start_idxs)}")
     
     log_returns = []
     valid_episodes = 0
@@ -103,9 +103,9 @@ def getSharpeComplete(data_array):
             log_ret = np.log(end_val / start_val)
             log_returns.append(log_ret)
             valid_episodes += 1
-            print(f"Episode {i}: [{s}:{e}] start={start_val:.6f} end={end_val:.6f} return={log_ret:.8f}")
-        else:
-            print(f"Episode {i}: [{s}:{e}] SKIPPED (invalid values: start={start_val}, end={end_val})")
+            # print(f"Episode {i}: [{s}:{e}] start={start_val:.6f} end={end_val:.6f} return={log_ret:.8f}")
+        # else:
+            # print(f"Episode {i}: [{s}:{e}] SKIPPED (invalid values: start={start_val}, end={end_val})")
     
     log_returns = np.array(log_returns)
     
@@ -125,10 +125,10 @@ def getSharpeComplete(data_array):
         sharpe = 0
         ann_sharpe = 0
     
-    print(f"\n=== COMPLETE RESULTS ===")
-    print(f"Valid episodes processed: {valid_episodes} / {len(start_idxs)}")
-    print(f"Mean return: {mean_return:.8f}")
-    print(f"Std return: {std_return:.8f}")
+    # print(f"\n=== COMPLETE RESULTS ===")
+    # print(f"Valid episodes processed: {valid_episodes} / {len(start_idxs)}")
+    # print(f"Mean return: {mean_return:.8f}")
+    # print(f"Std return: {std_return:.8f}")
     print(f"Sharpe: {sharpe:.6f}")
     print(f"Ann_sharpe: {ann_sharpe:.6f}")
     
@@ -1353,104 +1353,41 @@ def price_quantity_graph_predecay_mortised_starting_at_0():
     
     return mean_times, mean_path, sampled_indices
 
-# price_quantity_graph_predecay_mortised_starting_at_0()
 
-# Test the new complete Sharpe function when data is available
-# Uncomment the lines below and provide the correct data variable names
+# rl_alone_data = np.load('/Users/alirazajafree/researchprojects/RL_alone/RL_alonetest_episodes_RL_alone_profit.npy')
+# getSharpe(rl_alone_data)
+# getSharpeComplete(rl_alone_data)
 
-# print("\n" + "="*60)
-# print("TESTING COMPLETE SHARPE FUNCTION")
-# print("="*60)
-# getSharpeComplete(your_data_variable_here)
+slippages = np.load('/Users/alirazajafree/researchprojects/untrained_RL/slippages/untrained_rl_testingtest_untrained_RL_versus_buy_buyslippage.npy')
+print("Buy slippages")
 
-# Example usage:
-# split_results = splitBuySellRunsByEpisodes(your_buy_sell_data)
-# buy_runs = split_results['target_episodes_data'] 
-# sell_runs = split_results['remaining_episodes_data']
-# getSharpeComplete(buy_runs)
-# getSharpeComplete(sell_runs)
+print(np.mean(slippages)/100)
 
-# getSharpeNoEpisodeBoundaries(data)
+slippages = np.load('/Users/alirazajafree/researchprojects/untrained_RL/slippages/untrained_rl_testingtest_untrained_RL_versus_sell_sellslippage.npy')
+print("Sell slippages")
 
-# print("=" * 60)
-# print("OVERALL PERFORMANCE (No TWAP Split)")
-# print("=" * 60)
-# getSharpe()
+print(np.mean(slippages)/100)
 
-rl_alone_data = np.load('/Users/alirazajafree/researchprojects/RL_alone/RL_alonetest_episodes_RL_alone_profit.npy')
-getSharpe(rl_alone_data)
-getSharpeComplete(rl_alone_data)
-
-# buy_data = np.load('/Users/alirazajafree/researchprojects/Training Results/slippages/Outputfile/single_runs/multiple_runs/test_episodes_buy_profit.npy')
-# sell_data = np.load('/Users/alirazajafree/researchprojects/Training Results/slippages/Outputfile/single_runs/multiple_runs/test_episodes_sell_profit.npy')
-
-# print("Buy")
-# res = getSharpeWithTWAPSplit(buy_data)
-# without_returns = res["without_twap_ann_sharpe"]
-# with_returns = res["with_twap_ann_sharpe"]
-# print(f"without: {without_returns}. With: {with_returns}")
-# print("Buy with/without")
-# getSharpe(data=buy_data)
-# print("Sell Runs")
-# res = getSharpeWithTWAPSplit(sell_data)
-# without_returns = res["without_twap_ann_sharpe"]
-# with_returns = res["with_twap_ann_sharpe"]
-# print(f"without: {without_returns}. With: {with_returns}")
-# print("Sell with/without")
-# getSharpe(data=sell_data)
-
-# print("Buy/Sell with/without")
-# combined_data = np.concatenate([buy_data, sell_data], axis=1)
-# getSharpe(data=combined_data)
+rl_before_buy = np.load("/Users/alirazajafree/researchprojects/untrained_RL/profits/untrained_rl_testingtest_untrained_RL_versus_buy_profit_wout_twap.npy")
+print("RL Before Buy")
+# getSharpe(rl_before_buy)
+getSharpeComplete(rl_before_buy)
+rl_before_sell = np.load("/Users/alirazajafree/researchprojects/untrained_RL/profits/untrained_rl_testingtest_untrained_RL_versus_sell_profit_wout_twap.npy")
+print("RL Before Sell")
+# getSharpe(rl_before_sell)
+getSharpeComplete(rl_before_sell)
+rl_after_buy = np.load("/Users/alirazajafree/researchprojects/untrained_RL/profits/untrained_rl_testingtest_untrained_RL_versus_buy_profit_w_twap.npy")
+print("RL After Buy")
+# getSharpe(rl_after_buy)
+getSharpeComplete(rl_after_buy)
+rl_after_sell = np.load("/Users/alirazajafree/researchprojects/untrained_RL/profits/untrained_rl_testingtest_untrained_RL_versus_sell_profit_w_twap.npy")
+print("RL After Sell")
+# getSharpe(rl_after_sell)
+getSharpeComplete(rl_after_sell)
 
 
 
 
 
-# print("\n" + "=" * 60)
-# print("PERFORMANCE COMPARISON (With vs Without TWAP)")
-# print("=" * 60)
-# getSharpeWithTWAPSplit(data)
-
-# lists = splitBuySellRunsByEpisodes(buy_sell_runs)
-# buy_runs = lists["target_episodes_data"]
-# sell_runs = lists["remaining_episodes_data"]
-# print(f"Buy Runs")
-# res = getSharpeWithTWAPSplit(buy_runs)
-# without_returns = res["without_twap_ann_sharpe"]
-# with_returns = res["with_twap_ann_sharpe"]
-# print(f"without: {without_returns}. With: {with_returns}")
-# print("Sell Runs")
-# res = getSharpeWithTWAPSplit(sell_runs) 
-# without_returns = res["without_twap_ann_sharpe"]
-# with_returns = res["with_twap_ann_sharpe"]
-# print(f"without: {without_returns}. With: {with_returns}")
-
-# print("Combined function")
-# getSharpeWithTWAPSplit_buysell(buy_sell_runs)
-
-# data = np.load('/Users/alirazajafree/researchprojects/Training Results/slippages/Outputfile/single_runs/multiple_runs/test_episodes_sell_profit.npy')
-
-# print("Multi sell runs:")
-# res = getSharpeWithTWAPSplit(data)
-# without_returns = res["without_twap_ann_sharpe"]
-# with_returns = res["with_twap_ann_sharpe"]
-# print(f"without: {without_returns}. With: {with_returns}")
-
-# data = np.load('/Users/alirazajafree/researchprojects/Training Results/slippages/Outputfile/single_runs/multiple_runs/test_episodes_buy_profit.npy')
-
-# print("Multi buy runs: ")
-# res = getSharpeWithTWAPSplit(data)
-# without_returns = res["without_twap_ann_sharpe"]
-# with_returns = res["with_twap_ann_sharpe"]
-# print(f"without: {without_returns}. With: {with_returns}")
 
 
-# getSharpe(data)
-# getSharpeWithTWAPSplit(data)
-
-
-# getSharpeWithTWAPExecutionData(data, twap_executions_by_episode)
-
-
-# aggregatePricePaths_decay_fitted_propogatormodel()
