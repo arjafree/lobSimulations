@@ -372,7 +372,8 @@ for episode in range(10):
                 np.save(log_dir + label + '_profit', np.array([t, finalcash2]))
                 np.save(log_dir+label+"_profit_w_twap", np.array([t_with_twap, profit_with_twap]))
                 np.save(log_dir+label+"_profit_wout_twap", np.array([t_without_twap, profit_without_twap]))
-                TWAP_agent_obsv.append(observationsDict[TWAPagentid])
+                if TWAPagentid in observationsDict:
+                    TWAP_agent_obsv.append(observationsDict[TWAPagentid])
                 RL_agent_obsv.append(observationsDict[RLagentID])
                 
             
