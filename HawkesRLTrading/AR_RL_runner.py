@@ -11,7 +11,7 @@ model_dir = '/home/ajafree/testing_adversarial/models'
 # log_dir = '/Users/alirazajafree/researchprojects/logs'
 # model_dir = '/Users/alirazajafree/researchprojects/models/icrl_ppo_model_symmetric'
 
-label = 'test_trained_RL_versus_sell'
+label = 'test_fRL_versus_sell'
 # layer_widths=128
 # n_layers=3
 layer_widths=512
