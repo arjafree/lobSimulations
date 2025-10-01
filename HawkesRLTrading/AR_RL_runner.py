@@ -10,7 +10,7 @@ import torch
 # log_dir = '/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/outputs/'
 # model_dir = '/home/ajafree/testing_adversarial/models'
 # model_dir = '/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/models/'
-log_dir = '/home/ajafree/uRL_testing/outputs'
+log_dir = '/home/ajafree/uRL_testing/outputs/'
 model_dir = '/home/ajafree/uRL_testing/models'
 
 label = 'test_uRL_versus_sell'
