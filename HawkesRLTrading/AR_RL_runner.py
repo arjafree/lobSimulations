@@ -6,21 +6,23 @@ from HawkesRLTrading.src.Envs.HawkesRLTradingEnv import *
 
 import torch
 
-log_dir = '/home/ajafree/untrained_rl_testing/outputs'
-model_dir = '/home/ajafree/testing_adversarial/models'
-# log_dir = '/home/ajafree/uRL_testing/outputs'
-# model_dir = '/home/ajafree/uRL_testing/models'
+# log_dir = '/home/ajafree/untrained_rl_testing/outputs'
+# log_dir = '/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/outputs/'
+# model_dir = '/home/ajafree/testing_adversarial/models'
+# model_dir = '/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/models/'
+log_dir = '/home/ajafree/uRL_testing/outputs'
+model_dir = '/home/ajafree/uRL_testing/models'
 
-label = 'test_uRL_versus_buy'
-# layer_widths=128
-# n_layers=3
-layer_widths=512
-n_layers=1
+label = 'test_uRL_versus_sell'
+layer_widths=128
+n_layers=3
+# layer_widths=512
+# n_layers=1
 checkpoint_params = ('20250618_115039_inv10_symmHP_lowEpochs_standard', 52)
 # checkpoint_params = ('20250921_080550_train_RLAgent_vs_TWAP_standardised_updatedslippagegraphs', 28)
 
-# with open("/Users/alirazajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
-with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
+with open("/Users/alirazajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
+# with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
     kernelparams = pickle.load(f)
 kernelparams = preprocessdata(kernelparams)
 
@@ -96,11 +98,11 @@ kwargs={
                           "cashlimit": 1000000000,
                           "strategy": "TWAP",
                           "on_trade":False,
-                          "total_order_size":300,
+                          "total_order_size":8,
                           "order_target":"INTC",
-                          "total_time":400,
-                          "window_size":50, #window size, measured in seconds
-                          "action_freq":1,
+                          "total_time":420,
+                          "window_size":160, #window size, measured in seconds
+                          "action_freq":40,
                           "Inventory": {"INTC":500},
                           'start_trading_lag': 100,
                           "wake_on_MO": False,
@@ -166,7 +168,7 @@ buy_slippage = []
 percentage_of_volume = []
 
 
-twap_side = "buy"
+twap_side = "sell"
 for episode in range(10):
     kwargs["GymTradingAgent"][1]["Inventory"] = {"INTC": 500}
     kwargs["GymTradingAgent"][1]["cash"] = 1000000
@@ -175,13 +177,13 @@ for episode in range(10):
     new_midprice = True
     RLagentInstance.TWAPPresent = False
     # twap_time = start_times[episode]
-    twap_time = 250
-    RLagentInstance.TWAPPresent = -1 if twap_side == "sell" else 1 #comment out for non adversarial agent
+    twap_time = 100
+    # RLagentInstance.TWAPPresent = -1 if twap_side == "sell" else 1 #comment out for non adversarial agent
     kwargs["GymTradingAgent"][1]["start_trading_lag"] = twap_time
     twap_agent_executions_by_episode[episode] = []
     i = 0
     action_num = 0
-    env=tradingEnv(stop_time=400, wall_time_limit=23400, **kwargs)
+    env=tradingEnv(stop_time=460, wall_time_limit=23400, **kwargs)
     print("Initial Observations"+ str(env.getobservations()))
     Simstate, observations, termination, truncation =env.step(action=None) 
     AgentsIDs=[k for k,v in Simstate["Infos"].items() if v==True]
@@ -249,7 +251,7 @@ for episode in range(10):
 
 
                 prev_inventory = observations['Inventory']
-                if 399 <= Simstate['TimeCode'] <= 400:
+                if 419 <= Simstate['TimeCode'] <= 460:
                     if agent.side == "sell":
                         # TWAP started with 500 shares, calculate how many were sold
                         total_executed = 500 - agent.Inventory["INTC"]
