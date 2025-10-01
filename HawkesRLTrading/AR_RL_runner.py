@@ -281,7 +281,7 @@ for episode in range(10):
                 action_num+=1
                 RLagentID = agent.id
                 agentAction:Tuple[int, int] = agent.get_action(data=env.getobservations(agentID=agent.id), epsilon = 0.5 if i_eps < 100 else 0.1)
-                action = (agent.id, (agentAction[0],40))
+                action = (agent.id, (agentAction[0],1))
                 observations_prev = observationsDict[agent.id].copy() if i != 0 else observations.copy()
                 Simstate, observations, termination, truncation=env.step(action=action) #do not try and use this data before this line in the loop
                 if(Simstate["TimeCode"] > twap_time):
