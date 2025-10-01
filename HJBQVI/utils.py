@@ -253,7 +253,8 @@ class ModelManager:
             suffix = f"_epoch_{epoch}" if epoch >= 0 else "_final"
             meta_path = os.path.join(
                 self.model_dir,
-                f"models\\model_metadata{suffix}_{timestamp}.json"
+                f"model_metadata{suffix}_{timestamp}.json"
+                # f"models\\model_metadata{suffix}_{timestamp}.json"
             )
 
         # Load metadata
