@@ -13,7 +13,7 @@ import torch
 log_dir = '/home/ajafree/uRL_testing/outputs/'
 model_dir = '/home/ajafree/uRL_testing/models'
 
-label = 'test_uRL_versus_buy'
+label = 'test_uRL_versus_sell'
 layer_widths=128
 n_layers=3
 # layer_widths=512
@@ -168,7 +168,7 @@ buy_slippage = []
 percentage_of_volume = []
 
 
-twap_side = "buy"
+twap_side = "sell"
 for episode in range(5):
     kwargs["GymTradingAgent"][1]["Inventory"] = {"INTC": 500}
     kwargs["GymTradingAgent"][1]["cash"] = 1000000
