@@ -1363,37 +1363,37 @@ def price_quantity_graph_predecay_mortised_starting_at_0():
 
 # print(np.mean(slippages)/100)
 
-slippages = np.load('/Users/alirazajafree/researchprojects/fRL_september/slippages/outputstest_fRL_versus_sell_sellslippage.npy')
+slippages = np.load('/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/outputs/slippages/test_uRL_versus_sell_sellslippage.npy')
 print("Sell slippages")
 print(np.mean(slippages)/100)
 
-slippages = np.load('/Users/alirazajafree/researchprojects/fRL_september/slippages/outputstest_fRL_versus_buy_buyslippage.npy')
+slippages = np.load('/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/outputs/slippages/test_uRL_versus_buy_buyslippage.npy')
 print("Buy slippages")
 print(np.mean(slippages)/100)
 
 
-rl_before_buy = np.load("/Users/alirazajafree/researchprojects/fRL_september/profits/outputstest_fRL_versus_buy_profit_wout_twap.npy")
-print("RL Before Buy")
-# getSharpe(rl_before_buy)
-getSharpeComplete(rl_before_buy)
-rl_before_sell = np.load("/Users/alirazajafree/researchprojects/fRL_september/profits/outputstest_fRL_versus_sell_profit_wout_twap.npy")
-print("RL Before Sell")
-# getSharpe(rl_before_sell)
-getSharpeComplete(rl_before_sell)
-rl_after_buy = np.load("/Users/alirazajafree/researchprojects/fRL_september/profits/outputstest_fRL_versus_buy_profit_w_twap.npy")
+# rl_before_buy = np.load("/Users/alirazajafree/researchprojects/fRL_september/profits/outputstest_fRL_versus_buy_profit_wout_twap.npy")
+# print("RL Before Buy")
+# # getSharpe(rl_before_buy)
+# getSharpeComplete(rl_before_buy)
+# rl_before_sell = np.load("/Users/alirazajafree/researchprojects/fRL_september/profits/outputstest_fRL_versus_sell_profit_wout_twap.npy")
+# print("RL Before Sell")
+# # getSharpe(rl_before_sell)
+# getSharpeComplete(rl_before_sell)
+rl_after_buy = np.load("/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/outputs/profits/test_uRL_versus_buy_profit_w_twap.npy")
 print("RL After Buy")
 # getSharpe(rl_after_buy)
 getSharpeComplete(rl_after_buy)
-rl_after_sell = np.load("/Users/alirazajafree/researchprojects/fRL_september/profits/outputstest_fRL_versus_sell_profit_w_twap.npy")
+rl_after_sell = np.load("/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/outputs/profits/test_uRL_versus_sell_profit_w_twap.npy")
 print("RL After Sell")
 # getSharpe(rl_after_sell)
 getSharpeComplete(rl_after_sell)
 
-print("total sell sharpe fRL")
-getSharpeComplete(np.load("/Users/alirazajafree/researchprojects/fRL_september/RL_info/outputstest_fRL_versus_sell_profit.npy"))
+# print("total sell sharpe fRL")
+# getSharpeComplete(np.load("/Users/alirazajafree/researchprojects/fRL_september/RL_info/outputstest_fRL_versus_sell_profit.npy"))
 
-print("total sell sharpe uRL")
-getSharpeComplete(np.load("/Users/alirazajafree/researchprojects/untrained_RL/profits/untrained_rl_testingtest_untrained_RL_versus_sell_profit.npy"))
+# print("total sell sharpe uRL")
+# getSharpeComplete(np.load("/Users/alirazajafree/researchprojects/untrained_RL/profits/untrained_rl_testingtest_untrained_RL_versus_sell_profit.npy"))
 
 
 
