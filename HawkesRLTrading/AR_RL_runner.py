@@ -169,7 +169,7 @@ percentage_of_volume = []
 
 
 twap_side = "buy"
-for episode in range(10):
+for episode in range(5):
     kwargs["GymTradingAgent"][1]["Inventory"] = {"INTC": 500}
     kwargs["GymTradingAgent"][1]["cash"] = 1000000
     kwargs["GymTradingAgent"][1]["side"] = twap_side
