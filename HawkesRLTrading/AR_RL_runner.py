@@ -173,7 +173,7 @@ total_RL_obsv = []
 final_cashs = []
 total_executeds = []
 twap_side = "sell"
-for episode in range(5):
+for episode in range(20):
     total_executed = 0
     final_cash = 0
     kwargs["GymTradingAgent"][1]["Inventory"] = {"INTC": 500}
