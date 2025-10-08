@@ -1508,6 +1508,7 @@ class PPOAgent(GymTradingAgent):
         past_times = data['past_times']
         if self.Inventory['INTC'] ==0: self.init_cash = self.cash
         skew = (n_a - n_b)/(0.5*(q_a + q_b))
+        # print(f"skew: {skew}")
         avgFillPrice = 0
         if self.Inventory['INTC'] != 0 :
             avgFillPrice = (self.cash-self.init_cash)/self.Inventory['INTC']

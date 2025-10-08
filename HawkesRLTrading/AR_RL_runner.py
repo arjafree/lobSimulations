@@ -10,10 +10,10 @@ import torch
 # log_dir = '/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/outputs/'
 # model_dir = '/home/ajafree/testing_adversarial/models'
 # model_dir = '/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/models/'
-log_dir = '/home/ajafree/uRL_testing/outputs/'
-model_dir = '/home/ajafree/uRL_testing/models'
+log_dir = '/home/ajafree/october_retest/uRL/logs/'
+model_dir = '/home/ajafree/october_retest/uRL/models'
 
-label = 'test_uRL_versus_sell'
+label = 'retest_uRL_versus_sell'
 layer_widths=128
 n_layers=3
 # layer_widths=512
@@ -94,7 +94,7 @@ kwargs={
                          "wake_on_MO": True,
                          "wake_on_Spread": True}
                          ,
-                         {"cash":100,
+                         {"cash":1000000,
                           "cashlimit": 1000000000,
                           "strategy": "TWAP",
                           "on_trade":False,
@@ -166,10 +166,16 @@ sell_slippage = []
 buy_slippage = []
 
 percentage_of_volume = []
+total_TWAP_obsv = []
+total_RL_obsv = []
 
 
+final_cashs = []
+total_executeds = []
 twap_side = "sell"
 for episode in range(5):
+    total_executed = 0
+    final_cash = 0
     kwargs["GymTradingAgent"][1]["Inventory"] = {"INTC": 500}
     kwargs["GymTradingAgent"][1]["cash"] = 1000000
     kwargs["GymTradingAgent"][1]["side"] = twap_side
@@ -218,22 +224,20 @@ for episode in range(5):
             #check if agent is an RL agent or not
             
             if not isinstance(agent, PPOAgent):
-                if(new_midprice):
-                    starting_midprice = float((observations.get('LOB0').get('Ask_L1')[0] + observations.get('LOB0').get('Bid_L1')[0])/2)
-                    new_midprice = False
+                # if(new_midprice):
+                #     starting_midprice = float((observations.get('LOB0').get('Ask_L1')[0] + observations.get('LOB0').get('Bid_L1')[0])/2)
+                #     new_midprice = False
                 action_num+=1
                 agentAction:Tuple[int, int] = agent.get_action(data=env.getobservations(agentID=agent.id))
                 action = (agent.id, agentAction)
-                print(f"Action: {action}")
+                print(f"TWAP Action: {action}")
                 print(f"Limit Order Book: {observationsDict.get(agent.id, {}).get('LOB0', '')}")
-                print(f"Inventory: {observationsDict.get(agent.id, {}).get('Inventory', '')}")
+                print(f"TWAP Inventory: {observationsDict.get(agent.id, {}).get('Inventory', '')}")
 
                 TWAPagentid = agent.id
-
                 Simstate, observations, termination, truncation=env.step(action=action) #do not try and use this data before this line in the loop
-                
-
                 observationsDict.update({agent.id:observations})
+
                 logger.debug(f"\n Agent: {agent.id}\n Simstate: {Simstate}\nObservations: {observations}\nTermination: {termination}\nTruncation: {truncation}")
                 cashs.update({agent.id:cashs.get(agent.id, [])+[observations['Cash']]})
                 inventories.update({agent.id:inventories.get(agent.id, []) + [observations['Inventory']]})
@@ -251,40 +255,22 @@ for episode in range(5):
 
 
                 prev_inventory = observations['Inventory']
-                if 419 <= Simstate['TimeCode'] <= 460:
-                    if agent.side == "sell":
-                        # TWAP started with 500 shares, calculate how many were sold
-                        total_executed = 500 - agent.Inventory["INTC"]
-                        if total_executed > 0:
-                            # Calculate cash earned from selling
-                            total_earned = agent.cash - 1000000  # Started with 1M cash
-                            # Benchmark: what they would have earned selling at starting mid-price
-                            benchmark_earned = total_executed * starting_midprice
-                            # Slippage: (actual - benchmark) / benchmark
-                            slippage = (total_earned - benchmark_earned) / benchmark_earned
+                total_executed = abs(500 - agent.Inventory["INTC"])
+                final_cash = agent.cash
+                
 
-                            # np.save(log_dir+"sell_slippage.npy", [slippage])
-                            # print(f"SELL - Executed: {total_executed}, Earned: {total_earned}, Benchmark: {benchmark_earned}, Slippage: {slippage}")
-                    elif agent.side == "buy":
-                            # TWAP started with 500 shares, calculate how many were bought
-                            total_executed = agent.Inventory["INTC"] - 500
-                            if total_executed > 0:
-                                # Calculate cash spent on buying
-                                total_paid = 1000000 - agent.cash  # Started with 1M cash
-                                # Benchmark: what they would have paid buying at starting mid-price
-                                benchmark_paid = total_executed * starting_midprice
-                                # Slippage: (actual - benchmark) / benchmark
-                                slippage = (total_paid - benchmark_paid) / benchmark_paid
-                                # np.save(log_dir+"buy_slippage.npy", [slippage])
                 
             else:
                 action_num+=1
                 RLagentID = agent.id
                 agentAction:Tuple[int, int] = agent.get_action(data=env.getobservations(agentID=agent.id), epsilon = 0.5 if i_eps < 100 else 0.1)
                 action = (agent.id, (agentAction[0],1))
+                print(f"RL Action: {action}")
+                print(f"Limit Order Book: {observationsDict.get(agent.id, {}).get('LOB0', '')}")
+                print(f"RL Inventory: {observationsDict.get(agent.id, {}).get('Inventory', '')}")
                 observations_prev = observationsDict[agent.id].copy() if i != 0 else observations.copy()
                 Simstate, observations, termination, truncation=env.step(action=action) #do not try and use this data before this line in the loop
-                if(Simstate["TimeCode"] > twap_time):
+                if(Simstate["TimeCode"] >= twap_time):
                     if twap_side == "sell":
                         inventory_with_twap_sell.append(observations["Inventory"])
                     else:
@@ -312,7 +298,7 @@ for episode in range(5):
                 current_pnl = cashs[agent.id][-1] + inventories[agent.id][-1] * agent.mid * (1 - tc*np.sign(inventories[agent.id][-1]))
                 finalcash2.append(current_pnl)
 
-                if(Simstate['TimeCode'] > twap_time):
+                if(Simstate['TimeCode'] >= twap_time):
                     profit_with_twap.append(current_pnl)
                     t_with_twap += [Simstate['TimeCode']]
                 else:
@@ -382,15 +368,19 @@ for episode in range(5):
             print(agent.current_time)
             print(f"ACTION DONE{action_num}")
     
-    np.save(log_dir+label+"twap_observations.npy", np.array(TWAP_agent_obsv))
-    np.save(log_dir+label+"RL_observations.npy", np.array(RL_agent_obsv))
+    total_RL_obsv.append(RL_agent_obsv)
+    total_TWAP_obsv.append(TWAP_agent_obsv)
 
-    if twap_side == "buy":
-        buy_slippage.append(slippage)
-        np.save(log_dir+label+"_buyslippage.npy", np.array(buy_slippage))
-    else:
-        sell_slippage.append(slippage)
-        np.save(log_dir+label+"_sellslippage.npy", np.array(sell_slippage))
+    inventory_and_cash = ()
+    final_cashs.append(final_cash)
+    total_executeds.append(total_executed)
+
+    # if twap_side == "buy":
+    #     buy_slippage.append(slippage)
+    #     np.save(log_dir+label+"_buyslippage.npy", np.array(buy_slippage))
+    # else:
+    #     sell_slippage.append(slippage)
+    #     np.save(log_dir+label+"_sellslippage.npy", np.array(sell_slippage))
     if termination:
         print("Termination condition reached.")
     elif truncation:
@@ -476,6 +466,11 @@ if(twap_side == "sell"):
     np.save(log_dir + label+ "_inventory_with_twap_sell.npy", np.array(inventory_with_twap_sell))
 else:
     np.save(log_dir + label+ "_inventory_with_twap_buy.npy", np.array(inventory_with_twap_buy))
+
+np.save(log_dir+label+"total_executed.npy", np.array(total_executeds))
+np.save(log_dir+label+"final_cash.npy", np.array(final_cashs))
+np.save(log_dir+label+"twap_observations.npy", np.array(total_TWAP_obsv))
+np.save(log_dir+label+"RL_observations.npy", np.array(total_RL_obsv))
 
 # np.save(log_dir + label + '_start_midprices.npy', start_midprices_array)
 # np.savez(log_dir + label + '_twap_executions.npz', **executions_data)
