@@ -13,7 +13,8 @@ import torch
 log_dir = '/home/ajafree/october_retest/uRL/logs/'
 model_dir = '/home/ajafree/october_retest/uRL/models'
 
-label = 'retest_uRL_versus_sell'
+twap_side = "buy"
+label = 'retest_uRL_versus_'+twap_side
 layer_widths=128
 n_layers=3
 # layer_widths=512
@@ -172,7 +173,6 @@ total_RL_obsv = []
 
 final_cashs = []
 total_executeds = []
-twap_side = "sell"
 for episode in range(20):
     total_executed = 0
     final_cash = 0
