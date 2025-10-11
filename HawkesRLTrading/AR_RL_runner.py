@@ -13,14 +13,15 @@ import torch
 log_dir = '/home/ajafree/october_retest/uRL/logs/'
 model_dir = '/home/ajafree/october_retest/uRL/models'
 
-twap_side = "buy"
-label = 'retest_uRL_versus_'+twap_side
-layer_widths=128
-n_layers=3
-# layer_widths=512
-# n_layers=1
-checkpoint_params = ('20250618_115039_inv10_symmHP_lowEpochs_standard', 52)
-# checkpoint_params = ('20250921_080550_train_RLAgent_vs_TWAP_standardised_updatedslippagegraphs', 28)
+twap_side = "sell"
+RL_type = "f"
+label = f'retest_{RL_type}RL_versus_{twap_side}'
+# layer_widths=128
+# n_layers=3
+layer_widths=512
+n_layers=1
+# checkpoint_params = ('20250618_115039_inv10_symmHP_lowEpochs_standard', 52)
+checkpoint_params = ('20250921_080550_train_RLAgent_vs_TWAP_standardised_updatedslippagegraphs', 28)
 
 # with open("/Users/alirazajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
 with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
@@ -38,47 +39,47 @@ for k in cols:
 tod=np.zeros(shape=(len(cols), 13))
 for i in range(len(cols)):
     tod[i]=[faketod[cols[i]][k] for k in range(13)]
-Pis={'Bid_L2': [0.,
-                [(1, 1.)]],
-     'Bid_inspread': [0.,
-                      [(1, 1.)]],
-     'Bid_L1': [0.,
-                [(1, 1.)]],
-     'Bid_MO': [0.,
-                [(1, 1.)]]}
-Pis["Ask_MO"] = Pis["Bid_MO"]
-Pis["Ask_L1"] = Pis["Bid_L1"]
-Pis["Ask_inspread"] = Pis["Bid_inspread"]
-Pis["Ask_L2"] = Pis["Bid_L2"]
-Pi_Q0= {'Ask_L1': [0.,
-                   [(10, 1.)]],
-        'Ask_L2': [0.,
-                   [(10, 1.)]],
-        'Bid_L1': [0.,
-                   [(10, 1.)]],
-        'Bid_L2': [0.,
-                   [(10, 1.)]]}
-
 # Pis={'Bid_L2': [0.,
-#                 [(40, 1.)]],
+#                 [(1, 1.)]],
 #      'Bid_inspread': [0.,
-#                       [(40, 1.)]],
+#                       [(1, 1.)]],
 #      'Bid_L1': [0.,
-#                 [(40, 1.)]],
+#                 [(1, 1.)]],
 #      'Bid_MO': [0.,
-#                 [(40, 1.)]]}
+#                 [(1, 1.)]]}
 # Pis["Ask_MO"] = Pis["Bid_MO"]
 # Pis["Ask_L1"] = Pis["Bid_L1"]
 # Pis["Ask_inspread"] = Pis["Bid_inspread"]
 # Pis["Ask_L2"] = Pis["Bid_L2"]
 # Pi_Q0= {'Ask_L1': [0.,
-#                    [(200, 1.)]],
+#                    [(10, 1.)]],
 #         'Ask_L2': [0.,
-#                    [(200, 1.)]],
+#                    [(10, 1.)]],
 #         'Bid_L1': [0.,
-#                    [(200, 1.)]],
+#                    [(10, 1.)]],
 #         'Bid_L2': [0.,
-#                    [(200, 1.)]]}
+#                    [(10, 1.)]]}
+
+Pis={'Bid_L2': [0.,
+                [(40, 1.)]],
+     'Bid_inspread': [0.,
+                      [(40, 1.)]],
+     'Bid_L1': [0.,
+                [(40, 1.)]],
+     'Bid_MO': [0.,
+                [(40, 1.)]]}
+Pis["Ask_MO"] = Pis["Bid_MO"]
+Pis["Ask_L1"] = Pis["Bid_L1"]
+Pis["Ask_inspread"] = Pis["Bid_inspread"]
+Pis["Ask_L2"] = Pis["Bid_L2"]
+Pi_Q0= {'Ask_L1': [0.,
+                   [(200, 1.)]],
+        'Ask_L2': [0.,
+                   [(200, 1.)]],
+        'Bid_L1': [0.,
+                   [(200, 1.)]],
+        'Bid_L2': [0.,
+                   [(200, 1.)]]}
 
 kwargs={
     "TradingAgent": [],
@@ -181,11 +182,12 @@ for episode in range(20):
     kwargs["GymTradingAgent"][1]["side"] = twap_side
     starting_midprice = 0
     new_midprice = True
-    RLagentInstance.TWAPPresent = False
-    # twap_time = start_times[episode]
-    twap_time = 100
-    # RLagentInstance.TWAPPresent = -1 if twap_side == "sell" else 1 #comment out for non adversarial agent
+    if(isinstance(RLagentInstance, AdversarialPPOAgent)):
+        RLagentInstance.TWAPPresent = False
+
+    twap_time = 250
     kwargs["GymTradingAgent"][1]["start_trading_lag"] = twap_time
+
     twap_agent_executions_by_episode[episode] = []
     i = 0
     action_num = 0
@@ -256,9 +258,8 @@ for episode in range(20):
 
                 prev_inventory = observations['Inventory']
                 total_executed = abs(500 - agent.Inventory["INTC"])
-                final_cash = agent.cash
+                final_cash = agent.cash #if we make the twap stop trading early, this will have to be changed
                 
-
                 
             else:
                 action_num+=1
