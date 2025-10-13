@@ -13,7 +13,7 @@ import torch
 log_dir = '/home/ajafree/october_retest/fRL/logs/'
 model_dir = '/home/ajafree/october_retest/fRL/models'
 
-twap_side = "sell"
+twap_side = "buy"
 RL_type = "f"
 label = f'retest_{RL_type}RL_versus_{twap_side}'
 # layer_widths=128
