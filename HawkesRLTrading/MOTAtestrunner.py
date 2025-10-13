@@ -4,7 +4,7 @@ sys.path.append(os.path.abspath('/home/ajafree/lobSimulations'))
 # sys.path.append(os.path.abspath('/Users/alirazajafree/Documents/GitHub/lobSimulations/'))
 from HawkesRLTrading.src.Envs.HawkesRLTradingEnv import *
 # import matplotlib.pyplot as plt
-log_dir = '/home/ajafree/october_retest/alone/logs/'
+log_dir = '/home/ajafree/october_retest/twap_alone/logs'
 twap_side = "buy"
 label = f'retest_twap_{twap_side}_alone'
 
