@@ -10,8 +10,8 @@ import torch
 # log_dir = '/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/outputs/'
 # model_dir = '/home/ajafree/testing_adversarial/models'
 # model_dir = '/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/models/'
-log_dir = '/home/ajafree/october_retest/uRL/logs/'
-model_dir = '/home/ajafree/october_retest/uRL/models'
+log_dir = '/home/ajafree/october_retest/fRL/logs/'
+model_dir = '/home/ajafree/october_retest/fRL/models'
 
 twap_side = "sell"
 RL_type = "f"
@@ -100,11 +100,11 @@ kwargs={
                           "cashlimit": 1000000000,
                           "strategy": "TWAP",
                           "on_trade":False,
-                          "total_order_size":8,
+                          "total_order_size":300,
                           "order_target":"INTC",
-                          "total_time":420,
-                          "window_size":160, #window size, measured in seconds
-                          "action_freq":40,
+                          "total_time":400,
+                          "window_size":50, #window size, measured in seconds
+                          "action_freq":1,
                           "Inventory": {"INTC":500},
                           'start_trading_lag': 100,
                           "wake_on_MO": False,
@@ -191,7 +191,7 @@ for episode in range(20):
     twap_agent_executions_by_episode[episode] = []
     i = 0
     action_num = 0
-    env=tradingEnv(stop_time=460, wall_time_limit=23400, **kwargs)
+    env=tradingEnv(stop_time=400, wall_time_limit=23400, **kwargs)
     print("Initial Observations"+ str(env.getobservations()))
     Simstate, observations, termination, truncation =env.step(action=None) 
     AgentsIDs=[k for k,v in Simstate["Infos"].items() if v==True]
