@@ -114,6 +114,12 @@ percentage_of_volume = []
 final_cashs = []
 total_executeds = []
 
+start_midprices = []
+
+total_TWAP_obsv = []
+start_midprices = []
+
+
 for episode in range(20):
     kwargs["GymTradingAgent"][0]["side"] = twap_side
     total_executed = 0
@@ -121,11 +127,11 @@ for episode in range(20):
     cash_differences = 0
 
     new_mv = True
+    new_mp = True
 
     env=tradingEnv(stop_time=400, wall_time_limit=23400, seed=1, **kwargs)
     prev_inventory = 0
 
-    start_midprices = []
     twap_agent_executions_by_episode:Dict[int, List] = {}
 
     Simstate, observations, termination, truncation =env.step(action=None) 
@@ -143,12 +149,18 @@ for episode in range(20):
         times.append(Simstate["TimeCode"])
         
         for agent in agents:
+            if(new_mp):
+                midprice = float((observations.get('LOB0').get('Ask_L1')[0] + observations.get('LOB0').get('Bid_L1')[0])/2)
+                start_midprices.append(midprice)
+                new_mp = False
+
             
             assert isinstance(agent, GymTradingAgent), "Agent with action should be a GymTradingAgent"
 
             agentAction:Tuple[int, int] = agent.get_action(data=env.getobservations(agentID=agent.id))
             action = (agent.id, agentAction)
             observations_prev = copy.deepcopy(observationsDict.get(agent.id, {}))
+            TWAPagentid = agent.id
             print(f"Limit Order Book: {observationsDict.get(agent.id, {}).get('LOB0', '')}")
             print(f"TWAP Inventory: {observationsDict.get(agent.id, {}).get('Inventory', '')}")
 
@@ -198,6 +210,8 @@ for episode in range(20):
             total_executed = abs(500 - agent.Inventory["INTC"])
             final_cash = agent.cash
 
+
+
             print(f"ACTION DONE{i}")
             t += [Simstate['TimeCode']]
             i+=1
@@ -221,6 +235,7 @@ for episode in range(20):
 # plt.show()
 np.save(log_dir+label+"total_executed.npy", np.array(total_executeds))
 np.save(log_dir+label+"final_cash.npy", np.array(final_cashs))
+np.save(log_dir+label+"_start_midprices.npy", np.array(start_midprices))
 
 # agent_ids = set()
 # for ep in inventoryhistories:

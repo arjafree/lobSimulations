@@ -157,8 +157,7 @@ RLagentID = 1
 
 # start_times = np.load("/home/ajafree/twap_testing_final/start_times.npy")
 
-RL_agent_obsv = []
-TWAP_agent_obsv = []
+
 
 inventory_without_twap = []
 inventory_with_twap_sell = []
@@ -175,6 +174,8 @@ total_RL_obsv = []
 final_cashs = []
 total_executeds = []
 for episode in range(20):
+    RL_agent_obsv = []
+    TWAP_agent_obsv = []
     total_executed = 0
     final_cash = 0
     kwargs["GymTradingAgent"][1]["Inventory"] = {"INTC": 500}
