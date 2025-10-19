@@ -4,9 +4,9 @@ sys.path.append(os.path.abspath('/home/ajafree/lobSimulations'))
 # sys.path.append(os.path.abspath('/Users/alirazajafree/Documents/GitHub/lobSimulations/'))
 from HawkesRLTrading.src.Envs.HawkesRLTradingEnv import *
 # import matplotlib.pyplot as plt
-log_dir = '/home/ajafree/october_retest/twap_alone/logs'
+log_dir = '/home/ajafree/october_retest/twap_alone/logs/'
 twap_side = "buy"
-label = f'retest_twap_{twap_side}_alone'
+label = f'retest_twap_bigpov_{twap_side}_alone'
 
             
 # from scipy.optimize import curve_fit
@@ -70,7 +70,7 @@ kwargs={
                                 "cashlimit": 1000000000,
                                 "strategy": "TWAP",
                                 "on_trade":False,
-                                "total_order_size":8,
+                                "total_order_size":300,
                                 "order_target":"INTC",
                                 "total_time":420,
                                 "window_size":160, #window size, measured in seconds
@@ -122,6 +122,8 @@ start_midprices = []
 
 for episode in range(20):
     kwargs["GymTradingAgent"][0]["side"] = twap_side
+    kwargs["GymTradingAgent"][0]["Inventory"] = {"INTC": 500}
+    kwargs["GymTradingAgent"][0]["cash"] = 1000000
     total_executed = 0
     final_cash = 0
     cash_differences = 0
@@ -129,7 +131,7 @@ for episode in range(20):
     new_mv = True
     new_mp = True
 
-    env=tradingEnv(stop_time=400, wall_time_limit=23400, seed=1, **kwargs)
+    env=tradingEnv(stop_time=400, wall_time_limit=23400, **kwargs)
     prev_inventory = 0
 
     twap_agent_executions_by_episode:Dict[int, List] = {}
