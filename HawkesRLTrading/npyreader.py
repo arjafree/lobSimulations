@@ -1374,11 +1374,11 @@ def price_quantity_graph_predecay_mortised_starting_at_0():
     return mean_times, mean_path, sampled_indices
 
 side = "sell"
-print(f"{side} slippages")
+# print(f"{side} slippages")
 # twap_obsv_episodes = np.load(f"/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/fRL/logs/observations/retest_fRL_versus_{side}twap_observations.npy", allow_pickle=True)
-twap_finalcash = np.load(f"/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/twap_alone/logsretest_twap_{side}_alonefinal_cash.npy")
-twap_totalexecuted = np.load(f"/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/twap_alone/logsretest_twap_{side}_alonetotal_executed.npy")
-starting_midprices = np.load(f"/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/twap_alone/logsretest_twap_{side}_alone_start_midprices.npy")
+# twap_finalcash = np.load(f"/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/fRL/logs/retest_fRL_versus_{side}_alonefinal_cash.npy")
+# twap_totalexecuted = np.load(f"/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/fRL/logs/logsretest_twap_{side}_alonetotal_executed.npy")
+# starting_midprices = np.load(f"/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/fRL/logs/logsretest_twap_{side}_alone_start_midprices.npy")
 # decoded_episodes = {}
 # for episode_idx, episode_obsv in enumerate(twap_obsv_episodes):
 #     episode_data = {
@@ -1415,10 +1415,10 @@ starting_midprices = np.load(f"/Users/alirazajafree/researchprojects/uRL_testing
 #         if obs_idx == episode_start_idx:
 #             starting_midprices.append((lob_snapshot['ask_l1'][0]+lob_snapshot['bid_l1'][0])/2)
 
-slippages = getSlippagesFromFinalCashInventory(twap_finalcash, twap_totalexecuted, starting_midprices, side)
-print(slippages)
-print(np.mean(slippages))
-print(len(slippages))
+# slippages = getSlippagesFromFinalCashInventory(twap_finalcash, twap_totalexecuted, starting_midprices, side)
+# print(slippages)
+# print(np.mean(slippages))
+# print(len(slippages))
 
 # rl_alone_data = np.load('/Users/alirazajafree/researchprojects/RL_alone/RL_alonetest_episodes_RL_alone_profit.npy')
 # getSharpe(rl_alone_data)
@@ -1427,23 +1427,23 @@ print(len(slippages))
 
 
 
-# rl_before_buy = np.load("/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/logs/profit/retest_uRL_versus_buy_profit_wout_twap.npy")
-# print("uRL Before Buy")
-# getSharpeComplete(rl_before_buy)
+rl_before_buy = np.load("/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/fRL/logs/retest_fRL_versus_buy_profit_wout_twap.npy")
+print("fRL Before Buy")
+getSharpeComplete(rl_before_buy)
 # getSharpe(rl_before_buy)
-# rl_after_buy = np.load("/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/fRL/logs/retest_fRL_versus_buy_profit_w_twap.npy")
-# print("fRL With buy")
-# getSharpeComplete(rl_after_buy)
+rl_after_buy = np.load("/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/fRL/logs/retest_fRL_versus_buy_profit_w_twap.npy")
+print("fRL With buy")
+getSharpeComplete(rl_after_buy)
 # getSharpe(rl_after_buy)
 
-# rl_before_sell = np.load("/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/logs/profit/retest_uRL_versus_sell_profit_wout_twap.npy")
-# print("uRL Before Sell")
-# getSharpeComplete(rl_before_sell)
+rl_before_sell = np.load("/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/fRL/logs/retest_fRL_versus_sell_profit_wout_twap.npy")
+print("fRL Before Sell")
+getSharpeComplete(rl_before_sell)
 # getSharpe(rl_before_sell)
 
-# rl_after_sell = np.load("/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/fRL/logs/retest_fRL_versus_sell_profit_w_twap.npy")
-# print("fRL With sell")
-# getSharpeComplete(rl_after_sell)
+rl_after_sell = np.load("/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/fRL/logs/retest_fRL_versus_sell_profit_w_twap.npy")
+print("fRL With sell")
+getSharpeComplete(rl_after_sell)
 # getSharpe(rl_after_sell)
 
 
