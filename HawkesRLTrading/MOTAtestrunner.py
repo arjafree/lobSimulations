@@ -4,7 +4,7 @@ sys.path.append(os.path.abspath('/home/ajafree/lobSimulations'))
 # sys.path.append(os.path.abspath('/Users/alirazajafree/Documents/GitHub/lobSimulations/'))
 from HawkesRLTrading.src.Envs.HawkesRLTradingEnv import *
 # import matplotlib.pyplot as plt
-log_dir = '/home/ajafree/october_retest/twap_alone/logs/'
+log_dir = "/home/ajafree/october_retest/twap_alone/changedPIs/logs/"
 twap_side = "buy"
 label = f'retest_twap_bigpov_{twap_side}_alone'
 
@@ -26,26 +26,47 @@ for k in cols:
 tod=np.zeros(shape=(len(cols), 13))
 for i in range(len(cols)):
     tod[i]=[faketod[cols[i]][k] for k in range(13)]
+# Pis={'Bid_L2': [0.,
+#                 [(1, 1.)]],
+#         'Bid_inspread': [0.,
+#                         [(1, 1.)]],
+#         'Bid_L1': [0.,
+#                 [(1, 1.)]],
+#         'Bid_MO': [0.,
+#                 [(1, 1.)]]}
+# Pis["Ask_MO"] = Pis["Bid_MO"]
+# Pis["Ask_L1"] = Pis["Bid_L1"]
+# Pis["Ask_inspread"] = Pis["Bid_inspread"]
+# Pis["Ask_L2"] = Pis["Bid_L2"]
+# Pi_Q0= {'Ask_L1': [0.,
+#                     [(10, 1.)]],
+#         'Ask_L2': [0.,
+#                     [(10, 1.)]],
+#         'Bid_L1': [0.,
+#                     [(10, 1.)]],
+#         'Bid_L2': [0.,
+#                     [(10, 1.)]]}
 Pis={'Bid_L2': [0.,
-                [(1, 1.)]],
-        'Bid_inspread': [0.,
-                        [(1, 1.)]],
-        'Bid_L1': [0.,
-                [(1, 1.)]],
-        'Bid_MO': [0.,
-                [(1, 1.)]]}
+                [(40, 1.)]],
+     'Bid_inspread': [0.,
+                      [(40, 1.)]],
+     'Bid_L1': [0.,
+                [(40, 1.)]],
+     'Bid_MO': [0.,
+                [(40, 1.)]]}
 Pis["Ask_MO"] = Pis["Bid_MO"]
 Pis["Ask_L1"] = Pis["Bid_L1"]
 Pis["Ask_inspread"] = Pis["Bid_inspread"]
 Pis["Ask_L2"] = Pis["Bid_L2"]
 Pi_Q0= {'Ask_L1': [0.,
-                    [(10, 1.)]],
+                   [(200, 1.)]],
         'Ask_L2': [0.,
-                    [(10, 1.)]],
+                   [(200, 1.)]],
         'Bid_L1': [0.,
-                    [(10, 1.)]],
+                   [(200, 1.)]],
         'Bid_L2': [0.,
-                    [(10, 1.)]]}
+                   [(200, 1.)]]}
+
 kwargs={
             "TradingAgent": [],
             "GymTradingAgent":

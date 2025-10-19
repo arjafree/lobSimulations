@@ -16,12 +16,14 @@ model_dir = '/home/ajafree/october_retest/fRL/models'
 twap_side = "buy"
 RL_type = "f"
 label = f'retest_{RL_type}RL_versus_{twap_side}'
-# layer_widths=128
-# n_layers=3
-layer_widths=512
-n_layers=1
-# checkpoint_params = ('20250618_115039_inv10_symmHP_lowEpochs_standard', 52)
-checkpoint_params = ('20250921_080550_train_RLAgent_vs_TWAP_standardised_updatedslippagegraphs', 28)
+if RL_type == "u":
+    layer_widths=128
+    n_layers=3
+    checkpoint_params = ('20250618_115039_inv10_symmHP_lowEpochs_standard', 52)
+else:
+    layer_widths=512
+    n_layers=1
+    checkpoint_params = ('20250921_080550_train_RLAgent_vs_TWAP_standardised_updatedslippagegraphs', 28)
 
 # with open("/Users/alirazajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
 with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
@@ -39,47 +41,49 @@ for k in cols:
 tod=np.zeros(shape=(len(cols), 13))
 for i in range(len(cols)):
     tod[i]=[faketod[cols[i]][k] for k in range(13)]
-# Pis={'Bid_L2': [0.,
-#                 [(1, 1.)]],
-#      'Bid_inspread': [0.,
-#                       [(1, 1.)]],
-#      'Bid_L1': [0.,
-#                 [(1, 1.)]],
-#      'Bid_MO': [0.,
-#                 [(1, 1.)]]}
-# Pis["Ask_MO"] = Pis["Bid_MO"]
-# Pis["Ask_L1"] = Pis["Bid_L1"]
-# Pis["Ask_inspread"] = Pis["Bid_inspread"]
-# Pis["Ask_L2"] = Pis["Bid_L2"]
-# Pi_Q0= {'Ask_L1': [0.,
-#                    [(10, 1.)]],
-#         'Ask_L2': [0.,
-#                    [(10, 1.)]],
-#         'Bid_L1': [0.,
-#                    [(10, 1.)]],
-#         'Bid_L2': [0.,
-#                    [(10, 1.)]]}
 
-Pis={'Bid_L2': [0.,
-                [(40, 1.)]],
-     'Bid_inspread': [0.,
-                      [(40, 1.)]],
-     'Bid_L1': [0.,
-                [(40, 1.)]],
-     'Bid_MO': [0.,
-                [(40, 1.)]]}
-Pis["Ask_MO"] = Pis["Bid_MO"]
-Pis["Ask_L1"] = Pis["Bid_L1"]
-Pis["Ask_inspread"] = Pis["Bid_inspread"]
-Pis["Ask_L2"] = Pis["Bid_L2"]
-Pi_Q0= {'Ask_L1': [0.,
-                   [(200, 1.)]],
-        'Ask_L2': [0.,
-                   [(200, 1.)]],
+if RL_type == "u":
+    Pis={'Bid_L2': [0.,
+                    [(1, 1.)]],
+         'Bid_inspread': [0.,
+                          [(1, 1.)]],
+         'Bid_L1': [0.,
+                    [(1, 1.)]],
+         'Bid_MO': [0.,
+                    [(1, 1.)]]}
+    Pis["Ask_MO"] = Pis["Bid_MO"]
+    Pis["Ask_L1"] = Pis["Bid_L1"]
+    Pis["Ask_inspread"] = Pis["Bid_inspread"]
+    Pis["Ask_L2"] = Pis["Bid_L2"]
+    Pi_Q0= {'Ask_L1': [0.,
+                       [(10, 1.)]],
+            'Ask_L2': [0.,
+                       [(10, 1.)]],
+            'Bid_L1': [0.,
+                       [(10, 1.)]],
+            'Bid_L2': [0.,
+                       [(10, 1.)]]}
+else:
+    Pis={'Bid_L2': [0.,
+                    [(40, 1.)]],
+        'Bid_inspread': [0.,
+                        [(40, 1.)]],
         'Bid_L1': [0.,
-                   [(200, 1.)]],
-        'Bid_L2': [0.,
-                   [(200, 1.)]]}
+                    [(40, 1.)]],
+        'Bid_MO': [0.,
+                    [(40, 1.)]]}
+    Pis["Ask_MO"] = Pis["Bid_MO"]
+    Pis["Ask_L1"] = Pis["Bid_L1"]
+    Pis["Ask_inspread"] = Pis["Bid_inspread"]
+    Pis["Ask_L2"] = Pis["Bid_L2"]
+    Pi_Q0= {'Ask_L1': [0.,
+                    [(200, 1.)]],
+            'Ask_L2': [0.,
+                    [(200, 1.)]],
+            'Bid_L1': [0.,
+                    [(200, 1.)]],
+            'Bid_L2': [0.,
+                    [(200, 1.)]]}
 
 kwargs={
     "TradingAgent": [],
@@ -129,14 +133,16 @@ kwargs={
 agents = kwargs['GymTradingAgent']
 j = agents[0]
 tc = 0.0001
-# RLagentInstance = PPOAgent( seed=1, log_events=True, log_to_file=True, strategy=j["strategy"], Inventory=j["Inventory"], cash=j["cash"], action_freq=j["action_freq"],
-#                           wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"], cashlimit=j["cashlimit"],inventorylimit=j['inventorylimit'], batch_size=512,
-#                           layer_widths=layer_widths, n_layers =n_layers, buffer_capacity = 100000, rewardpenalty = 1e-4, epochs = 1000, transaction_cost=tc, start_trading_lag = j['start_trading_lag'],
-#                           gae_lambda=0.5, truncation_enabled=False, action_space_config = 1, alt_state=True, include_time=False, optim_type='ADAM',entropy_coef=0,lr=1e-5)
-RLagentInstance = AdversarialPPOAgent( seed=1, log_events=True, log_to_file=True, strategy=j["strategy"], Inventory=j["Inventory"], cash=j["cash"], action_freq=j["action_freq"],
-                          wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"], cashlimit=j["cashlimit"],inventorylimit=j['inventorylimit'], batch_size=512,
-                          layer_widths=layer_widths, n_layers =n_layers, buffer_capacity = 100000, rewardpenalty = j["rewardpenalty"], epochs = 5, transaction_cost=1e-4, start_trading_lag = j['start_trading_lag'],
-                          gae_lambda=0.5, truncation_enabled=False, action_space_config = 1, alt_state=True, enhance_state=False, include_time=False, optim_type='ADAM',entropy_coef=0, exploration_bonus = 0, TWAPPresent=0, hidden_activation='sigmoid')
+if RL_type == "u":
+    RLagentInstance = PPOAgent( seed=1, log_events=True, log_to_file=True, strategy=j["strategy"], Inventory=j["Inventory"], cash=j["cash"], action_freq=j["action_freq"],
+                              wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"], cashlimit=j["cashlimit"],inventorylimit=j['inventorylimit'], batch_size=512,
+                              layer_widths=layer_widths, n_layers =n_layers, buffer_capacity = 100000, rewardpenalty = 1e-4, epochs = 1000, transaction_cost=tc, start_trading_lag = j['start_trading_lag'],
+                              gae_lambda=0.5, truncation_enabled=False, action_space_config = 1, alt_state=True, include_time=False, optim_type='ADAM',entropy_coef=0,lr=1e-5)
+else:
+    RLagentInstance = AdversarialPPOAgent( seed=1, log_events=True, log_to_file=True, strategy=j["strategy"], Inventory=j["Inventory"], cash=j["cash"], action_freq=j["action_freq"],
+                            wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"], cashlimit=j["cashlimit"],inventorylimit=j['inventorylimit'], batch_size=512,
+                            layer_widths=layer_widths, n_layers =n_layers, buffer_capacity = 100000, rewardpenalty = j["rewardpenalty"], epochs = 5, transaction_cost=1e-4, start_trading_lag = j['start_trading_lag'],
+                            gae_lambda=0.5, truncation_enabled=False, action_space_config = 1, alt_state=True, enhance_state=False, include_time=False, optim_type='ADAM',entropy_coef=0, exploration_bonus = 0, TWAPPresent=0, hidden_activation='sigmoid')
 
 j['agent_instance'] = RLagentInstance
 kwargs['GymTradingAgent'] = agents
