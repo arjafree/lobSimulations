@@ -72,9 +72,9 @@ kwargs={
                                 "on_trade":False,
                                 "total_order_size":300,
                                 "order_target":"INTC",
-                                "total_time":420,
-                                "window_size":160, #window size, measured in seconds
-                                "action_freq":40,
+                                "total_time":400,
+                                "window_size":50, #window size, measured in seconds
+                                "action_freq":1,
                                 "Inventory": {"INTC":500},
                                 'start_trading_lag': 100,
                                 "wake_on_MO": False,
