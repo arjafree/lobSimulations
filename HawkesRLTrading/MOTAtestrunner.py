@@ -4,9 +4,9 @@ sys.path.append(os.path.abspath('/home/ajafree/lobSimulations'))
 # sys.path.append(os.path.abspath('/Users/alirazajafree/Documents/GitHub/lobSimulations/'))
 from HawkesRLTrading.src.Envs.HawkesRLTradingEnv import *
 # import matplotlib.pyplot as plt
-log_dir = "/home/ajafree/october_retest/twap_alone/changedPIs/logs/"
+log_dir = "/home/ajafree/october_retest/twap_alone/logs/"
 twap_side = "buy"
-label = f'retest_twap_bigpov_{twap_side}_alone'
+label = f'retest_twap_regularpov_oldpis_{twap_side}_alone'
 
             
 # from scipy.optimize import curve_fit
@@ -26,46 +26,46 @@ for k in cols:
 tod=np.zeros(shape=(len(cols), 13))
 for i in range(len(cols)):
     tod[i]=[faketod[cols[i]][k] for k in range(13)]
-# Pis={'Bid_L2': [0.,
-#                 [(1, 1.)]],
-#         'Bid_inspread': [0.,
-#                         [(1, 1.)]],
-#         'Bid_L1': [0.,
-#                 [(1, 1.)]],
-#         'Bid_MO': [0.,
-#                 [(1, 1.)]]}
-# Pis["Ask_MO"] = Pis["Bid_MO"]
-# Pis["Ask_L1"] = Pis["Bid_L1"]
-# Pis["Ask_inspread"] = Pis["Bid_inspread"]
-# Pis["Ask_L2"] = Pis["Bid_L2"]
-# Pi_Q0= {'Ask_L1': [0.,
-#                     [(10, 1.)]],
-#         'Ask_L2': [0.,
-#                     [(10, 1.)]],
-#         'Bid_L1': [0.,
-#                     [(10, 1.)]],
-#         'Bid_L2': [0.,
-#                     [(10, 1.)]]}
 Pis={'Bid_L2': [0.,
-                [(40, 1.)]],
-     'Bid_inspread': [0.,
-                      [(40, 1.)]],
-     'Bid_L1': [0.,
-                [(40, 1.)]],
-     'Bid_MO': [0.,
-                [(40, 1.)]]}
+                [(1, 1.)]],
+        'Bid_inspread': [0.,
+                        [(1, 1.)]],
+        'Bid_L1': [0.,
+                [(1, 1.)]],
+        'Bid_MO': [0.,
+                [(1, 1.)]]}
 Pis["Ask_MO"] = Pis["Bid_MO"]
 Pis["Ask_L1"] = Pis["Bid_L1"]
 Pis["Ask_inspread"] = Pis["Bid_inspread"]
 Pis["Ask_L2"] = Pis["Bid_L2"]
 Pi_Q0= {'Ask_L1': [0.,
-                   [(200, 1.)]],
+                    [(10, 1.)]],
         'Ask_L2': [0.,
-                   [(200, 1.)]],
+                    [(10, 1.)]],
         'Bid_L1': [0.,
-                   [(200, 1.)]],
+                    [(10, 1.)]],
         'Bid_L2': [0.,
-                   [(200, 1.)]]}
+                    [(10, 1.)]]}
+# Pis={'Bid_L2': [0.,
+#                 [(40, 1.)]],
+#      'Bid_inspread': [0.,
+#                       [(40, 1.)]],
+#      'Bid_L1': [0.,
+#                 [(40, 1.)]],
+#      'Bid_MO': [0.,
+#                 [(40, 1.)]]}
+# Pis["Ask_MO"] = Pis["Bid_MO"]
+# Pis["Ask_L1"] = Pis["Bid_L1"]
+# Pis["Ask_inspread"] = Pis["Bid_inspread"]
+# Pis["Ask_L2"] = Pis["Bid_L2"]
+# Pi_Q0= {'Ask_L1': [0.,
+#                    [(200, 1.)]],
+#         'Ask_L2': [0.,
+#                    [(200, 1.)]],
+#         'Bid_L1': [0.,
+#                    [(200, 1.)]],
+#         'Bid_L2': [0.,
+#                    [(200, 1.)]]}
 
 kwargs={
             "TradingAgent": [],
@@ -87,15 +87,28 @@ kwargs={
                                 # "side":"buy",
                                 # "wake_on_MO": False,
                                 # "wake_on_Spread": False}
+                                # {"cash":1000000,
+                                # "cashlimit": 1000000000,
+                                # "strategy": "TWAP",
+                                # "on_trade":False,
+                                # "total_order_size":300,
+                                # "order_target":"INTC",
+                                # "total_time":400,
+                                # "window_size":50, #window size, measured in seconds
+                                # "action_freq":1,
+                                # "Inventory": {"INTC":500},
+                                # 'start_trading_lag': 100,
+                                # "wake_on_MO": False,
+                                # "wake_on_Spread": False}
                                 {"cash":1000000,
                                 "cashlimit": 1000000000,
                                 "strategy": "TWAP",
                                 "on_trade":False,
-                                "total_order_size":300,
+                                "total_order_size":8,
                                 "order_target":"INTC",
-                                "total_time":400,
-                                "window_size":50, #window size, measured in seconds
-                                "action_freq":1,
+                                "total_time":420,
+                                "window_size":160, #window size, measured in seconds
+                                "action_freq":40,
                                 "Inventory": {"INTC":500},
                                 'start_trading_lag': 100,
                                 "wake_on_MO": False,
@@ -245,6 +258,9 @@ for episode in range(20):
             # inventoryhistories[episode][agent.id].append((Simstate['TimeCode'], observations['Inventory']))
     final_cashs.append(final_cash)
     total_executeds.append(total_executed)
+    np.save(log_dir+label+"total_executed.npy", np.array(total_executeds))
+    np.save(log_dir+label+"final_cash.npy", np.array(final_cashs))
+    np.save(log_dir+label+"_start_midprices.npy", np.array(start_midprices))
 
 # Plot the final inventory trajectory after the simulation completes
 # plt.figure(figsize=(10, 6))

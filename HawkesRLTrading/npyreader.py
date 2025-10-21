@@ -146,14 +146,14 @@ def getSharpeComplete(data_array):
 def getSlippagesFromFinalCashInventory(finalcash, total_executed, starting_midprices, side):
     slippages = []
     for (cash, executed, starting_midprice) in zip(finalcash, total_executed, starting_midprices):
-        # print(cash)
-        # print(executed)
-        executed = 6
+        print(cash)
+        print(executed)
+        # executed = 6
         print(starting_midprice)
         benchmark_cost = executed*starting_midprice
         executed_cost = 1000000-cash if side == "buy" else cash-1000000
-        print(executed_cost)
-        print(benchmark_cost)
+        # print(executed_cost)
+        # print(benchmark_cost)
         diff = executed_cost-benchmark_cost
         slippage = diff/benchmark_cost
         slippage *= 10000
@@ -1373,14 +1373,112 @@ def price_quantity_graph_predecay_mortised_starting_at_0():
     
     return mean_times, mean_path, sampled_indices
 
-side = "sell"
+side = "buy"
+
+# twap_obsv_episodes = np.load(f"/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/fRL/logs/observations/retest_fRL_versus_{side}twap_observations.npy", allow_pickle=True)
+
+# print(f"Number of episodes: {len(twap_obsv_episodes)}")
+
+# # Since all episodes contain accumulated data, we only need episode 19 (contains all data)
+# # Then we'll split it by detecting time resets
+# all_observations = twap_obsv_episodes[-1]  # Take the last episode (has all data)
+
+# print(f"Total observations in final episode: {len(all_observations)}")
+
+# # Detect episode boundaries by time decreases
+# episode_boundaries = [0]
+# for i in range(1, len(all_observations)):
+#     current_time = all_observations[i].get('current_time', 999999)
+#     prev_time = all_observations[i-1].get('current_time', 0)
+    
+#     # Episode boundary: time decreases or resets
+#     if current_time < prev_time:
+#         episode_boundaries.append(i)
+#         print(f"Episode boundary at index {i}: time went from {prev_time} to {current_time}")
+
+# episode_boundaries.append(len(all_observations))
+
+# print(f"\nFound {len(episode_boundaries)-1} episodes")
+# print(f"Episode boundaries: {episode_boundaries[:5]}... (first 5)")
+
+# # Now extract starting midprices and other data
+# starting_midprices = []
+# decoded_episodes = {}
+
+# for ep_idx in range(len(episode_boundaries) - 1):
+#     start_idx = episode_boundaries[ep_idx]
+#     end_idx = episode_boundaries[ep_idx + 1]
+    
+#     episode_observations = all_observations[start_idx:end_idx]
+    
+#     episode_data = {
+#         'episode': ep_idx,
+#         'num_observations': len(episode_observations),
+#         'cash': [],
+#         'inventory': [],
+#         'current_time': [],
+#         'lob_data': []
+#     }
+    
+#     for obs in episode_observations:
+#         episode_data['cash'].append(obs.get('Cash', None))
+#         episode_data['inventory'].append(obs.get('Inventory', None))
+#         episode_data['current_time'].append(obs.get('current_time', None))
+        
+#         lob = obs.get('LOB0', {})
+#         lob_snapshot = {
+#             'ask_l1': lob.get('Ask_L1'),
+#             'bid_l1': lob.get('Bid_L1'),
+#             'ask_l2': lob.get('Ask_L2'),
+#             'bid_l2': lob.get('Bid_L2')
+#         }
+#         episode_data['lob_data'].append(lob_snapshot)
+    
+#     # Get starting midprice from first observation of this episode
+#     if len(episode_observations) > 0:
+#         first_lob = episode_observations[0].get('LOB0', {})
+#         ask = first_lob.get('Ask_L1', [None])[0]
+#         bid = first_lob.get('Bid_L1', [None])[0]
+#         if ask and bid:
+#             starting_midprices.append((ask + bid) / 2)
+#         else:
+#             starting_midprices.append(100.0)  # fallback
+    
+#     decoded_episodes[ep_idx] = episode_data
+#     print(f"Episode {ep_idx}: {len(episode_observations)} observations, "
+#           f"time range: {episode_data['current_time'][0]:.2f} - {episode_data['current_time'][-1]:.2f}")
+
+# # Now calculate slippages
+logdir = f"/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/twap_alone/"
+twap_finalcash = np.load(f"{logdir}/logsretest_twap_{side}_alonefinal_cash.npy")
+twap_totalexecuted = np.load(f"{logdir}/logsretest_twap_{side}_alonetotal_executed.npy")
+starting_midprices = np.load(f"{logdir}/logsretest_twap_{side}_alone_start_midprices.npy")
+
+temp = [0 for i in range(len(twap_totalexecuted))]
+for i in range(len(twap_totalexecuted)-1, 0, -1):
+    temp[i] = twap_totalexecuted[i]-twap_totalexecuted[i-1]
+temp[0] = twap_totalexecuted[0]
+twap_totalexecuted = temp
+
+print(twap_finalcash)
+# print(f"\nStarting midprices count: {len(starting_midprices)}")
+# print(f"Final cash count: {len(twap_finalcash)}")
+# print(f"Total executed count: {len(twap_totalexecuted)}")
+
+slippages = getSlippagesFromFinalCashInventory(twap_finalcash, twap_totalexecuted, starting_midprices, side)
+# print(f"\nSlippages: {slippages}")
+# print(f"Mean slippage: {np.mean(slippages):.4f} bps")
+# print(f"Number of episodes: {len(slippages)}")
+
 # print(f"{side} slippages")
 # twap_obsv_episodes = np.load(f"/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/fRL/logs/observations/retest_fRL_versus_{side}twap_observations.npy", allow_pickle=True)
-# twap_finalcash = np.load(f"/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/fRL/logs/retest_fRL_versus_{side}_alonefinal_cash.npy")
-# twap_totalexecuted = np.load(f"/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/fRL/logs/logsretest_twap_{side}_alonetotal_executed.npy")
-# starting_midprices = np.load(f"/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/fRL/logs/logsretest_twap_{side}_alone_start_midprices.npy")
+# twap_finalcash = np.load(f"/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/fRL/logs/twap_slippages/retest_fRL_versus_{side}final_cash.npy")
+# twap_totalexecuted = np.load(f"/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/fRL/logs/twap_slippages/retest_fRL_versus_{side}total_executed.npy")
+# starting_midprices = [] #np.load(f"/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/fRL/logs/logsretest_twap_{side}_alone_start_midprices.npy")
 # decoded_episodes = {}
 # for episode_idx, episode_obsv in enumerate(twap_obsv_episodes):
+#     # print(episode_idx)
+#     print(len(episode_obsv))
 #     episode_data = {
 #             'episode': episode_idx,
 #             'timestamps': [],
@@ -1392,11 +1490,11 @@ side = "sell"
 #             'num_observations': len(episode_obsv)
 #     }
 
-#     if episode_idx == 0:
-#         episode_start_idx = 0
-#     else:
-#         # Sum up lengths of all previous episodes
-#         episode_start_idx = sum(len(twap_obsv_episodes[i]) for i in range(episode_idx))
+#     # if episode_idx == 0:
+#     #     episode_start_idx = 0
+#     # else:
+#     #     # Sum up lengths of all previous episodes
+#     #     episode_start_idx = sum(len(twap_obsv_episodes[i]) for i in range(episode_idx))
 
 #     for obs_idx, obs in enumerate(episode_obsv):
 #         episode_data['cash'].append(obs.get('Cash', None)) 
@@ -1412,8 +1510,10 @@ side = "sell"
 #         }
 #         episode_data['lob_data'].append(lob_snapshot)
 
-#         if obs_idx == episode_start_idx:
+#         if obs_idx == 0:
 #             starting_midprices.append((lob_snapshot['ask_l1'][0]+lob_snapshot['bid_l1'][0])/2)
+
+# # print("starting midprices" + str(len(starting_midprices)))
 
 # slippages = getSlippagesFromFinalCashInventory(twap_finalcash, twap_totalexecuted, starting_midprices, side)
 # print(slippages)
@@ -1425,26 +1525,34 @@ side = "sell"
 # getSharpeComplete(rl_alone_data)
 
 
+# rl_alone = np.load("/Users/alirazajafree/researchprojects/RL_alone/RL_alonetest_episodes_RL_alone_profit.npy")
+# print("uRL Alone")
+# getSharpeComplete(rl_alone)
 
+# rl_before_buy = np.load("/Users/alirazajafree/researchprojects/untrained_RL/profits/untrained_rl_testingtest_untrained_RL_versus_buy_profit_wout_twap.npy")
+# print("uRL Before Buy")
+# getSharpeComplete(rl_before_buy)
+# # getSharpe(rl_before_buy)
+# rl_after_buy = np.load("/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/logs/profit/retest_uRL_versus_buy_profit_w_twap.npy")
+# print("uRL With buy")
+# getSharpeComplete(rl_after_buy)
+# # getSharpe(rl_after_buy)
+# rl_after_buy = np.load("/Users/alirazajafree/researchprojects/untrained_RL/profits/untrained_rl_testingtest_untrained_RL_versus_buy_profit_w_twap.npy")
+# print("uRL With buy (bigpov)")
+# getSharpeComplete(rl_after_buy)
 
-rl_before_buy = np.load("/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/fRL/logs/retest_fRL_versus_buy_profit_wout_twap.npy")
-print("fRL Before Buy")
-getSharpeComplete(rl_before_buy)
-# getSharpe(rl_before_buy)
-rl_after_buy = np.load("/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/fRL/logs/retest_fRL_versus_buy_profit_w_twap.npy")
-print("fRL With buy")
-getSharpeComplete(rl_after_buy)
-# getSharpe(rl_after_buy)
+# rl_before_sell = np.load("/Users/alirazajafree/researchprojects/untrained_RL/profits/untrained_rl_testingtest_untrained_RL_versus_sell_profit_wout_twap.npy")
+# print("uRL Before Sell")
+# getSharpeComplete(rl_before_sell)
+# # getSharpe(rl_before_sell)
 
-rl_before_sell = np.load("/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/fRL/logs/retest_fRL_versus_sell_profit_wout_twap.npy")
-print("fRL Before Sell")
-getSharpeComplete(rl_before_sell)
-# getSharpe(rl_before_sell)
-
-rl_after_sell = np.load("/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/fRL/logs/retest_fRL_versus_sell_profit_w_twap.npy")
-print("fRL With sell")
-getSharpeComplete(rl_after_sell)
+# rl_after_sell = np.load("/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/logs/profit/retest_uRL_versus_sell_profit_w_twap.npy")
+# print("uRL With sell")
+# getSharpeComplete(rl_after_sell)
 # getSharpe(rl_after_sell)
+# rl_after_sell = np.load("/Users/alirazajafree/researchprojects/untrained_RL/profits/untrained_rl_testingtest_untrained_RL_versus_sell_profit_w_twap.npy")
+# print("uRL With sell (bigpov)")
+# getSharpeComplete(rl_after_sell)
 
 
 # print("total sell sharpe fRL")
