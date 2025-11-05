@@ -383,12 +383,6 @@ for episode in range(20):
     final_cashs.append(final_cash)
     total_executeds.append(total_executed)
 
-    # if twap_side == "buy":
-    #     buy_slippage.append(slippage)
-    #     np.save(log_dir+label+"_buyslippage.npy", np.array(buy_slippage))
-    # else:
-    #     sell_slippage.append(slippage)
-    #     np.save(log_dir+label+"_sellslippage.npy", np.array(sell_slippage))
     if termination:
         print("Termination condition reached.")
     elif truncation:

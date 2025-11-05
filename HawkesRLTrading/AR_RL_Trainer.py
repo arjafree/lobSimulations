@@ -7,18 +7,24 @@ from HawkesRLTrading.src.SimulationEntities.MetaOrderTradingAgents import TWAPGy
 
 import torch
 
-log_dir = '/home/ajafree/TRAINING/logs/'
-model_dir = '/home/ajafree/TRAINING/icrl_ppo_model_symmetric'
+log_dir = '/home/ajafree/LSTM_fRL/with_expo/training/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/with_expo/training/model'
 # log_dir = '/Users/alirazajafree/researchprojects/logs'
 # model_dir = '/Users/alirazajafree/researchprojects/models/icrl_ppo_model_symmetric'
 
 start_trading_lag = 100
 
-label = 'train_RLAgent_vs_TWAP_standardised_updatedslippagegraphs'
-layer_widths=512
-n_layers=1
+twap_side = "buy"
+#the time that the TWAP agent will kick in:
+twap_start_time = 150 + start_trading_lag #int(np.clip(np.random.normal(150, 50), 1, 300)) + start_trading_lag
 
-checkpoint_params = ('20250920_101819_train_RLAgent_vs_TWAP_standardised_starttime_repeated_withslippagegraphs', 28)
+twap_end_time = 300 + start_trading_lag
+
+label = 'train_RLAgent_vs_TWAP_standardised_updatedslippagegraphs'
+layer_widths=50
+n_layers=3
+
+checkpoint_params = None
 
 def graphInventories(beforetwap, withtwap_buy, withtwap_sell, episode_num):
     plt.figure(figsize=(12, 8))
@@ -146,10 +152,10 @@ kwargs={
                           "cashlimit": 100000000000,
                           "strategy": "TWAP",
                           "on_trade":False,
-                          "total_order_size":300,
+                          "total_order_size":150,
                           "order_target":"INTC",
-                          "total_time":400,
-                          "window_size":50, #window size, measured in seconds
+                          "total_time":150,
+                          "window_size":25, #window size, measured in seconds
                           "action_freq":1,
                           "Inventory": {"INTC":500},
                           'start_trading_lag': start_trading_lag,
@@ -169,7 +175,7 @@ kwargs={
                                      "beta": 0.941,
                                      "avgSpread": 0.0101,
                                      "Pi_Q0": Pi_Q0,
-                                     'expapprox' : True}}
+                                     'expapprox' : True}} #one with true, one with false
 }
 
 agents = kwargs['GymTradingAgent']
@@ -178,10 +184,7 @@ tc = 0.0001
 RLagentInstance = AdversarialPPOAgent( seed=1, log_events=True, log_to_file=True, strategy=j["strategy"], Inventory=j["Inventory"], cash=j["cash"], action_freq=j["action_freq"],
                           wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"], cashlimit=j["cashlimit"],inventorylimit=j['inventorylimit'], batch_size=512,
                           layer_widths=layer_widths, n_layers =n_layers, buffer_capacity = 100000, rewardpenalty = j["rewardpenalty"], epochs = 5, transaction_cost=1e-4, start_trading_lag = j['start_trading_lag'],
-                          gae_lambda=0.5, truncation_enabled=False, action_space_config = 1, alt_state=True, enhance_state=False, include_time=False, optim_type='ADAM',entropy_coef=0, exploration_bonus = 0, TWAPPresent=0 , hidden_activation='relu')
-# RLagentInstance = ProbabilisticAgent(seed=1, log_events=True, log_to_file=True, strategy=j["strategy"], Inventory=j["Inventory"], cash=j["cash"], action_freq=j["action_freq"],
-#                           wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"], cashlimit=j["cashlimit"],inventorylimit=j['inventorylimit'], 
-#                           rewardpenalty = 1e-4, transaction_cost=tc, start_trading_lag = j['start_trading_lag'])
+                          gae_lambda=0.5, truncation_enabled=False, action_space_config = 1, alt_state=True, enhance_state=True, include_time=True, optim_type='ADAM',entropy_coef=0, exploration_bonus = 0, TWAPPresent=0 , hidden_activation='relu')
 
 inventories_with_twap_buy = []
 inventories_with_twap_sell = []
@@ -190,9 +193,8 @@ inventories_without_twap = []
 j['agent_instance'] = RLagentInstance
 kwargs['GymTradingAgent'] = agents
 i_eps=0
-# cash, inventory, t, actions = [], [], [], []
-t = []
-avgEpisodicRewards, stdEpisodicRewards, finalcash, finalcash2 = [], [], [], []
+t, t_with_twap_buy, t_with_twap_sell, t_without_twap = [], [], [], []
+avgEpisodicRewards, stdEpisodicRewards, finalcash, finalcash2, profit_with_twap_sell, profit_with_twap_buy, profit_without_twap = [], [], [], [], [], [], []
 train_logger = TrainingLogger(layer_widths=layer_widths, n_layers=n_layers, log_dir=log_dir, label = label)
 model_manager = ModelManager(model_dir = model_dir, label = label)
 counter_profit = 0
@@ -201,29 +203,47 @@ cashs:Dict[int, List] = {}
 inventories:Dict[int, List] = {}
 actionss:Dict[int, List] = {}
 RLagentID = 1
-twap_sell_slippages = []
-twap_buy_slippages = []
 
+start_midprices = []
+total_executeds = []
+
+TWAP_obsv = []
+RL_obsv = []
+
+sides = []
+
+eps_with_buy = []
+eps_with_sell = []
+
+total_RL_obsv = []
+
+final_cashs = []
+total_executeds = []
 for episode in range(100):
     inventory_with_twap_buy = []
     inventory_with_twap_sell = []
     inventory_without_twap = []
+
+    RL_agent_obsv = []
+    TWAP_agent_obsv = []
+
     twap_diff = 0
     starting_midprice = 0
     new_midprice = True
     kwargs["GymTradingAgent"][1]["Inventory"] = {"INTC": 500}
     kwargs["GymTradingAgent"][1]["cash"] = 1000000
-    #the time that the TWAP agent will kick in:
-    twap_time = 150 + start_trading_lag #int(np.clip(np.random.normal(150, 50), 1, 300)) + start_trading_lag
-    RLagentInstance.TWAPPresent = False
+
+    # RLagentInstance.TWAPPresent = False
     twap_side = np.random.choice(["buy", "sell"])
-    kwargs["GymTradingAgent"][1]["start_trading_lag"] = twap_time
+    sides.append(twap_side)
+    eps_with_buy.append(episode) if twap_side == "buy" else eps_with_sell.append(episode)
+    kwargs["GymTradingAgent"][1]["start_trading_lag"] = twap_start_time
     #randomise buy or sell
     kwargs["GymTradingAgent"][1]["side"] = twap_side
     i = 0
     action_num = 0
-    env=tradingEnv(stop_time=400, wall_time_limit=23400, **kwargs)
-    print(f"Start of episode {episode}. TWAP Time is {twap_time} and side is {twap_side}")
+    env=tradingEnv(stop_time=550, wall_time_limit=23400, **kwargs)
+    print(f"Start of episode {episode}. TWAP side is {twap_side}")
     print("Initial Observations"+ str(env.getobservations()))
     Simstate, observations, termination, truncation =env.step(action=None) 
     AgentsIDs=[k for k,v in Simstate["Infos"].items() if v==True]
@@ -246,7 +266,7 @@ for episode in range(100):
         print(f"Agents with IDs {AgentsIDs} have an action available")
         agents:List[GymTradingAgent] = [env.getAgent(ID=agentid) for agentid in AgentsIDs]
         # action:list[Tuple] = []
-        if(Simstate['TimeCode'] > twap_time) and not RLagentInstance.TWAPPresent:
+        if(twap_end_time > Simstate['TimeCode'] > twap_start_time) and not RLagentInstance.TWAPPresent:
             RLagentInstance.TWAPPresent = -1 if twap_side == 'sell' else 1
 
         for agent in agents:
@@ -271,61 +291,11 @@ for episode in range(100):
                 cashs.update({agent.id:cashs.get(agent.id, [])+[observations['Cash']]})
                 inventories.update({agent.id:inventories.get(agent.id, []) + [observations['Inventory']]})
                 actionss.update({agent.id: actionss.get(agent.id, []) + [action[1][0]]})
-                twap_agent = agent if isinstance(agent, TWAPGymTradingAgent) else None
-                if 399 <= Simstate['TimeCode'] <= 400:
-                    if twap_agent.side == "sell":
-                        # TWAP started with 500 shares, calculate how many were sold
-                        total_executed = 500 - twap_agent.Inventory["INTC"]
-                        if total_executed > 0:
-                            # Calculate cash earned from selling
-                            total_earned = twap_agent.cash - 1000000  # Started with 1M cash
-                            # Benchmark: what they would have earned selling at starting mid-price
-                            benchmark_earned = total_executed * starting_midprice
-                            # Slippage: (actual - benchmark) / benchmark
-                            slippage = (total_earned - benchmark_earned) / benchmark_earned
-                            
-                            # Overwrite if we already have data for this episode (prevent duplicates)
-                            if len(twap_sell_slippages) > episode:
-                                twap_sell_slippages[episode] = slippage
-                                print(f"SELL - Overwriting episode {episode} slippage data")
-                            else:
-                                # Pad with None if needed and add new data
-                                while len(twap_sell_slippages) < episode:
-                                    twap_sell_slippages.append(None)
-                                twap_sell_slippages.append(slippage)
-                            
-                            print(f"SELL - Executed: {total_executed}, Earned: {total_earned}, Benchmark: {benchmark_earned}, Slippage: {slippage}")
-                        else:
-                            print("SELL - No executions this episode")
-                            
-                    elif twap_agent.side == "buy":
-                        # TWAP started with 500 shares, calculate how many were bought
-                        total_executed = twap_agent.Inventory["INTC"] - 500
-                        if total_executed > 0:
-                            # Calculate cash spent on buying
-                            total_paid = 1000000 - twap_agent.cash  # Started with 1M cash
-                            # Benchmark: what they would have paid buying at starting mid-price
-                            benchmark_paid = total_executed * starting_midprice
-                            # Slippage: (actual - benchmark) / benchmark
-                            slippage = (total_paid - benchmark_paid) / benchmark_paid
-                            
-                            # Overwrite if we already have data for this episode (prevent duplicates)
-                            if len(twap_buy_slippages) > episode:
-                                twap_buy_slippages[episode] = slippage
-                                print(f"BUY - Overwriting episode {episode} slippage data")
-                            else:
-                                # Pad with None if needed and add new data
-                                while len(twap_buy_slippages) < episode:
-                                    twap_buy_slippages.append(None)
-                                twap_buy_slippages.append(slippage)
-                            
-                            print(f"BUY - Executed: {total_executed}, Paid: {total_paid}, Benchmark: {benchmark_paid}, Slippage: {slippage}")
-                        else:
-                            print("BUY - No executions this episode")
+
+                total_executed = abs(500 - agent.Inventory["INTC"])
+                final_cash = agent.cash
                     
-                    # Debug output
-                    print(f"Total slippages recorded so far - Sell: {len([s for s in twap_sell_slippages if s is not None])}, Buy: {len([s for s in twap_buy_slippages if s is not None])}")
-                    
+                   
             else:
                 action_num+=1
                 RLagentID = agent.id
@@ -338,7 +308,7 @@ for episode in range(100):
                 cashs.update({agent.id:cashs.get(agent.id, [])+[observations['Cash']]})
                 inventories.update({agent.id:inventories.get(agent.id, []) + [observations['Inventory']]})
                 actionss.update({agent.id: actionss.get(agent.id, []) + [action[1][0]]})
-                if(Simstate["TimeCode"] > twap_time):
+                if(twap_end_time > Simstate['TimeCode'] > twap_start_time):
                     if twap_side == "sell":
                         inventory_with_twap_sell.append(observations["Inventory"])
                     else:
@@ -360,6 +330,17 @@ for episode in range(100):
                 # Calculate current PnL (cash + inventory value)
                 current_pnl = cashs[agent.id][-1] + inventories[agent.id][-1] * agent.mid * (1 - tc*np.sign(inventories[agent.id][-1]))
                 finalcash2.append(current_pnl)
+
+                if(twap_end_time >= Simstate['TimeCode'] >= twap_start_time):
+                    if twap_side == "buy":
+                        profit_with_twap_buy.append(current_pnl)
+                        t_with_twap_buy += [Simstate['TimeCode']]
+                    else:
+                        profit_with_twap_sell.append(current_pnl)
+                        t_with_twap_sell += [Simstate['TimeCode']]
+                else:
+                    profit_without_twap.append(current_pnl)
+                    t_without_twap += [Simstate['TimeCode']]
                 
                 #Sharpe ratio
                 all_log_returns = []
@@ -412,53 +393,26 @@ for episode in range(100):
                 plt.ylabel('Profit in Dollars')
                 plt.title('Final Profit - All Episodes Overlaid')
                 plt.savefig(log_dir + label + '_profit.png')
-                np.save(log_dir + label + '_profit', np.array([t, finalcash2]))
+                
+                np.save(log_dir + "sharpe/" + label + '_profit', np.array([t, finalcash2]))
+                np.save(log_dir+ "sharpe/" + label+"_profit_w_twap_buy", np.array([t_with_twap_buy, profit_with_twap_buy])) if twap_side == "buy" else np.save(log_dir+label+"_profit_w_twap_sell", np.array([t_with_twap_sell, profit_with_twap_sell]))
+                np.save(log_dir+"sharpe/" +label+"_profit_wout_twap", np.array([t_without_twap, profit_without_twap]))
+
+                RL_agent_obsv.append(observationsDict[RLagentID])
             
             print(agent.current_time)
             print(f"ACTION DONE{action_num}")
-            
+    
+    total_RL_obsv.append(RL_agent_obsv)
+
     if(len(inventory_with_twap_buy) > 0):
         inventories_with_twap_buy.append(inventory_with_twap_buy)
     else:
         inventories_with_twap_sell.append(inventory_with_twap_sell)
     inventories_without_twap.append(inventory_without_twap)
-    graphInventories(withtwap_buy = inventories_with_twap_buy, withtwap_sell=inventories_with_twap_sell, beforetwap=inventories_without_twap, episode_num=episode)
 
-    # for agent in agents:
-    #     if isinstance(agent, TWAPGymTradingAgent):
-    #         if agent.side == "sell":
-    #             total_executed = 500 - agent.Inventory["INTC"] 
-    #             assert total_executed > 0
-    #             total_earned = agent.cash - 1000000
-    #             twap_sell_slippages.append((total_earned - total_executed*starting_midprice)/(total_executed*starting_midprice))
-    #         else:
-    #             total_executed = agent.Inventory["INTC"] - 500
-    #             assert total_executed > 0
-    #             total_paid = 1000000 - agent.cash
-    #             twap_buy_slippages.append((total_paid - total_executed*starting_midprice)/(total_executed*starting_midprice))
-
-# Plot slippages (filter out None values)
-    plt.figure(figsize=(10, 6))
-    
-    valid_sell_slippages = [s for s in twap_sell_slippages if s is not None]
-    valid_buy_slippages = [s for s in twap_buy_slippages if s is not None]
-    
-    if valid_sell_slippages:
-        sell_episodes = [i for i, s in enumerate(twap_sell_slippages) if s is not None]
-        plt.plot(sell_episodes, [-s for s in valid_sell_slippages], label=f'TWAP Sell Slippage (negated) n={len(valid_sell_slippages)}', marker='o')
-    
-    if valid_buy_slippages:
-        buy_episodes = [i for i, s in enumerate(twap_buy_slippages) if s is not None]
-        plt.plot(buy_episodes, valid_buy_slippages, label=f'TWAP Buy Slippage n={len(valid_buy_slippages)}', marker='x')
-    
-    plt.xlabel('Episode')
-    plt.ylabel('Slippage')
-    plt.title('TWAP Slippages (Buy vs Sell)')
-    plt.legend()
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(log_dir + label + '_twap_slippages.png', dpi=300, bbox_inches='tight')
-    plt.close()
+    final_cashs.append(final_cash)
+    total_executeds.append(total_executed)
 
     if termination:
         print("Termination condition reached.")
@@ -514,6 +468,9 @@ for episode in range(100):
     finalcash.append(cashs[(RLagentID)][-1] + inventories[(RLagentID)][-1]*agent.mid )
     pft = np.array(finalcash) - j["cash"]
     ma = np.convolve(pft, np.ones(5)/5, mode='valid')
+
+    np.save(log_dir+"trajectory_buffer", agent.trajectory_buffer)
+
     plt.figure(figsize=(12,8))
     plt.subplot(311)
     plt.plot(np.arange(len(avgEpisodicRewards)),avgEpisodicRewards)
@@ -531,3 +488,14 @@ for episode in range(100):
     plt.savefig(log_dir + label+'_avgepisodicreward.png')
     torch.cuda.empty_cache()
     # torch.mps.empty_cache()
+
+np.save(log_dir +"inventorydists/" + label+ "_inventory_without_twap.npy", np.array(inventory_without_twap))
+
+if len(inventory_with_twap_sell) > 0:
+    np.save(log_dir +"inventorydists/" + label+ "_inventory_with_twap_sell.npy", np.array(inventory_with_twap_sell))
+if len(inventory_with_twap_buy) > 0:
+    np.save(log_dir +"inventorydists/" + label+ "_inventory_with_twap_buy.npy", np.array(inventory_with_twap_buy))
+
+np.save(log_dir+"slippages/"+label+"total_executed.npy", np.array(total_executeds))
+np.save(log_dir+"slippages/"+label+"final_cash.npy", np.array(final_cashs))
+np.save(log_dir+label+"RL_observations.npy", np.array(total_RL_obsv))
