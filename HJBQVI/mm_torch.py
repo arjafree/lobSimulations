@@ -9,6 +9,40 @@ import os
 import pickle
 import pandas as pd
 
+import torch
+
+def expand_logits(nn_logits, mask_value=-1e9):
+    """
+    Expand NN logits of shape (batch_size, 4) to simulator logits of shape (batch_size, 12).
+
+    Args:
+        nn_logits: torch.Tensor of shape (batch_size, 4)
+                   Columns correspond to [lo_top_ask, co_top_ask, co_top_bid, lo_top_bid]
+        mask_value: float, value used to mask irrelevant simulator actions (default: -1e9)
+
+    Returns:
+        torch.Tensor of shape (batch_size, 12)
+    """
+
+    batch_size = nn_logits.shape[0]
+
+    # Initialize all actions as masked
+    logits_12 = torch.full(
+        (batch_size, 12),
+        mask_value,
+        dtype=nn_logits.dtype,
+        device=nn_logits.device
+    )
+
+    # Assign NN logits to the correct simulator action indices
+    logits_12[:, 2] = nn_logits[:, 0]  # lo_top_Ask
+    logits_12[:, 3] = nn_logits[:, 1]  # co_top_Ask
+    logits_12[:, 8] = nn_logits[:, 2]  # co_top_Bid
+    logits_12[:, 9] = nn_logits[:, 3]  # lo_top_Bid
+
+    return logits_12
+
+
 def gumbel_softmax_sample(logits, tau=1.0, hard=True):
     """Gumbel-Softmax with straight-through trick."""
     # gumbel_noise = -torch.log(-torch.log(torch.rand_like(logits) + 1e-20) + 1e-20)
@@ -66,12 +100,13 @@ class MarketMaking():
         self.NDIMS = 12
         self.NUM_POINTS = num_points
         self.EPOCHS = num_epochs
-        self.eta = 100  # inventory penalty
+        self.eta = 10  # inventory penalty
         self.E = ["lo_deep_Ask", "co_deep_Ask", "lo_top_Ask", "co_top_Ask", "mo_Ask", "lo_inspread_Ask",
                   "lo_inspread_Bid", "mo_Bid", "co_top_Bid", "lo_top_Bid", "co_deep_Bid", "lo_deep_Bid"]
         self.U = ["lo_deep_Ask", "lo_top_Ask", "co_top_Ask", "mo_Ask", "lo_inspread_Ask",
                   "lo_inspread_Bid", "mo_Bid", "co_top_Bid", "lo_top_Bid", "lo_deep_Bid"]
-        if hawkes: self.U = self.E.copy()
+        if hawkes:
+            self.U = [ "lo_top_Ask", "co_top_Ask", "co_top_Bid", "lo_top_Bid"]
         self.hawkes = hawkes
         # self.lambdas_poisson = [.86, .32, .33, .48, .02, .47, .47, .02, .48, .33, .32, .86]  # [5] * 12 # AMZN
         # INTC : {'lo_deep_Ask': 1.3291742343304844, 'co_deep_Ask': 2.2448482015669513, 'lo_top_Ask': 7.89707621082621, 'co_top_Ask': 6.617852118945869, 'mo_Ask': 0.5408440170940172, 'lo_inspread_Ask': 0.1327911324786325, 'lo_inspread_Bid': 0.1327911324786325, 'mo_Bid': 0.5408440170940172, 'co_top_Bid': 6.617852118945869, 'lo_top_Bid': 7.89707621082621, 'co_deep_Bid': 2.2448482015669513, 'lo_deep_Bid': 1.3291742343304844}
@@ -95,7 +130,7 @@ class MarketMaking():
 
     def ansatz_output(self, states, ts, model_phi):
         states_lob = self.means + states[:,:11].clone()*(self.stds + 1e-8)
-        return (states_lob[:,0] + states_lob[:,1]*states_lob[:,10]).unsqueeze(-1) + (1 - ts)*model_phi(ts, states)*1000
+        return (states_lob[:,0] + states_lob[:,1]*(states_lob[:,10] - 1e-2*states_lob[:,1])).unsqueeze(-1) + (1 - ts)*model_phi(ts, states)*1000
 
     def sampler(self, num_points=1000, seed=None, boundary=False, hawkes=False):
         '''
@@ -108,8 +143,9 @@ class MarketMaking():
             torch.manual_seed(seed)
 
         # Generate sample data
-        Xs = np.round(1e3 * np.random.randn(num_points, 1), 2)
+
         Ys = np.round(6 * np.random.randn(num_points, 1), 0)
+        Xs = 2500 - 100*Ys + np.round(0.1*np.random.randn(num_points, 1), 2)
         P_mids = np.round(200 + 10 * np.random.randn(num_points, 1), 2) / 2
         spreads = 0.01 * np.random.geometric(.8, [num_points, 1])
         p_as = np.round(P_mids + spreads / 2, 2)
@@ -121,8 +157,8 @@ class MarketMaking():
         qD_as = np.random.geometric(p2, [num_points, 1])
         q_bs = np.random.geometric(p, [num_points, 1])
         qD_bs = np.random.geometric(p2, [num_points, 1])
-        n_as = np.array([np.random.randint(0, 2*b) for b in q_as])/q_as
-        n_bs = np.array([np.random.randint(0, 2*b) for b in q_bs])/q_bs
+        n_as = np.array([np.random.randint(0, b) for b in q_as + qD_as + 1])/q_as
+        n_bs = np.array([np.random.randint(0, b) for b in q_bs + qD_bs + 1])/q_bs
         if hawkes:
             frozen_mask = (self.alphas != 0)
             lambdas = torch.log((torch.tensor(np.random.pareto(3.0, [num_points,len(self.E), len(self.E)]), dtype=torch.float32)*frozen_mask+ 1)*self.mus)
@@ -136,7 +172,7 @@ class MarketMaking():
         # --- Standardize using known distributions ---
         eps = 1e-8
         means = np.array([
-            0.0,   # X ~ N(0, 1000^2)
+            2500.0,
             0.0,   # Y ~ N(0, 2^2)
             100.0, # ask price ~ Pmid + spread/2
             100.0, # bid price ~ Pmid - spread/2
@@ -144,13 +180,13 @@ class MarketMaking():
             (1-p)/p,   # mean of Geom(0.002)
             (1-p2)/p2, # mean of Geom(0.0015)
             (1-p2)/p2, # mean of Geom(0.0015)
-            None,  # n_as ~ U(0, q_as) (data dependent, center later)
-            None,  # n_bs ~ U(0, q_bs)
+            0,  # n_as ~ U(0, q_as) (data dependent, center later)
+            0,  # n_bs ~ U(0, q_bs)
             100.0  # Pmid
         ])
 
         stds = np.array([
-            1000.0,
+            6.0,
             6.0,
             5.0,
             5.0,
@@ -158,16 +194,16 @@ class MarketMaking():
             np.sqrt((1-p)/(p**2)),
             np.sqrt((1-p2)/(p2**2)),
             np.sqrt((1-p2)/(p2**2)),
-            None,
-            None,
+            1,
+            1,
             5.0
         ])
 
         # Fill n_as, n_bs normalization from sample (since uniform depends on q)
-        means[8] = n_as.mean()
-        means[9] = n_bs.mean()
-        stds[8] = n_as.std() + eps
-        stds[9] = n_bs.std() + eps
+        # means[8] = n_as.mean()
+        # means[9] = n_bs.mean()
+        # stds[8] = n_as.std() + eps
+        # stds[9] = n_bs.std() + eps
 
         features = (features - means) / (stds + eps)
         features = features.astype('float')
@@ -277,9 +313,9 @@ class MarketMaking():
     def tr_co_top(self, z, q_as, n_as, qD_as, p_as, P_mids, intervention=False):
         if intervention:
             # For intervention, directly update values
-            q_as_updated = q_as - 1.0
+            q_as_updated = torch.clamp(q_as - 1.0, 1e-3)
             # This is a simplification; in real code, you might need a differentiable alternative
-            n_as_updated = torch.rand(n_as.shape, device=n_as.device) * (q_as_updated + qD_as + 1)
+            n_as_updated = (q_as_updated + qD_as + 1)/q_as_updated
             qD_as_updated =qD_as.clone()
         else:
             # For normal operation
@@ -846,6 +882,8 @@ class MarketMaking():
 
         # Control network
         logits_u = model_u(ts, states)[1]
+        if len(self.U) != len(self.E):
+            logits_u = expand_logits(logits_u)
         if not train_u:
             logits_u = logits_u.detach()
 
@@ -858,7 +896,9 @@ class MarketMaking():
 
         # HJB evaluation
         print(ds.unique(return_counts=True))
-        evaluation = (1 - ds) * (L_phi + f) + ds * (M_phi - output)
+        # evaluation = (L_phi + f) + 10000 * torch.clamp(M_phi - output, min=0)
+        # print(((M_phi- output) > 0).sum())
+        evaluation = (1-ds)*(L_phi + f) + ds*(M_phi - output)
         evaluation /= 1000.0
         # Interior loss
         interior_loss = nn.MSELoss()(evaluation, torch.zeros_like(evaluation))
@@ -1233,7 +1273,11 @@ class MarketMaking():
 
         if phi_optim == 'ADAM':
             optimizer_phi = optim.Adam(model_phi.parameters(), lr=lr)
-            scheduler_phi = optim.lr_scheduler.LambdaLR(optimizer_phi, lr_lambda)
+            scheduler_phi = torch.optim.lr_scheduler.StepLR(
+                optimizer_phi,
+                step_size=1000,  # same as decay_steps
+                gamma=0.96         # same as decay_rate
+            )
         else:
             optimizer_phi = optim.LBFGS(model_phi.parameters(), lr=lr*100, line_search_fn ='strong_wolfe')
             # scheduler_phi = optim.lr_scheduler.LambdaLR(optimizer_phi, lr_lambda_lbfgs)
@@ -1243,8 +1287,16 @@ class MarketMaking():
 
         # Set up schedulers
 
-        scheduler_u = optim.lr_scheduler.LambdaLR(optimizer_u, lr_lambda)
-        scheduler_d = optim.lr_scheduler.LambdaLR(optimizer_d, lr_lambda)
+        scheduler_u = torch.optim.lr_scheduler.StepLR(
+            optimizer_u,
+            step_size=1000,  # same as decay_steps
+            gamma=0.96         # same as decay_rate
+        )
+        scheduler_d = torch.optim.lr_scheduler.StepLR(
+            optimizer_d,
+            step_size=1000,  # same as decay_steps
+            gamma=0.96         # same as decay_rate
+        )
 
         #entropy target a la SAC
         self.log_alpha_u = torch.tensor(2.0, requires_grad=True, device=self.device)
@@ -1256,7 +1308,7 @@ class MarketMaking():
         # Training loop
         freeze_d = False
         for epoch in range(continue_epoch, self.EPOCHS):
-            if epoch > 50: freeze_d = True
+            if epoch > 500: freeze_d = True
             print(f"\nEpoch {epoch+1}/{self.EPOCHS}")
             #KJ: PoC needed for a simple LOB model - check the solution wrt real soln
             #KJ: also useful would be Mguni et al. comparison
@@ -1638,4 +1690,4 @@ class MarketMakingUnifiedControl(MarketMaking):
 
 # get_gpu_specs()
 MM = MarketMaking(num_epochs=2000, num_points=1000, hawkes=True)
-MM.train(lr =1e-3, ric='INTC', phi_epochs = 5, sampler='iid',log_dir = 'logs', model_dir = 'models', typeNN='LSTM', layer_widths = [50, 50, 50], n_layers= [5,5,5], unified=False, label = 'LSTM_INTC_hawkes', activation='relu')
+MM.train(lr =1e-3, ric='INTC', phi_epochs = 5, sampler='iid',log_dir = 'logs', model_dir = 'models', typeNN='LSTM', layer_widths = [50, 50, 50], n_layers= [5,5,5], unified=False, label = 'LSTM_INTC_hawkes_tc1_4U', activation='relu')
