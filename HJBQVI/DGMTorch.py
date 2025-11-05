@@ -854,6 +854,8 @@ class ActorMLP(BaseNet):
         '''
         super(ActorMLP, self).__init__()
 
+        self.typeNN = typeNN
+
         if typeNN == "dense":
             # Initial layer
             self.initial_layer = DenseLayer(layer_width, input_dim, activation=hidden_activation)
@@ -920,6 +922,8 @@ class CriticMLP(BaseNet):
         '''
         super(CriticMLP, self).__init__()
 
+        self.typeNN = typeNN
+
         if typeNN == "dense":
 
             # Initial layer
@@ -970,7 +974,7 @@ class CriticMLP(BaseNet):
 class ActorCriticSeparate(nn.Module):
     def __init__(self, input_dim, layer_width, n_layers,
                  actor_output_dim, actor_activation="softmax",
-                 hidden_activation="tanh", q_function=True):
+                 hidden_activation="tanh", q_function=True, typeNN = "dense"):
         '''
         Separate Actor-Critic networks
 
@@ -991,7 +995,8 @@ class ActorCriticSeparate(nn.Module):
             n_layers=n_layers,
             output_dim=actor_output_dim,
             output_activation=actor_activation,
-            hidden_activation=hidden_activation
+            hidden_activation=hidden_activation, 
+            typeNN=typeNN
         )
 
         critic_output_dim = actor_output_dim if q_function else 1
@@ -1001,7 +1006,8 @@ class ActorCriticSeparate(nn.Module):
             n_layers=n_layers,
             output_dim=critic_output_dim,
             hidden_activation=hidden_activation,
-            q_function=q_function
+            q_function=q_function,
+            typeNN=typeNN
         )
 
     def forward(self, x):
@@ -1015,8 +1021,27 @@ class ActorCriticSeparate(nn.Module):
             actor_output: policy distribution or action
             critic_output: value estimate
         '''
-        actor_output = self.actor(x)
-        critic_output = self.critic(x)
+        if self.actor.typeNN == "dense":
+            actor_output = self.actor(x)
+        elif self.actor.typeNN == "LSTM":
+            S = self.actor.initial_layer(x)
+            # Process through LSTM layers
+            for lstm_layer in self.actor.lstm_layers:
+                S = lstm_layer(S, x)  # LSTMLayer needs both S and X
+            
+            actor_output = self.actor.output_layer(S)
+        
+        if self.critic.typeNN == "dense":
+            critic_output = self.critic(x)
+
+        elif self.critic.typeNN == "LSTM":
+            S = self.critic.initial_layer(x)
+            # Process through LSTM layers
+            for lstm_layer in self.critic.lstm_layers:
+                S = lstm_layer(S, x)  # LSTMLayer needs both S and X
+            
+            critic_output = self.actor.output_layer(S)
+
         return actor_output, critic_output
 
     def actor_forward(self, x):

@@ -1401,7 +1401,7 @@ class PPOAgent(GymTradingAgent):
                  buffer_capacity=10000, batch_size=64, epochs=1000, layer_widths = 128, n_layers = 3, clip_ratio=0.2,
                  value_loss_coef=0.5, entropy_coef=10, max_grad_norm=0.5, gae_lambda=0.95, rewardpenalty = 0.1, hidden_activation='leaky_relu',
                  transaction_cost = 0.01, start_trading_lag=0, truncation_enabled=True, action_space_config = 0, include_time = False, alt_state=False, enhance_state=False,
-                 policy_loss_coef = 1, optim_type = 'ADAM',lr=1e-3, exploration_bonus = 0, two_sided_reward = True, ablation_params= {}):
+                 policy_loss_coef = 1, optim_type = 'ADAM',lr=1e-3, exploration_bonus = 0, two_sided_reward = True, ablation_params= {}, typeNN = "dense"):
         """
         PPO Agent with Generalized Advantage Estimation (GAE)
         Maintains two networks: one for decision (d) and one for utility (u)
@@ -1479,6 +1479,8 @@ class PPOAgent(GymTradingAgent):
         # State scaler
         self.mmscaler = MinMaxScaler()
         self.ablation_params = ablation_params
+        # NN Type
+        self.typeNN = typeNN
         # Enable anomaly detection for debugging
         torch.autograd.set_detect_anomaly(True)
 
@@ -1580,11 +1582,11 @@ class PPOAgent(GymTradingAgent):
 
         # Initialize main networks with shared architecture
         if type == 'separate':
-            self.Actor_Critic_d = ActorCriticSeparate(state_dim, self.layer_widths, self.n_layers, 2, actor_activation=None, hidden_activation=self.hidden_activation, q_function = False)
-            self.Actor_Critic_u = ActorCriticSeparate(state_dim, self.layer_widths, self.n_layers, len(self.allowed_actions), actor_activation=None, hidden_activation=self.hidden_activation,q_function = False)
+            self.Actor_Critic_d = ActorCriticSeparate(state_dim, self.layer_widths, self.n_layers, 2, actor_activation=None, hidden_activation=self.hidden_activation, q_function = False, typeNN=self.typeNN)
+            self.Actor_Critic_u = ActorCriticSeparate(state_dim, self.layer_widths, self.n_layers, len(self.allowed_actions), actor_activation=None, hidden_activation=self.hidden_activation,q_function = False, typeNN=self.typeNN)
         else:
-            self.Actor_Critic_d = ActorCriticMLP(state_dim, self.layer_widths, self.n_layers, 2, actor_activation='tanh', hidden_activation=self.hidden_activation, q_function = False)
-            self.Actor_Critic_u = ActorCriticMLP(state_dim, self.layer_widths, self.n_layers, len(self.allowed_actions), actor_activation='tanh', hidden_activation=self.hidden_activation,q_function = False)
+            self.Actor_Critic_d = ActorCriticMLP(state_dim, self.layer_widths, self.n_layers, 2, actor_activation='tanh', hidden_activation=self.hidden_activation, q_function = False, typeNN = self.typeNN)
+            self.Actor_Critic_u = ActorCriticMLP(state_dim, self.layer_widths, self.n_layers, len(self.allowed_actions), actor_activation='tanh', hidden_activation=self.hidden_activation,q_function = False, typeNN = self.typeNN)
 
         # Move all models to appropriate device
         self.Actor_Critic_d.to(self.device)
