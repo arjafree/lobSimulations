@@ -26,46 +26,46 @@ for k in cols:
 tod=np.zeros(shape=(len(cols), 13))
 for i in range(len(cols)):
     tod[i]=[faketod[cols[i]][k] for k in range(13)]
-Pis={'Bid_L2': [0.,
-                [(1, 1.)]],
-        'Bid_inspread': [0.,
-                        [(1, 1.)]],
-        'Bid_L1': [0.,
-                [(1, 1.)]],
-        'Bid_MO': [0.,
-                [(1, 1.)]]}
-Pis["Ask_MO"] = Pis["Bid_MO"]
-Pis["Ask_L1"] = Pis["Bid_L1"]
-Pis["Ask_inspread"] = Pis["Bid_inspread"]
-Pis["Ask_L2"] = Pis["Bid_L2"]
-Pi_Q0= {'Ask_L1': [0.,
-                    [(10, 1.)]],
-        'Ask_L2': [0.,
-                    [(10, 1.)]],
-        'Bid_L1': [0.,
-                    [(10, 1.)]],
-        'Bid_L2': [0.,
-                    [(10, 1.)]]}
 # Pis={'Bid_L2': [0.,
-#                 [(40, 1.)]],
-#      'Bid_inspread': [0.,
-#                       [(40, 1.)]],
-#      'Bid_L1': [0.,
-#                 [(40, 1.)]],
-#      'Bid_MO': [0.,
-#                 [(40, 1.)]]}
+#                 [(1, 1.)]],
+#         'Bid_inspread': [0.,
+#                         [(1, 1.)]],
+#         'Bid_L1': [0.,
+#                 [(1, 1.)]],
+#         'Bid_MO': [0.,
+#                 [(1, 1.)]]}
 # Pis["Ask_MO"] = Pis["Bid_MO"]
 # Pis["Ask_L1"] = Pis["Bid_L1"]
 # Pis["Ask_inspread"] = Pis["Bid_inspread"]
 # Pis["Ask_L2"] = Pis["Bid_L2"]
 # Pi_Q0= {'Ask_L1': [0.,
-#                    [(200, 1.)]],
+#                     [(10, 1.)]],
 #         'Ask_L2': [0.,
-#                    [(200, 1.)]],
+#                     [(10, 1.)]],
 #         'Bid_L1': [0.,
-#                    [(200, 1.)]],
+#                     [(10, 1.)]],
 #         'Bid_L2': [0.,
-#                    [(200, 1.)]]}
+#                     [(10, 1.)]]}
+Pis={'Bid_L2': [0.,
+                [(40, 1.)]],
+     'Bid_inspread': [0.,
+                      [(40, 1.)]],
+     'Bid_L1': [0.,
+                [(40, 1.)]],
+     'Bid_MO': [0.,
+                [(40, 1.)]]}
+Pis["Ask_MO"] = Pis["Bid_MO"]
+Pis["Ask_L1"] = Pis["Bid_L1"]
+Pis["Ask_inspread"] = Pis["Bid_inspread"]
+Pis["Ask_L2"] = Pis["Bid_L2"]
+Pi_Q0= {'Ask_L1': [0.,
+                   [(200, 1.)]],
+        'Ask_L2': [0.,
+                   [(200, 1.)]],
+        'Bid_L1': [0.,
+                   [(200, 1.)]],
+        'Bid_L2': [0.,
+                   [(200, 1.)]]}
 
 kwargs={
             "TradingAgent": [],
@@ -165,7 +165,7 @@ for episode in range(20):
     new_mv = True
     new_mp = True
 
-    env=tradingEnv(stop_time=400, wall_time_limit=23400, **kwargs)
+    env=tradingEnv(stop_time=520, wall_time_limit=23400, **kwargs)
     prev_inventory = 0
 
     twap_agent_executions_by_episode:Dict[int, List] = {}
