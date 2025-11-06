@@ -470,7 +470,7 @@ for episode in range(100):
     pft = np.array(finalcash) - j["cash"]
     ma = np.convolve(pft, np.ones(5)/5, mode='valid')
 
-    np.save(log_dir+"trajectory_buffer", agent.trajectory_buffer)
+    np.save(log_dir+label+"_trajectory_buffer", np.array(agent.trajectory_buffer, dtype=object), allow_pickle=True)
 
     plt.figure(figsize=(12,8))
     plt.subplot(311)
