@@ -20,7 +20,7 @@ twap_start_time = 150 + start_trading_lag #int(np.clip(np.random.normal(150, 50)
 
 twap_end_time = 300 + start_trading_lag
 
-label = 'train_RLAgent_vs_TWAP_standardised_updatedslippagegraphs'
+label = 'train_LSTMRLAgent_vs_TWAP_withExpo'
 layer_widths=50
 n_layers=3
 
