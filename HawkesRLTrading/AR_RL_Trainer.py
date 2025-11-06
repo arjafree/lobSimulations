@@ -274,26 +274,27 @@ for episode in range(100):
             #check if agent is an RL agent or not
             
             if not isinstance(agent, PPOAgent):
-                if(new_midprice):
-                    starting_midprice = float((observations.get('LOB0').get('Ask_L1')[0] + observations.get('LOB0').get('Bid_L1')[0])/2)
-                    new_midprice = False
-                action_num+=1
-                agentAction:Tuple[int, int] = agent.get_action(data=env.getobservations(agentID=agent.id))
-                action = (agent.id, agentAction)
-                print(f"Action: {action}")
-                
-                print(f"Limit Order Book: {observationsDict.get(agent.id, {}).get('LOB0', '')}")
-                print(f"Inventory: {observationsDict.get(agent.id, {}).get('Inventory', '')}")
-                
-                Simstate, observations, termination, truncation=env.step(action=action) #do not try and use this data before this line in the loop
-                observationsDict.update({agent.id:observations})
-                logger.debug(f"\n Agent: {agent.id}\n Simstate: {Simstate}\nObservations: {observations}\nTermination: {termination}\nTruncation: {truncation}")
-                cashs.update({agent.id:cashs.get(agent.id, [])+[observations['Cash']]})
-                inventories.update({agent.id:inventories.get(agent.id, []) + [observations['Inventory']]})
-                actionss.update({agent.id: actionss.get(agent.id, []) + [action[1][0]]})
+                if(twap_end_time > Simstate['TimeCode'] > twap_start_time):
+                    if(new_midprice):
+                        starting_midprice = float((observations.get('LOB0').get('Ask_L1')[0] + observations.get('LOB0').get('Bid_L1')[0])/2)
+                        new_midprice = False
+                    action_num+=1
+                    agentAction:Tuple[int, int] = agent.get_action(data=env.getobservations(agentID=agent.id))
+                    action = (agent.id, agentAction)
+                    print(f"Action: {action}")
+                    
+                    print(f"Limit Order Book: {observationsDict.get(agent.id, {}).get('LOB0', '')}")
+                    print(f"Inventory: {observationsDict.get(agent.id, {}).get('Inventory', '')}")
+                    
+                    Simstate, observations, termination, truncation=env.step(action=action) #do not try and use this data before this line in the loop
+                    observationsDict.update({agent.id:observations})
+                    logger.debug(f"\n Agent: {agent.id}\n Simstate: {Simstate}\nObservations: {observations}\nTermination: {termination}\nTruncation: {truncation}")
+                    cashs.update({agent.id:cashs.get(agent.id, [])+[observations['Cash']]})
+                    inventories.update({agent.id:inventories.get(agent.id, []) + [observations['Inventory']]})
+                    actionss.update({agent.id: actionss.get(agent.id, []) + [action[1][0]]})
 
-                total_executed = abs(500 - agent.Inventory["INTC"])
-                final_cash = agent.cash
+                    total_executed = abs(500 - agent.Inventory["INTC"])
+                    final_cash = agent.cash
                     
                    
             else:
@@ -393,7 +394,7 @@ for episode in range(100):
                 plt.ylabel('Profit in Dollars')
                 plt.title('Final Profit - All Episodes Overlaid')
                 plt.savefig(log_dir + label + '_profit.png')
-                
+
                 np.save(log_dir + "sharpe/" + label + '_profit', np.array([t, finalcash2]))
                 np.save(log_dir+ "sharpe/" + label+"_profit_w_twap_buy", np.array([t_with_twap_buy, profit_with_twap_buy])) if twap_side == "buy" else np.save(log_dir+label+"_profit_w_twap_sell", np.array([t_with_twap_sell, profit_with_twap_sell]))
                 np.save(log_dir+"sharpe/" +label+"_profit_wout_twap", np.array([t_without_twap, profit_without_twap]))
