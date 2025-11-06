@@ -266,8 +266,11 @@ for episode in range(100):
         print(f"Agents with IDs {AgentsIDs} have an action available")
         agents:List[GymTradingAgent] = [env.getAgent(ID=agentid) for agentid in AgentsIDs]
         # action:list[Tuple] = []
-        if(twap_end_time > Simstate['TimeCode'] > twap_start_time) and not RLagentInstance.TWAPPresent:
-            RLagentInstance.TWAPPresent = -1 if twap_side == 'sell' else 1
+        if(twap_end_time > Simstate['TimeCode'] > twap_start_time):
+            if not RLagentInstance.TWAPPresent:
+                RLagentInstance.TWAPPresent = -1 if twap_side == 'sell' else 1
+        else:
+            RLagentInstance.TWAPPresent = 0
 
         for agent in agents:
             assert isinstance(agent, GymTradingAgent), "Agent with action should be a GymTradingAgent"
