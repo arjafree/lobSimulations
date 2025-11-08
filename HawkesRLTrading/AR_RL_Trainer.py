@@ -266,7 +266,7 @@ for episode in range(100):
         print(f"Agents with IDs {AgentsIDs} have an action available")
         agents:List[GymTradingAgent] = [env.getAgent(ID=agentid) for agentid in AgentsIDs]
         # action:list[Tuple] = []
-        if(twap_end_time > Simstate['TimeCode'] > twap_start_time):
+        if(twap_end_time >= Simstate['TimeCode'] >= twap_start_time):
             if not RLagentInstance.TWAPPresent:
                 RLagentInstance.TWAPPresent = -1 if twap_side == 'sell' else 1
         else:
@@ -277,7 +277,7 @@ for episode in range(100):
             #check if agent is an RL agent or not
             
             if not isinstance(agent, PPOAgent):
-                if(twap_end_time > Simstate['TimeCode'] > twap_start_time):
+                if(twap_end_time >= Simstate['TimeCode'] >= twap_start_time):
                     if(new_midprice):
                         starting_midprice = float((observations.get('LOB0').get('Ask_L1')[0] + observations.get('LOB0').get('Bid_L1')[0])/2)
                         new_midprice = False
@@ -299,6 +299,8 @@ for episode in range(100):
                     total_executed = abs(500 - agent.Inventory["INTC"])
                     final_cash = agent.cash
                     
+                else:
+                    agentAction = (12, 0)
                    
             else:
                 action_num+=1
