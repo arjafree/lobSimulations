@@ -300,7 +300,10 @@ for episode in range(100):
                     final_cash = agent.cash
                     
                 else:
+                    print("Post TWAP Execution")
                     agentAction = (12, 0)
+                    action = (agent.id, agentAction)
+                    env.step(action=action)
                    
             else:
                 action_num+=1
