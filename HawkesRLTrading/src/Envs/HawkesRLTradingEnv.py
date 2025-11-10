@@ -86,7 +86,7 @@ class tradingEnv(gym.Env):
             for j in kwargs["GymTradingAgent"]:
                 new_agent=None
                 if j["strategy"] == "TWAP":
-                     new_agent = TWAPGymTradingAgent(seed=self.seed, log_events=True, log_to_file=log_to_file, strategy=j["strategy"], Inventory=j["Inventory"], cash=j["cash"], cashlimit=j["cashlimit"], action_freq=j["action_freq"], total_order_size = j["total_order_size"], total_time = j["total_time"], window_size = j["window_size"], side = j["side"], order_target = j["order_target"], start_trading_lag=j["start_trading_lag"], wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"])
+                     new_agent = TWAPGymTradingAgent(seed=self.seed, log_events=True, log_to_file=log_to_file, strategy=j["strategy"], Inventory=j["Inventory"], cash=j["cash"], cashlimit=j["cashlimit"], action_freq=j["action_freq"], total_order_size = j["total_order_size"], total_time = j["total_time"], window_size = j["window_size"], side = j["side"], order_target = j["order_target"], start_trading_lag=j["start_trading_lag"], wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"], off_time=j["off_time"])
                 elif j["strategy"]=="Random":
                     new_agent=RandomGymTradingAgent(seed=self.seed, log_events=True, log_to_file=log_to_file, strategy=j["strategy"], Inventory=j["Inventory"], cash=j["cash"], action_freq=j["action_freq"] , rewardpenalty=j["rewardpenalty"],  wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"], cashlimit=j["cashlimit"])
                 elif j['strategy'] == 'ImpulseControl':

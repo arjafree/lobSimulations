@@ -5,7 +5,7 @@ import numpy as np
 from decimal import Decimal
 
 class TWAPGymTradingAgent(GymTradingAgent):
-    def __init__(self, seed, log_events:bool, log_to_file:bool, strategy:str, Inventory:Optional[Dict[str, Any]], cash:int, cashlimit:int, action_freq:float, total_order_size:int, total_time:int, window_size:int, side:str, order_target:str,  start_trading_lag:int=0, wake_on_MO:bool=False, wake_on_Spread:bool=False):
+    def __init__(self, seed, log_events:bool, log_to_file:bool, strategy:str, Inventory:Optional[Dict[str, Any]], cash:int, cashlimit:int, action_freq:float, total_order_size:int, total_time:int, window_size:int, side:str, order_target:str,  off_time:int, start_trading_lag:int=0, wake_on_MO:bool=False, wake_on_Spread:bool=False):
         if side=="sell": assert Inventory[order_target] >= total_order_size, "Not enough volume in inventory to execute sell order"
         # assert total_order_size%window_size == 0, f"Order size {total_order_size} cannot be executed with window size {window_size}"
         # assert total_order_size % ((total_time-start_trading_lag)/action_freq) == 0, f"Order size {total_order_size} cannot be executed evenly with time {total_time} with start trading lag {start_trading_lag} and action frequency {action_freq} "
@@ -24,6 +24,7 @@ class TWAPGymTradingAgent(GymTradingAgent):
         self.starting_volume:int = self.old_volume
         self.agent_time = self.current_time
         self.urgent = False
+        self.off_time = off_time
         # self.num_calls = 0
 
         self._set_slices()
@@ -50,6 +51,8 @@ class TWAPGymTradingAgent(GymTradingAgent):
         
 
     def get_action(self, data) -> Optional[Tuple[int, int]]:
+        if(self.current_time > self.off_time):
+            return(12,0)
         self.agent_time = self.current_time - self.start_trading_lag
         # self.num_calls +=1
         # print(f"Num calls: {self.num_calls}")

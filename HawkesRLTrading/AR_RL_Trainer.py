@@ -13,6 +13,7 @@ model_dir = '/home/ajafree/LSTM_fRL/with_expo/training/model'
 # model_dir = '/Users/alirazajafree/researchprojects/models/icrl_ppo_model_symmetric'
 
 start_trading_lag = 100
+twap_off_time = 400
 
 twap_side = "buy"
 #the time that the TWAP agent will kick in:
@@ -160,7 +161,8 @@ kwargs={
                           "Inventory": {"INTC":500},
                           'start_trading_lag': start_trading_lag,
                           "wake_on_MO": False,
-                          "wake_on_Spread": False}
+                          "wake_on_Spread": False,
+                          "off_time": twap_off_time}
                           ],
     "Exchange": {"symbol": "INTC",
                  "ticksize":0.01,
@@ -277,33 +279,26 @@ for episode in range(100):
             #check if agent is an RL agent or not
             
             if not isinstance(agent, PPOAgent):
-                if(twap_end_time >= Simstate['TimeCode'] >= twap_start_time):
-                    if(new_midprice):
-                        starting_midprice = float((observations.get('LOB0').get('Ask_L1')[0] + observations.get('LOB0').get('Bid_L1')[0])/2)
-                        new_midprice = False
-                    action_num+=1
-                    agentAction:Tuple[int, int] = agent.get_action(data=env.getobservations(agentID=agent.id))
-                    action = (agent.id, agentAction)
-                    print(f"Action: {action}")
-                    
-                    print(f"Limit Order Book: {observationsDict.get(agent.id, {}).get('LOB0', '')}")
-                    print(f"Inventory: {observationsDict.get(agent.id, {}).get('Inventory', '')}")
-                    
-                    Simstate, observations, termination, truncation=env.step(action=action) #do not try and use this data before this line in the loop
-                    observationsDict.update({agent.id:observations})
-                    logger.debug(f"\n Agent: {agent.id}\n Simstate: {Simstate}\nObservations: {observations}\nTermination: {termination}\nTruncation: {truncation}")
-                    cashs.update({agent.id:cashs.get(agent.id, [])+[observations['Cash']]})
-                    inventories.update({agent.id:inventories.get(agent.id, []) + [observations['Inventory']]})
-                    actionss.update({agent.id: actionss.get(agent.id, []) + [action[1][0]]})
+                if(new_midprice):
+                    starting_midprice = float((observations.get('LOB0').get('Ask_L1')[0] + observations.get('LOB0').get('Bid_L1')[0])/2)
+                    new_midprice = False
+                action_num+=1
+                agentAction:Tuple[int, int] = agent.get_action(data=env.getobservations(agentID=agent.id))
+                action = (agent.id, agentAction)
+                print(f"Action: {action}")
+                
+                print(f"Limit Order Book: {observationsDict.get(agent.id, {}).get('LOB0', '')}")
+                print(f"Inventory: {observationsDict.get(agent.id, {}).get('Inventory', '')}")
+                
+                Simstate, observations, termination, truncation=env.step(action=action) #do not try and use this data before this line in the loop
+                observationsDict.update({agent.id:observations})
+                logger.debug(f"\n Agent: {agent.id}\n Simstate: {Simstate}\nObservations: {observations}\nTermination: {termination}\nTruncation: {truncation}")
+                cashs.update({agent.id:cashs.get(agent.id, [])+[observations['Cash']]})
+                inventories.update({agent.id:inventories.get(agent.id, []) + [observations['Inventory']]})
+                actionss.update({agent.id: actionss.get(agent.id, []) + [action[1][0]]})
 
-                    total_executed = abs(500 - agent.Inventory["INTC"])
-                    final_cash = agent.cash
-                    
-                else:
-                    print("Post TWAP Execution")
-                    agentAction = (12, 0)
-                    action = (agent.id, agentAction)
-                    env.step(action=action)
+                total_executed = abs(500 - agent.Inventory["INTC"])
+                final_cash = agent.cash
                    
             else:
                 action_num+=1
