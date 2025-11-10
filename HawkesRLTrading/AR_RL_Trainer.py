@@ -115,13 +115,13 @@ Pis["Ask_L1"] = Pis["Bid_L1"]
 Pis["Ask_inspread"] = Pis["Bid_inspread"]
 Pis["Ask_L2"] = Pis["Bid_L2"]
 Pi_Q0= {'Ask_L1': [0.,
-                   [(200, 1.)]],
+                   [(400, 1.)]],
         'Ask_L2': [0.,
-                   [(200, 1.)]],
+                   [(400, 1.)]],
         'Bid_L1': [0.,
-                   [(200, 1.)]],
+                   [(400, 1.)]],
         'Bid_L2': [0.,
-                   [(200, 1.)]]}
+                   [(400, 1.)]]}
 
 kwargs={
     "TradingAgent": [],
