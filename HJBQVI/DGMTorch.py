@@ -870,13 +870,13 @@ class ActorMLP(BaseNet):
             self.output_layer = DenseLayer(output_dim, layer_width, activation=output_activation)
 
         elif typeNN == "LSTM":
-            self.initial_layer = LSTMLayer(layer_width, input_dim, activation=hidden_activation)
+            self.initial_layer = LSTMLayer(layer_width, input_dim, trans1=hidden_activation, trans2=hidden_activation)
 
             self.lstm_layers = nn.ModuleList([
             LSTMLayer(layer_width, layer_width, trans1=hidden_activation, trans2=hidden_activation)
             for _ in range(n_layers)])
 
-            self.output_layer = LSTMLayer(output_dim, layer_width, activation=output_activation)
+            self.output_layer = LSTMLayer(output_dim, layer_width, trans1=output_activation, trans2=output_activation)
 
 
 
@@ -939,13 +939,13 @@ class CriticMLP(BaseNet):
             self.output_layer = DenseLayer(output_dim, layer_width, activation=None)
 
         elif typeNN == "LSTM":
-            self.initial_layer = LSTMLayer(layer_width, input_dim, activation=hidden_activation)
+            self.initial_layer = LSTMLayer(layer_width, input_dim, trans1=hidden_activation, trans2=hidden_activation)
 
             self.lstm_layers = nn.ModuleList([
             LSTMLayer(layer_width, layer_width, trans1=hidden_activation, trans2=hidden_activation)
             for _ in range(n_layers)])
 
-            self.output_layer = LSTMLayer(output_dim, layer_width, activation=hidden_activation)
+            self.output_layer = LSTMLayer(output_dim, layer_width, trans1=hidden_activation, trans2=hidden_activation)
         self.q_function = q_function
 
     def forward(self, x):
