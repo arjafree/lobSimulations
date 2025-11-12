@@ -6,6 +6,7 @@ from HawkesRLTrading.src.Envs.HawkesRLTradingEnv import *
 from HawkesRLTrading.src.SimulationEntities.MetaOrderTradingAgents import TWAPGymTradingAgent
 
 import torch
+import time
 
 log_dir = '/home/ajafree/LSTM_fRL/with_expo/training/logs/'
 model_dir = '/home/ajafree/LSTM_fRL/with_expo/training/model'
@@ -261,6 +262,7 @@ for episode in range(100):
         agent.Actor_Critic_d = loaded_models['d']
         agent.Actor_Critic_u = loaded_models['u']
     logger.debug(f"\nSimstate: {Simstate}\nObservations: {observations}\nTermination: {termination}")
+    episode_start_time = time.time()
     while Simstate["Done"]==False and termination!=True:
         counter_profit +=1
         logger.debug(f"ENV TERMINATION: {termination}")
@@ -425,11 +427,17 @@ for episode in range(100):
         print("Truncation condition reached.")
     else:
         pass
+    episode_total_time = time.time() - episode_start_time
+    print(f"Episode took {episode_total_time} seconds to run")
 
     if ((episode) % 4 == 0):
         if ('test' not in label) and ((checkpoint_params is None) or (episode >= 0)):
             for epoch in range(1):
+                start_time = time.time()
                 d_policy_loss, d_value_loss, d_entropy_loss, u_policy_loss, u_value_loss, u_entropy_loss = agent.train(train_logger) #, use_CEM = bool((episode+1) % 4))
+                train_time = time.time() - start_time
+                # store timing on the train_logger (create list if necessary)
+                print(f"Agent.train took {train_time:.4f}s for episode {episode}")
                 train_logger.save_logs()
             train_logger.plot_losses(show=False, save=True)
 
