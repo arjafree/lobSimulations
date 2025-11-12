@@ -127,7 +127,7 @@ kwargs={
                                      "beta": 0.941,
                                      "avgSpread": 0.0101,
                                      "Pi_Q0": Pi_Q0,
-                                     'expapprox' : True}}
+                                     'expApprox' : True}}
 }
 
 agents = kwargs['GymTradingAgent']

@@ -9,8 +9,8 @@ import torch
 
 log_dir = '/home/ajafree/LSTM_fRL/with_expo/training/logs/'
 model_dir = '/home/ajafree/LSTM_fRL/with_expo/training/model'
-# log_dir = '/Users/alirazajafree/researchprojects/logs'
-# model_dir = '/Users/alirazajafree/researchprojects/models/icrl_ppo_model_symmetric'
+# log_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/training/logs/'
+# model_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/training/model'
 
 start_trading_lag = 100
 twap_off_time = 400
@@ -177,7 +177,7 @@ kwargs={
                                      "beta": 0.941,
                                      "avgSpread": 0.0101,
                                      "Pi_Q0": Pi_Q0,
-                                     'expapprox' : True}} #one with true, one with false
+                                     'expApprox' : True}} #one with true, one with false
 }
 
 agents = kwargs['GymTradingAgent']
@@ -301,6 +301,7 @@ for episode in range(100):
                 final_cash = agent.cash
                    
             else:
+                print(f"Twap present: {RLagentInstance.TWAPPresent}")
                 action_num+=1
                 RLagentID = agent.id
                 agentAction:Tuple[int, int] = agent.get_action(data=env.getobservations(agentID=agent.id), epsilon = 0.5 if i_eps < 100 else 0.1)
