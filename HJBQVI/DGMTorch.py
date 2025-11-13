@@ -870,13 +870,15 @@ class ActorMLP(BaseNet):
             self.output_layer = DenseLayer(output_dim, layer_width, activation=output_activation)
 
         elif typeNN == "LSTM":
-            self.initial_layer = LSTMLayer(layer_width, input_dim, trans1=hidden_activation, trans2=hidden_activation)
+            # Use MLP for initial layer (LSTMLayer needs S and X, so we use dense to get initial S)
+            self.initial_layer = DenseLayer(layer_width, input_dim, activation=hidden_activation)
 
             self.lstm_layers = nn.ModuleList([
             LSTMLayer(layer_width, layer_width, trans1=hidden_activation, trans2=hidden_activation)
             for _ in range(n_layers)])
 
-            self.output_layer = LSTMLayer(output_dim, layer_width, trans1="sigmoid", trans2="sigmoid")
+            # Output layer (policy network)
+            self.output_layer = DenseLayer(output_dim, layer_width, activation=output_activation)
 
 
 
@@ -895,11 +897,12 @@ class ActorMLP(BaseNet):
             x = self.initial_layer(x)
             x = self.hidden_layers(x)
             output = self.output_layer(x)
+            
         elif self.typeNN == "LSTM":
             S = self.initial_layer(x)
-            # Process through LSTM layers
+            
             for lstm_layer in self.lstm_layers:
-                S = lstm_layer(S, x)  # LSTMLayer needs both S and X
+                S = lstm_layer(S, x)
             
             output = self.output_layer(S)
         
@@ -939,13 +942,16 @@ class CriticMLP(BaseNet):
             self.output_layer = DenseLayer(output_dim, layer_width, activation=None)
 
         elif typeNN == "LSTM":
-            self.initial_layer = LSTMLayer(layer_width, input_dim, trans1=hidden_activation, trans2=hidden_activation)
+            # Use MLP for initial layer (LSTMLayer needs S and X, so we use dense to get initial S)
+            self.initial_layer = DenseLayer(layer_width, input_dim, activation=hidden_activation)
 
             self.lstm_layers = nn.ModuleList([
             LSTMLayer(layer_width, layer_width, trans1=hidden_activation, trans2=hidden_activation)
             for _ in range(n_layers)])
 
-            self.output_layer = LSTMLayer(output_dim, layer_width, trans1=hidden_activation, trans2=hidden_activation)
+            # Output layer (value function) - no activation for value estimation
+            self.output_layer = DenseLayer(output_dim, layer_width, activation=None)
+            
         self.q_function = q_function
 
     def forward(self, x):
@@ -962,12 +968,15 @@ class CriticMLP(BaseNet):
             x = self.initial_layer(x)
             x = self.hidden_layers(x)
             output = self.output_layer(x)
+            
         elif self.typeNN == "LSTM":
             S = self.initial_layer(x)
-            # Process through LSTM layers
+            
             for lstm_layer in self.lstm_layers:
-                S = lstm_layer(S, x)  # LSTMLayer needs both S and X
+                S = lstm_layer(S, x)  
+            
             output = self.output_layer(S)
+            
         return output
 
 
