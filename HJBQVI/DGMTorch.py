@@ -873,9 +873,11 @@ class ActorMLP(BaseNet):
             # Use MLP for initial layer (LSTMLayer needs S and X, so we use dense to get initial S)
             self.initial_layer = DenseLayer(layer_width, input_dim, activation=hidden_activation)
 
+            # LSTM layers: output_dim=layer_width, input_dim=input_dim (for original input X)
             self.lstm_layers = nn.ModuleList([
-            LSTMLayer(layer_width, layer_width, trans1=hidden_activation, trans2=hidden_activation)
-            for _ in range(n_layers)])
+                LSTMLayer(layer_width, input_dim, trans1=hidden_activation, trans2=hidden_activation)
+                for _ in range(n_layers)
+            ])
 
             # Output layer (policy network)
             self.output_layer = DenseLayer(output_dim, layer_width, activation=output_activation)
@@ -945,9 +947,11 @@ class CriticMLP(BaseNet):
             # Use MLP for initial layer (LSTMLayer needs S and X, so we use dense to get initial S)
             self.initial_layer = DenseLayer(layer_width, input_dim, activation=hidden_activation)
 
+            # LSTM layers: output_dim=layer_width, input_dim=input_dim (for original input X)
             self.lstm_layers = nn.ModuleList([
-            LSTMLayer(layer_width, layer_width, trans1=hidden_activation, trans2=hidden_activation)
-            for _ in range(n_layers)])
+                LSTMLayer(layer_width, input_dim, trans1=hidden_activation, trans2=hidden_activation)
+                for _ in range(n_layers)
+            ])
 
             # Output layer (value function) - no activation for value estimation
             self.output_layer = DenseLayer(output_dim, layer_width, activation=None)
