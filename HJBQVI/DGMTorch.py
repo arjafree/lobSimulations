@@ -876,7 +876,7 @@ class ActorMLP(BaseNet):
             LSTMLayer(layer_width, layer_width, trans1=hidden_activation, trans2=hidden_activation)
             for _ in range(n_layers)])
 
-            self.output_layer = LSTMLayer(output_dim, layer_width, trans1=output_activation, trans2=output_activation)
+            self.output_layer = LSTMLayer(output_dim, layer_width, trans1="sigmoid", trans2="sigmoid")
 
 
 
