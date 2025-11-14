@@ -1,5 +1,9 @@
 import sys
 import os
+
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+os.environ["TORCH_USE_CUDA_DSA"] = "1"  # Device-Side Assertions (even more detail)
+
 sys.path.append(os.path.abspath('/home/ajafree/lobSimulations'))
 # sys.path.append(os.path.abspath('/Users/alirazajafree/Documents/GitHub/lobSimulations'))
 from HawkesRLTrading.src.Envs.HawkesRLTradingEnv import *
@@ -8,7 +12,6 @@ from HawkesRLTrading.src.SimulationEntities.MetaOrderTradingAgents import TWAPGy
 import torch
 import time
 
-os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
 
 log_dir = '/home/ajafree/LSTM_fRL/with_expo/training/logs/'
