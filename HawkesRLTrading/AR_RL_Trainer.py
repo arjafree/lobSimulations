@@ -8,6 +8,9 @@ from HawkesRLTrading.src.SimulationEntities.MetaOrderTradingAgents import TWAPGy
 import torch
 import time
 
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+
+
 log_dir = '/home/ajafree/LSTM_fRL/with_expo/training/logs/'
 model_dir = '/home/ajafree/LSTM_fRL/with_expo/training/model'
 # log_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/training/logs/'
