@@ -1053,7 +1053,7 @@ class ActorCriticSeparate(nn.Module):
             for lstm_layer in self.critic.lstm_layers:
                 S = lstm_layer(S, x)  # LSTMLayer needs both S and X
             
-            critic_output = self.actor.output_layer(S)
+            critic_output = self.critic.output_layer(S) 
 
         return actor_output, critic_output
 
