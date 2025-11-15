@@ -1,8 +1,8 @@
 import sys
 import os
 
-os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
-os.environ["TORCH_USE_CUDA_DSA"] = "1"  # Device-Side Assertions (even more detail)
+# os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+# os.environ["TORCH_USE_CUDA_DSA"] = "1"  # Device-Side Assertions (even more detail)
 
 sys.path.append(os.path.abspath('/home/ajafree/lobSimulations'))
 # sys.path.append(os.path.abspath('/Users/alirazajafree/Documents/GitHub/lobSimulations'))
@@ -93,8 +93,8 @@ def graphInventories(beforetwap, withtwap_buy, withtwap_sell, episode_num):
 
 
 
-# with open("/Users/alirazajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
-with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
+with open("/Users/alirazajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
+# with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
     kernelparams = pickle.load(f)
 kernelparams = preprocessdata(kernelparams)
 
@@ -193,7 +193,7 @@ tc = 0.0001
 RLagentInstance = AdversarialPPOAgent( seed=1, log_events=True, log_to_file=True, strategy=j["strategy"], Inventory=j["Inventory"], cash=j["cash"], action_freq=j["action_freq"],
                           wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"], cashlimit=j["cashlimit"],inventorylimit=j['inventorylimit'], batch_size=512,
                           layer_widths=layer_widths, n_layers =n_layers, buffer_capacity = 100000, rewardpenalty = j["rewardpenalty"], epochs = 100, transaction_cost=1e-4, start_trading_lag = j['start_trading_lag'],
-                          gae_lambda=0.5, truncation_enabled=False, action_space_config = 1, alt_state=True, enhance_state=True, include_time=True, optim_type='ADAM',entropy_coef=0, exploration_bonus = 0, TWAPPresent=0 , hidden_activation='relu', typeNN = "LSTM")
+                          gae_lambda=0.5, truncation_enabled=False, action_space_config = 1, alt_state=True, enhance_state=True, include_time=True, optim_type='ADAM',entropy_coef=0, exploration_bonus = 0, TWAPPresent=0 , hidden_activation='sigmoid', typeNN = "LSTM")
 
 inventories_with_twap_buy = []
 inventories_with_twap_sell = []
