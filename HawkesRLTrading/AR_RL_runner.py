@@ -171,6 +171,11 @@ sharpe_post_twap = []   # Sharpe after TWAP ends
 # Each entry: (episode, side, phase, mean, std, min, max, median)
 inventory_stats_by_phase = []
 
+# Data structures for TWAP execution price tracking
+all_episode_twap_prices = []  # List of price arrays for each episode
+all_episode_twap_times = []   # List of time arrays for each episode
+all_episode_twap_start_prices = []  # Starting price for each episode
+
 def plot_inventory_timeseries(episode_num, all_inventories, all_times, twap_start, twap_end, stop_time, side, save_dir, label_prefix):
     """
     Plot inventory time series for all episodes with individual traces (alpha=0.1) and average overlay.
@@ -241,6 +246,68 @@ def plot_inventory_timeseries(episode_num, all_inventories, all_times, twap_star
     plt.close()
     print(f"Saved inventory time series plot to {save_path}")
 
+def plot_twap_execution_prices(episode_num, all_prices, all_times, all_start_prices, side, save_dir, label_prefix):
+    """
+    Plot TWAP execution prices relative to start price with individual traces (alpha=0.1) and average overlay.
+    
+    Args:
+        episode_num: Current episode number
+        all_prices: List of price arrays for each episode (relative to start)
+        all_times: List of time arrays for each episode
+        all_start_prices: List of starting prices for each episode
+        side: 'buy' or 'sell' - determines sign adjustment
+        save_dir: Directory to save the plot
+        label_prefix: Prefix for the saved filename
+    """
+    if len(all_prices) == 0:
+        return
+    
+    plt.figure(figsize=(14, 8))
+    
+    # Determine sign multiplier (positive price movement is bad for buy, good for sell)
+    sign_multiplier = -1 if side == 'buy' else 1
+    
+    # Plot individual episode trajectories with low alpha
+    for i, (times, prices) in enumerate(zip(all_times, all_prices)):
+        adjusted_prices = np.array(prices) * sign_multiplier
+        plt.plot(times, adjusted_prices, alpha=0.1, color='gray', linewidth=0.8)
+    
+    # Compute and plot average trajectory
+    if len(all_times) > 0:
+        max_len = max(len(t) for t in all_times)
+        max_time = max(t[-1] for t in all_times if len(t) > 0)
+        
+        # Create interpolated prices on a common time grid
+        common_times = np.linspace(0, max_time, max_len)
+        interpolated_prices = []
+        
+        for times, prices in zip(all_times, all_prices):
+            if len(times) > 0 and len(prices) > 0:
+                adjusted_prices = np.array(prices) * sign_multiplier
+                interp_prices = np.interp(common_times, times, adjusted_prices)
+                interpolated_prices.append(interp_prices)
+        
+        if len(interpolated_prices) > 0:
+            # Compute average across episodes
+            avg_prices = np.mean(interpolated_prices, axis=0)
+            
+            # Plot average with full opacity and thicker line
+            plt.plot(common_times, avg_prices, alpha=1.0, color='darkred', linewidth=2.5, label=f'Average (n={len(all_prices)})')
+    
+    plt.axhline(y=0, color='black', linestyle='--', linewidth=1, alpha=0.5, label='Start Price')
+    plt.xlabel('Time (seconds)', fontsize=12)
+    plt.ylabel('Execution Price - Start Price (sign-adjusted)', fontsize=12)
+    plt.title(f'TWAP Execution Prices Relative to Start - Episodes 1-{episode_num+1} ({side.capitalize()} Side)', fontsize=14)
+    plt.legend(loc='best', fontsize=10)
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    
+    # Save figure
+    save_path = os.path.join(save_dir, f'{label_prefix}_twap_exec_prices_ep{episode_num+1}.png')
+    plt.savefig(save_path, dpi=150)
+    plt.close()
+    print(f"Saved TWAP execution price plot to {save_path}")
+
 for episode in range(50):
     RL_agent_obsv = []
     TWAP_agent_obsv = []
@@ -259,6 +326,8 @@ for episode in range(50):
     kwargs["GymTradingAgent"][1]["start_trading_lag"] = twap_time
 
     twap_agent_executions_by_episode[episode] = []
+    episode_twap_exec_prices = []  # Track execution prices for this episode
+    episode_twap_exec_times = []   # Track execution times for this episode
     i = 0
     action_num = 0
     env=tradingEnv(stop_time=550, wall_time_limit=23400, **kwargs)
@@ -321,9 +390,15 @@ for episode in range(50):
                     #inventory has changed, order has gone through
                     percentage_of_volume.append(diff/observations["market_volume"])
                     if twap_side == 'sell':
-                        twap_agent_executions_by_episode[episode].append((observationsDict.get(agent.id, {}).get('LOB0', '').get('Bid_L1')[0], diff, twap_side))
+                        exec_price = observationsDict.get(agent.id, {}).get('LOB0', '').get('Bid_L1')[0]
+                        twap_agent_executions_by_episode[episode].append((exec_price, diff, twap_side))
                     else:
-                        twap_agent_executions_by_episode[episode].append((observationsDict.get(agent.id, {}).get('LOB0', '').get('Ask_L1')[0], diff, twap_side))
+                        exec_price = observationsDict.get(agent.id, {}).get('LOB0', '').get('Ask_L1')[0]
+                        twap_agent_executions_by_episode[episode].append((exec_price, diff, twap_side))
+                    
+                    # Track execution price relative to start price and time
+                    episode_twap_exec_prices.append(exec_price - starting_midprice)
+                    episode_twap_exec_times.append(Simstate['TimeCode'])
 
 
                 prev_inventory = observations['Inventory']
@@ -571,6 +646,25 @@ for episode in range(50):
             save_dir=log_dir,
             label_prefix=label
         )
+    
+    # Store and plot TWAP execution prices
+    if len(episode_twap_exec_prices) > 0:
+        all_episode_twap_prices.append(episode_twap_exec_prices)
+        all_episode_twap_times.append(episode_twap_exec_times)
+        all_episode_twap_start_prices.append(starting_midprice)
+        
+        # Plot TWAP execution prices
+        plot_twap_execution_prices(
+            episode_num=episode,
+            all_prices=all_episode_twap_prices,
+            all_times=all_episode_twap_times,
+            all_start_prices=all_episode_twap_start_prices,
+            side=twap_side,
+            save_dir=log_dir,
+            label_prefix=label
+        )
+    
+    if len(episode_inventory) > 0:
         
         # Plot slippage by episode (on-the-fly)
         plt.figure(figsize=(12, 6))
