@@ -161,6 +161,12 @@ all_episode_times = []
 sell_slippage_by_episode = []  # Store (episode_num, slippage) for sell episodes
 buy_slippage_by_episode = []   # Store (episode_num, slippage) for buy episodes
 
+# Data structures for phase-based Sharpe ratio tracking
+# Each list stores tuples of (episode_num, sharpe_ratio, side)
+sharpe_pre_twap = []    # Sharpe before TWAP starts
+sharpe_during_twap = [] # Sharpe during TWAP execution
+sharpe_post_twap = []   # Sharpe after TWAP ends
+
 def plot_inventory_timeseries(episode_num, all_inventories, all_times, twap_start, twap_end, stop_time, side, save_dir, label_prefix):
     """
     Plot inventory time series for all episodes with individual traces (alpha=0.1) and average overlay.
@@ -448,6 +454,50 @@ for episode in range(50):
     final_cashs.append(final_cash)
     total_executeds.append(total_executed)
 
+    # Calculate phase-based Sharpe ratios for this episode
+    if RLagentID in cashs and len(cashs[RLagentID]) > 0:
+        # Get the starting index for this episode
+        if len(all_episode_inventories) > 0 and len(episode_boundaries) > len(all_episode_inventories):
+            start_idx = episode_boundaries[len(all_episode_inventories)]
+        else:
+            start_idx = 0
+        
+        end_idx = len(cashs[RLagentID])
+        
+        # Extract episode data
+        episode_cash = np.array(cashs[RLagentID][start_idx:end_idx])
+        episode_inv = np.array(inventories[RLagentID][start_idx:end_idx])
+        episode_times = np.array(t[start_idx:end_idx])
+        
+        if len(episode_times) > 0:
+            # Get agent reference for mid price
+            agent_ref = [a for a in agents if isinstance(a, PPOAgent)][0] if any(isinstance(a, PPOAgent) for a in agents) else None
+            if agent_ref is not None:
+                # Calculate PnL time series for this episode
+                episode_pnl_series = episode_cash + episode_inv * agent_ref.mid * (1 - tc * np.sign(episode_inv))
+                
+                # Split into three phases based on time
+                pre_mask = episode_times < twap_time
+                during_mask = (episode_times >= twap_time) & (episode_times < twap_time + twap_off_time)
+                post_mask = episode_times >= twap_time + twap_off_time
+                
+                # Calculate Sharpe for each phase
+                def calc_sharpe(pnl_series):
+                    if len(pnl_series) > 1:
+                        log_returns = np.diff(np.log(pnl_series))
+                        if len(log_returns) > 0 and np.std(log_returns) > 0:
+                            return np.mean(log_returns) / np.std(log_returns)
+                    return 0.0
+                
+                sharpe_pre = calc_sharpe(episode_pnl_series[pre_mask]) if np.sum(pre_mask) > 1 else 0.0
+                sharpe_during = calc_sharpe(episode_pnl_series[during_mask]) if np.sum(during_mask) > 1 else 0.0
+                sharpe_post = calc_sharpe(episode_pnl_series[post_mask]) if np.sum(post_mask) > 1 else 0.0
+                
+                # Store with episode number and side
+                sharpe_pre_twap.append((episode, sharpe_pre, twap_side))
+                sharpe_during_twap.append((episode, sharpe_during, twap_side))
+                sharpe_post_twap.append((episode, sharpe_post, twap_side))
+
     # Collect inventory time series for this episode
     # Extract the current episode's inventory and time data
     # Get the starting index for this episode
@@ -505,6 +555,42 @@ for episode in range(50):
         plt.savefig(log_dir + label + f'_slippage_by_episode_ep{episode+1}.png', dpi=150)
         plt.close()
         print(f"Saved slippage plot for episode {episode+1}")
+        
+        # Plot phase-based Sharpe ratios (3 subplots)
+        fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+        
+        phases = [
+            (sharpe_pre_twap, 'Pre-TWAP Sharpe', axes[0]),
+            (sharpe_during_twap, 'During-TWAP Sharpe', axes[1]),
+            (sharpe_post_twap, 'Post-TWAP Sharpe', axes[2])
+        ]
+        
+        for phase_data, phase_title, ax in phases:
+            if len(phase_data) > 0:
+                # Separate buy and sell episodes
+                buy_eps = [(ep, sr) for ep, sr, side in phase_data if side == 'buy']
+                sell_eps = [(ep, sr) for ep, sr, side in phase_data if side == 'sell']
+                
+                if len(buy_eps) > 0:
+                    buy_episodes, buy_sharpes = zip(*buy_eps)
+                    ax.scatter(buy_episodes, buy_sharpes, color='blue', alpha=0.6, s=50, label='Buy', marker='s')
+                
+                if len(sell_eps) > 0:
+                    sell_episodes, sell_sharpes = zip(*sell_eps)
+                    ax.scatter(sell_episodes, sell_sharpes, color='red', alpha=0.6, s=50, label='Sell', marker='o')
+            
+            ax.set_xlabel('Episode', fontsize=11)
+            ax.set_ylabel('Sharpe Ratio', fontsize=11)
+            ax.set_title(phase_title, fontsize=12)
+            ax.legend(loc='best', fontsize=9)
+            ax.grid(True, alpha=0.3)
+            ax.axhline(y=0, color='black', linestyle='--', linewidth=0.8, alpha=0.5)
+        
+        plt.suptitle(f'RL Agent Sharpe Ratios by Phase - Episodes 1-{episode+1}', fontsize=14, y=1.02)
+        plt.tight_layout()
+        plt.savefig(log_dir + label + f'_sharpe_phases_ep{episode+1}.png', dpi=150)
+        plt.close()
+        print(f"Saved phase Sharpe plot for episode {episode+1}")
 
     if termination:
         print("Termination condition reached.")
