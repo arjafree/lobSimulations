@@ -124,7 +124,7 @@ kwargs['GymTradingAgent'] = agents
 i_eps=0
 # cash, inventory, t, actions = [], [], [], []
 t, t_with_twap, t_without_twap = [], [], []
-avgEpisodicRewards, stdEpisodicRewards, finalcash, finalcash2, profit_with_twap, profit_without_twap = [], [], [], [], [], []
+avgEpisodicRewards, stdEpisodicRewards, finalcash, finalcash2, profit_with_twap_sell, profit_with_twap_buy, profit_without_twap = [], [], [], [], [], [], []
 train_logger = TrainingLogger(layer_widths=layer_widths, n_layers=n_layers, log_dir=log_dir, label = label)
 model_manager = ModelManager(model_dir = model_dir, label = label)
 counter_profit = 0
@@ -378,7 +378,10 @@ for episode in range(50):
                 finalcash2.append(current_pnl)
 
                 if(Simstate['TimeCode'] >= twap_time):
-                    profit_with_twap.append(current_pnl)
+                    if twap_side == "buy":
+                        profit_with_twap_buy.append(current_pnl)
+                    else:
+                        profit_with_twap_sell.append(current_pnl)
                     t_with_twap += [Simstate['TimeCode']]
                 else:
                     profit_without_twap.append(current_pnl)
@@ -437,7 +440,8 @@ for episode in range(50):
                 plt.title('Final Profit - All Episodes Overlaid')
                 plt.savefig(log_dir + label + '_profit.png')
                 np.save(log_dir + label + '_profit', np.array([t, finalcash2]))
-                np.save(log_dir+label+"_profit_w_twap", np.array([t_with_twap, profit_with_twap]))
+                np.save(log_dir+label+"_profit_w_twap_buy", np.array([t_with_twap, profit_with_twap_buy]))
+                np.save(log_dir+label+"_profit_w_twap_sell", np.array([t_with_twap, profit_with_twap_sell]))
                 np.save(log_dir+label+"_profit_wout_twap", np.array([t_without_twap, profit_without_twap]))
                 if TWAPagentid in observationsDict:
                     TWAP_agent_obsv.append(observationsDict[TWAPagentid])
