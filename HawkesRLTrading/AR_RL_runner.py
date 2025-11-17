@@ -17,6 +17,10 @@ model_dir = '/home/ajafree/LSTM_fRL/with_expo/testing/model'
 start_trading_lag = 100
 twap_off_time = 400
 
+# Network architecture parameters - MUST match training
+layer_widths = 50
+n_layers = 3
+
 label = f'test_LSTM_fRL_52withExpo'
 
 checkpoint_params = ("20251115_164214_train_LSTMRLAgent_vs_TWAP_withExpo", 52)
@@ -313,7 +317,7 @@ for episode in range(50):
     TWAP_agent_obsv = []
     total_executed = 0
     final_cash = 0
-    twap_side = random.choice("buy", "sell")
+    twap_side = np.random.choice(["buy", "sell"])
     kwargs["GymTradingAgent"][1]["Inventory"] = {"INTC": 500}
     kwargs["GymTradingAgent"][1]["cash"] = 1000000
     kwargs["GymTradingAgent"][1]["side"] = twap_side
@@ -349,15 +353,21 @@ for episode in range(50):
     logger.debug(f"\nSimstate: {Simstate}\nObservations: {observations}\nTermination: {termination}")
     TWAPagentid = 0
     prev_inventory = 500
+    twap_end_time = twap_time + twap_off_time
     while Simstate["Done"]==False and termination!=True:
         counter_profit +=1
         logger.debug(f"ENV TERMINATION: {termination}")
         AgentsIDs=[k for k,v in Simstate["Infos"].items() if v==True]
         print(f"Agents with IDs {AgentsIDs} have an action available")
         agents:List[GymTradingAgent] = [env.getAgent(ID=agentid) for agentid in AgentsIDs]
+        
+        # Update TWAPPresent based on time window (matches trainer logic)
         if isinstance(RLagentInstance, AdversarialPPOAgent):
-            if(Simstate['TimeCode'] > twap_time) and not RLagentInstance.TWAPPresent:
-                RLagentInstance.TWAPPresent = -1 if twap_side == 'sell' else 1
+            if twap_end_time >= Simstate['TimeCode'] >= twap_time:
+                if not RLagentInstance.TWAPPresent:
+                    RLagentInstance.TWAPPresent = -1 if twap_side == 'sell' else 1
+            else:
+                RLagentInstance.TWAPPresent = 0
         
         # action:list[Tuple] = []
         for agent in agents:
