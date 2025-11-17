@@ -5,25 +5,21 @@ sys.path.append(os.path.abspath('/home/ajafree/lobSimulations'))
 from HawkesRLTrading.src.Envs.HawkesRLTradingEnv import *
 
 import torch
+import random
 
 # log_dir = '/home/ajafree/untrained_rl_testing/outputs'
 # log_dir = '/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/outputs/'
 # model_dir = '/home/ajafree/testing_adversarial/models'
 # model_dir = '/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/models/'
-log_dir = '/home/ajafree/october_retest/fRL/logs/'
-model_dir = '/home/ajafree/october_retest/fRL/models'
+log_dir = '/home/ajafree/LSTM_fRL/with_expo/testing/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/with_expo/testing/model'
 
-twap_side = "buy"
-RL_type = "f"
-label = f'retest_{RL_type}RL_versus_{twap_side}'
-if RL_type == "u":
-    layer_widths=128
-    n_layers=3
-    checkpoint_params = ('20250618_115039_inv10_symmHP_lowEpochs_standard', 52)
-else:
-    layer_widths=512
-    n_layers=1
-    checkpoint_params = ('20250921_080550_train_RLAgent_vs_TWAP_standardised_updatedslippagegraphs', 28)
+start_trading_lag = 100
+twap_off_time = 400
+
+label = f'test_LSTM_fRL_52withExpo'
+
+checkpoint_params = ("20251115_164214_train_LSTMRLAgent_vs_TWAP_withExpo", 52)
 
 # with open("/Users/alirazajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
 with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
@@ -42,48 +38,26 @@ tod=np.zeros(shape=(len(cols), 13))
 for i in range(len(cols)):
     tod[i]=[faketod[cols[i]][k] for k in range(13)]
 
-if RL_type == "u":
-    Pis={'Bid_L2': [0.,
-                    [(1, 1.)]],
-         'Bid_inspread': [0.,
-                          [(1, 1.)]],
-         'Bid_L1': [0.,
-                    [(1, 1.)]],
-         'Bid_MO': [0.,
-                    [(1, 1.)]]}
-    Pis["Ask_MO"] = Pis["Bid_MO"]
-    Pis["Ask_L1"] = Pis["Bid_L1"]
-    Pis["Ask_inspread"] = Pis["Bid_inspread"]
-    Pis["Ask_L2"] = Pis["Bid_L2"]
-    Pi_Q0= {'Ask_L1': [0.,
-                       [(10, 1.)]],
-            'Ask_L2': [0.,
-                       [(10, 1.)]],
-            'Bid_L1': [0.,
-                       [(10, 1.)]],
-            'Bid_L2': [0.,
-                       [(10, 1.)]]}
-else:
-    Pis={'Bid_L2': [0.,
-                    [(40, 1.)]],
-        'Bid_inspread': [0.,
-                        [(40, 1.)]],
+Pis={'Bid_L2': [0.,
+                [(40, 1.)]],
+     'Bid_inspread': [0.,
+                      [(40, 1.)]],
+     'Bid_L1': [0.,
+                [(40, 1.)]],
+     'Bid_MO': [0.,
+                [(40, 1.)]]}
+Pis["Ask_MO"] = Pis["Bid_MO"]
+Pis["Ask_L1"] = Pis["Bid_L1"]
+Pis["Ask_inspread"] = Pis["Bid_inspread"]
+Pis["Ask_L2"] = Pis["Bid_L2"]
+Pi_Q0= {'Ask_L1': [0.,
+                   [(400, 1.)]],
+        'Ask_L2': [0.,
+                   [(400, 1.)]],
         'Bid_L1': [0.,
-                    [(40, 1.)]],
-        'Bid_MO': [0.,
-                    [(40, 1.)]]}
-    Pis["Ask_MO"] = Pis["Bid_MO"]
-    Pis["Ask_L1"] = Pis["Bid_L1"]
-    Pis["Ask_inspread"] = Pis["Bid_inspread"]
-    Pis["Ask_L2"] = Pis["Bid_L2"]
-    Pi_Q0= {'Ask_L1': [0.,
-                    [(200, 1.)]],
-            'Ask_L2': [0.,
-                    [(200, 1.)]],
-            'Bid_L1': [0.,
-                    [(200, 1.)]],
-            'Bid_L2': [0.,
-                    [(200, 1.)]]}
+                   [(400, 1.)]],
+        'Bid_L2': [0.,
+                   [(400, 1.)]]}
 
 kwargs={
     "TradingAgent": [],
@@ -96,23 +70,24 @@ kwargs={
                          "log_to_file": True,
                          "cashlimit": 5000000,
                          "inventorylimit": 25,
-                         'start_trading_lag': 100,
+                         'start_trading_lag': start_trading_lag,
                          "wake_on_MO": True,
                          "wake_on_Spread": True}
                          ,
                          {"cash":1000000,
-                          "cashlimit": 1000000000,
+                          "cashlimit": 100000000000,
                           "strategy": "TWAP",
                           "on_trade":False,
-                          "total_order_size":300,
+                          "total_order_size":150,
                           "order_target":"INTC",
-                          "total_time":400,
-                          "window_size":50, #window size, measured in seconds
+                          "total_time":150,
+                          "window_size":25, #window size, measured in seconds
                           "action_freq":1,
                           "Inventory": {"INTC":500},
-                          'start_trading_lag': 100,
+                          'start_trading_lag': start_trading_lag,
                           "wake_on_MO": False,
-                          "wake_on_Spread": False}
+                          "wake_on_Spread": False,
+                          "off_time": twap_off_time}
                           ],
     "Exchange": {"symbol": "INTC",
                  "ticksize":0.01,
@@ -133,16 +108,16 @@ kwargs={
 agents = kwargs['GymTradingAgent']
 j = agents[0]
 tc = 0.0001
-if RL_type == "u":
-    RLagentInstance = PPOAgent( seed=1, log_events=True, log_to_file=True, strategy=j["strategy"], Inventory=j["Inventory"], cash=j["cash"], action_freq=j["action_freq"],
-                              wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"], cashlimit=j["cashlimit"],inventorylimit=j['inventorylimit'], batch_size=512,
-                              layer_widths=layer_widths, n_layers =n_layers, buffer_capacity = 100000, rewardpenalty = 1e-4, epochs = 1000, transaction_cost=tc, start_trading_lag = j['start_trading_lag'],
-                              gae_lambda=0.5, truncation_enabled=False, action_space_config = 1, alt_state=True, include_time=False, optim_type='ADAM',entropy_coef=0,lr=1e-5)
-else:
-    RLagentInstance = AdversarialPPOAgent( seed=1, log_events=True, log_to_file=True, strategy=j["strategy"], Inventory=j["Inventory"], cash=j["cash"], action_freq=j["action_freq"],
-                            wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"], cashlimit=j["cashlimit"],inventorylimit=j['inventorylimit'], batch_size=512,
-                            layer_widths=layer_widths, n_layers =n_layers, buffer_capacity = 100000, rewardpenalty = j["rewardpenalty"], epochs = 5, transaction_cost=1e-4, start_trading_lag = j['start_trading_lag'],
-                            gae_lambda=0.5, truncation_enabled=False, action_space_config = 1, alt_state=True, enhance_state=False, include_time=False, optim_type='ADAM',entropy_coef=0, exploration_bonus = 0, TWAPPresent=0, hidden_activation='sigmoid')
+RLagentInstance = AdversarialPPOAgent( seed=1, log_events=True, log_to_file=True, strategy=j["strategy"], Inventory=j["Inventory"], cash=j["cash"], action_freq=j["action_freq"],
+                          wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"], cashlimit=j["cashlimit"],inventorylimit=j['inventorylimit'], batch_size=512,
+                          layer_widths=layer_widths, n_layers =n_layers, buffer_capacity = 100000, rewardpenalty = j["rewardpenalty"], epochs = 100, transaction_cost=1e-4, start_trading_lag = j['start_trading_lag'],
+                          gae_lambda=0.5, truncation_enabled=False, action_space_config = 1, alt_state=True, enhance_state=True, include_time=True, optim_type='ADAM',entropy_coef=0, exploration_bonus = 0, TWAPPresent=0 , hidden_activation='sigmoid', typeNN = "LSTM")
+
+
+# RLagentInstance = PPOAgent( seed=1, log_events=True, log_to_file=True, strategy=j["strategy"], Inventory=j["Inventory"], cash=j["cash"], action_freq=j["action_freq"],
+#                               wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"], cashlimit=j["cashlimit"],inventorylimit=j['inventorylimit'], batch_size=512,
+#                               layer_widths=layer_widths, n_layers =n_layers, buffer_capacity = 100000, rewardpenalty = 1e-4, epochs = 1000, transaction_cost=tc, start_trading_lag = j['start_trading_lag'],
+#                               gae_lambda=0.5, truncation_enabled=False, action_space_config = 1, alt_state=True, include_time=False, optim_type='ADAM',entropy_coef=0,lr=1e-5)
 
 j['agent_instance'] = RLagentInstance
 kwargs['GymTradingAgent'] = agents
@@ -169,8 +144,6 @@ inventory_without_twap = []
 inventory_with_twap_sell = []
 inventory_with_twap_buy = []
 
-sell_slippage = []
-buy_slippage = []
 
 percentage_of_volume = []
 total_TWAP_obsv = []
@@ -179,11 +152,91 @@ total_RL_obsv = []
 
 final_cashs = []
 total_executeds = []
-for episode in range(20):
+
+# Data structures for inventory time series plotting
+all_episode_inventories = []
+all_episode_times = []
+
+# Data structures for slippage tracking
+sell_slippage_by_episode = []  # Store (episode_num, slippage) for sell episodes
+buy_slippage_by_episode = []   # Store (episode_num, slippage) for buy episodes
+
+def plot_inventory_timeseries(episode_num, all_inventories, all_times, twap_start, twap_end, stop_time, side, save_dir, label_prefix):
+    """
+    Plot inventory time series for all episodes with individual traces (alpha=0.1) and average overlay.
+    
+    Args:
+        episode_num: Current episode number
+        all_inventories: List of inventory arrays for each episode
+        all_times: List of time arrays for each episode
+        twap_start: Start time of TWAP metaorder
+        twap_end: End time of TWAP metaorder
+        stop_time: End time of simulation
+        side: 'buy' or 'sell' - determines sign adjustment
+        save_dir: Directory to save the plot
+        label_prefix: Prefix for the saved filename
+    """
+    if len(all_inventories) == 0:
+        return
+    
+    plt.figure(figsize=(14, 8))
+    
+    # Determine sign multiplier
+    sign_multiplier = -1 if side == 'sell' else 1
+    
+    # Add background rectangles for phases
+    # Pre-metaorder phase (0 to twap_start)
+    plt.axvspan(0, twap_start, alpha=0.15, color='lightblue', label='Pre-metaorder')
+    # During metaorder phase (twap_start to twap_end)
+    plt.axvspan(twap_start, twap_end, alpha=0.15, color='lightcoral', label='During metaorder')
+    # Post-metaorder phase (twap_end to stop_time)
+    plt.axvspan(twap_end, stop_time, alpha=0.15, color='lightgreen', label='Post-metaorder')
+    
+    # Plot individual episode trajectories with low alpha
+    for i, (times, inventories) in enumerate(zip(all_times, all_inventories)):
+        adjusted_inventory = np.array(inventories) * sign_multiplier
+        plt.plot(times, adjusted_inventory, alpha=0.1, color='gray', linewidth=0.8)
+    
+    # Compute and plot average trajectory
+    # Find common time grid (use the longest episode's time array)
+    max_len = max(len(t) for t in all_times)
+    max_time = max(t[-1] for t in all_times)
+    
+    # Create interpolated inventories on a common time grid
+    common_times = np.linspace(0, max_time, max_len)
+    interpolated_inventories = []
+    
+    for times, inventories in zip(all_times, all_inventories):
+        # Interpolate each episode onto common time grid
+        adjusted_inventory = np.array(inventories) * sign_multiplier
+        interp_inv = np.interp(common_times, times, adjusted_inventory)
+        interpolated_inventories.append(interp_inv)
+    
+    # Compute average across episodes
+    avg_inventory = np.mean(interpolated_inventories, axis=0)
+    
+    # Plot average with full opacity and thicker line
+    plt.plot(common_times, avg_inventory, alpha=1.0, color='darkblue', linewidth=2.5, label=f'Average (n={len(all_inventories)})')
+    
+    plt.xlabel('Time (seconds)', fontsize=12)
+    plt.ylabel('Inventory (sign-adjusted)', fontsize=12)
+    plt.title(f'RL Agent Inventory Time Series - Episodes 1-{episode_num+1} ({side.capitalize()} Side)', fontsize=14)
+    plt.legend(loc='best', fontsize=10)
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    
+    # Save figure
+    save_path = os.path.join(save_dir, f'{label_prefix}_inventory_timeseries_ep{episode_num+1}.png')
+    plt.savefig(save_path, dpi=150)
+    plt.close()
+    print(f"Saved inventory time series plot to {save_path}")
+
+for episode in range(50):
     RL_agent_obsv = []
     TWAP_agent_obsv = []
     total_executed = 0
     final_cash = 0
+    twap_side = random.choice("buy", "sell")
     kwargs["GymTradingAgent"][1]["Inventory"] = {"INTC": 500}
     kwargs["GymTradingAgent"][1]["cash"] = 1000000
     kwargs["GymTradingAgent"][1]["side"] = twap_side
@@ -198,7 +251,7 @@ for episode in range(20):
     twap_agent_executions_by_episode[episode] = []
     i = 0
     action_num = 0
-    env=tradingEnv(stop_time=400, wall_time_limit=23400, **kwargs)
+    env=tradingEnv(stop_time=550, wall_time_limit=23400, **kwargs)
     print("Initial Observations"+ str(env.getobservations()))
     Simstate, observations, termination, truncation =env.step(action=None) 
     AgentsIDs=[k for k,v in Simstate["Infos"].items() if v==True]
@@ -233,9 +286,9 @@ for episode in range(20):
             #check if agent is an RL agent or not
             
             if not isinstance(agent, PPOAgent):
-                # if(new_midprice):
-                #     starting_midprice = float((observations.get('LOB0').get('Ask_L1')[0] + observations.get('LOB0').get('Bid_L1')[0])/2)
-                #     new_midprice = False
+                if(new_midprice):
+                    starting_midprice = float((observations.get('LOB0').get('Ask_L1')[0] + observations.get('LOB0').get('Bid_L1')[0])/2)
+                    new_midprice = False
                 action_num+=1
                 agentAction:Tuple[int, int] = agent.get_action(data=env.getobservations(agentID=agent.id))
                 action = (agent.id, agentAction)
@@ -267,6 +320,18 @@ for episode in range(20):
                 total_executed = abs(500 - agent.Inventory["INTC"])
                 final_cash = agent.cash #if we make the twap stop trading early, this will have to be changed
                 
+                if(twap_side == "sell"):
+                    cash_earned = agent.cash - 1000000
+                    benchmark_earned = start_midprices * total_executed
+                    slip = (benchmark_earned - cash_earned)*10000/benchmark_earned
+                    sell_slippage_by_episode.append((episode, slip))
+                else:
+                    cash_spent = 1000000 - agent.cash 
+                    benchmark_spent = start_midprices * total_executed
+                    slip = (cash_spent- benchmark_spent)*10000/benchmark_spent
+                    buy_slippage_by_episode.append((episode, slip))
+                
+
                 
             else:
                 action_num+=1
@@ -382,6 +447,64 @@ for episode in range(20):
     inventory_and_cash = ()
     final_cashs.append(final_cash)
     total_executeds.append(total_executed)
+
+    # Collect inventory time series for this episode
+    # Extract the current episode's inventory and time data
+    # Get the starting index for this episode
+    if len(all_episode_inventories) > 0 and len(episode_boundaries) > len(all_episode_inventories):
+        start_idx = episode_boundaries[len(all_episode_inventories)]
+    else:
+        start_idx = 0
+        
+    # Get the ending index (current length)
+    end_idx = len(inventories[RLagentID])
+    
+    # Extract this episode's inventory trajectory
+    episode_inventory = inventories[RLagentID][start_idx:end_idx]
+    
+    # Extract corresponding times
+    episode_times = t[start_idx:end_idx]
+    
+    # Store for cumulative plotting
+    if len(episode_inventory) > 0:
+        all_episode_inventories.append(episode_inventory)
+        all_episode_times.append(episode_times)
+        
+        # Plot inventory time series with all episodes so far
+        plot_inventory_timeseries(
+            episode_num=episode,
+            all_inventories=all_episode_inventories,
+            all_times=all_episode_times,
+            twap_start=twap_time,
+            twap_end=twap_time + twap_off_time,
+            stop_time=550,  # env stop_time
+            side=twap_side,
+            save_dir=log_dir,
+            label_prefix=label
+        )
+        
+        # Plot slippage by episode (on-the-fly)
+        plt.figure(figsize=(12, 6))
+        
+        # Plot sell slippage
+        if len(sell_slippage_by_episode) > 0:
+            sell_episodes, sell_slips = zip(*sell_slippage_by_episode)
+            plt.scatter(sell_episodes, sell_slips, color='red', alpha=0.6, s=50, label='Sell Slippage', marker='o')
+        
+        # Plot buy slippage
+        if len(buy_slippage_by_episode) > 0:
+            buy_episodes, buy_slips = zip(*buy_slippage_by_episode)
+            plt.scatter(buy_episodes, buy_slips, color='blue', alpha=0.6, s=50, label='Buy Slippage', marker='s')
+        
+        plt.xlabel('Episode', fontsize=12)
+        plt.ylabel('Slippage (bps)', fontsize=12)
+        plt.title(f'TWAP Slippage by Episode - Episodes 1-{episode+1} (Buy vs Sell)', fontsize=14)
+        plt.legend(loc='best', fontsize=10)
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(log_dir + label + f'_slippage_by_episode_ep{episode+1}.png', dpi=150)
+        plt.close()
+        print(f"Saved slippage plot for episode {episode+1}")
 
     if termination:
         print("Termination condition reached.")
