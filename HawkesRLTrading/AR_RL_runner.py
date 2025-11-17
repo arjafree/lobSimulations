@@ -167,6 +167,10 @@ sharpe_pre_twap = []    # Sharpe before TWAP starts
 sharpe_during_twap = [] # Sharpe during TWAP execution
 sharpe_post_twap = []   # Sharpe after TWAP ends
 
+# Data structure for inventory statistics by phase
+# Each entry: (episode, side, phase, mean, std, min, max, median)
+inventory_stats_by_phase = []
+
 def plot_inventory_timeseries(episode_num, all_inventories, all_times, twap_start, twap_end, stop_time, side, save_dir, label_prefix):
     """
     Plot inventory time series for all episodes with individual traces (alpha=0.1) and average overlay.
@@ -501,6 +505,37 @@ for episode in range(50):
                 sharpe_pre_twap.append((episode, sharpe_pre, twap_side))
                 sharpe_during_twap.append((episode, sharpe_during, twap_side))
                 sharpe_post_twap.append((episode, sharpe_post, twap_side))
+                
+                # Calculate inventory statistics for each phase
+                def calc_inv_stats(inv_series, phase_name):
+                    if len(inv_series) > 0:
+                        return {
+                            'episode': episode,
+                            'side': twap_side,
+                            'phase': phase_name,
+                            'mean': np.mean(inv_series),
+                            'std': np.std(inv_series),
+                            'min': np.min(inv_series),
+                            'max': np.max(inv_series),
+                            'median': np.median(inv_series),
+                            'count': len(inv_series)
+                        }
+                    return None
+                
+                # Calculate stats for each phase
+                pre_stats = calc_inv_stats(episode_inv[pre_mask], 'pre')
+                during_stats = calc_inv_stats(episode_inv[during_mask], 'during')
+                post_stats = calc_inv_stats(episode_inv[post_mask], 'post')
+                
+                # Store statistics
+                for stats in [pre_stats, during_stats, post_stats]:
+                    if stats is not None:
+                        inventory_stats_by_phase.append(stats)
+                
+                # Save statistics to npy on-the-fly
+                npy_path = os.path.join(log_dir, f'{label}_inventory_stats_by_phase_ep{episode+1}.npy')
+                np.save(npy_path, np.array(inventory_stats_by_phase, dtype=object), allow_pickle=True)
+                print(f"Saved inventory statistics to {npy_path}")
 
     # Collect inventory time series for this episode
     # Extract the current episode's inventory and time data
