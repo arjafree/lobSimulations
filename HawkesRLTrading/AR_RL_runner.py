@@ -417,12 +417,12 @@ for episode in range(50):
                 
                 if(twap_side == "sell"):
                     cash_earned = agent.cash - 1000000
-                    benchmark_earned = start_midprices * total_executed
+                    benchmark_earned = starting_midprice * total_executed
                     slip = (benchmark_earned - cash_earned)*10000/benchmark_earned
                     sell_slippage_by_episode.append((episode, slip))
                 else:
                     cash_spent = 1000000 - agent.cash 
-                    benchmark_spent = start_midprices * total_executed
+                    benchmark_spent = starting_midprice * total_executed
                     slip = (cash_spent- benchmark_spent)*10000/benchmark_spent
                     buy_slippage_by_episode.append((episode, slip))
                 
