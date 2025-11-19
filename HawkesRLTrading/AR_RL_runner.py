@@ -127,7 +127,7 @@ j['agent_instance'] = RLagentInstance
 kwargs['GymTradingAgent'] = agents
 i_eps=0
 # cash, inventory, t, actions = [], [], [], []
-t, t_with_twap, t_without_twap = [], [], []
+t, t_with_twap_buy, t_with_twap_sell, t_without_twap = [], [], [], []
 avgEpisodicRewards, stdEpisodicRewards, finalcash, finalcash2, profit_with_twap_sell, profit_with_twap_buy, profit_without_twap = [], [], [], [], [], [], []
 train_logger = TrainingLogger(layer_widths=layer_widths, n_layers=n_layers, log_dir=log_dir, label = label)
 model_manager = ModelManager(model_dir = model_dir, label = label)
@@ -469,9 +469,10 @@ for episode in range(50):
                 if(Simstate['TimeCode'] >= twap_time):
                     if twap_side == "buy":
                         profit_with_twap_buy.append(current_pnl)
+                        t_with_twap_buy += [Simstate['TimeCode']]
                     else:
                         profit_with_twap_sell.append(current_pnl)
-                    t_with_twap += [Simstate['TimeCode']]
+                        t_with_twap_sell += [Simstate['TimeCode']]
                 else:
                     profit_without_twap.append(current_pnl)
                     t_without_twap += [Simstate['TimeCode']]
@@ -529,8 +530,9 @@ for episode in range(50):
                 plt.title('Final Profit - All Episodes Overlaid')
                 plt.savefig(log_dir + label + '_profit.png')
                 np.save(log_dir + label + '_profit', np.array([t, finalcash2]))
-                np.save(log_dir+label+"_profit_w_twap_buy", np.array([t_with_twap, profit_with_twap_buy]))
-                np.save(log_dir+label+"_profit_w_twap_sell", np.array([t_with_twap, profit_with_twap_sell]))
+                # Save buy/sell profits with their respective time arrays
+                np.save(log_dir+label+"_profit_w_twap_buy", np.array([t_with_twap_buy, profit_with_twap_buy]))
+                np.save(log_dir+label+"_profit_w_twap_sell", np.array([t_with_twap_sell, profit_with_twap_sell]))
                 np.save(log_dir+label+"_profit_wout_twap", np.array([t_without_twap, profit_without_twap]))
                 if TWAPagentid in observationsDict:
                     TWAP_agent_obsv.append(observationsDict[TWAPagentid])
