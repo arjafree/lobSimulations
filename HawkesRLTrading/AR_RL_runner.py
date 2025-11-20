@@ -415,19 +415,6 @@ for episode in range(50):
                 total_executed = abs(500 - agent.Inventory["INTC"])
                 final_cash = agent.cash #if we make the twap stop trading early, this will have to be changed
                 
-                if(twap_side == "sell"):
-                    cash_earned = agent.cash - 1000000
-                    benchmark_earned = starting_midprice * total_executed
-                    slip = (benchmark_earned - cash_earned)*10000/benchmark_earned
-                    sell_slippage_by_episode.append((episode, slip))
-                else:
-                    cash_spent = 1000000 - agent.cash 
-                    benchmark_spent = starting_midprice * total_executed
-                    slip = (cash_spent- benchmark_spent)*10000/benchmark_spent
-                    buy_slippage_by_episode.append((episode, slip))
-                
-
-                
             else:
                 action_num+=1
                 RLagentID = agent.id
@@ -544,6 +531,17 @@ for episode in range(50):
     
     total_RL_obsv.append(RL_agent_obsv)
     total_TWAP_obsv.append(TWAP_agent_obsv)
+
+    if(twap_side == "sell"):
+        cash_earned = agent.cash - 1000000
+        benchmark_earned = starting_midprice * total_executed
+        slip = (benchmark_earned - cash_earned)*10000/benchmark_earned
+        sell_slippage_by_episode.append((episode, slip))
+    else:
+        cash_spent = 1000000 - agent.cash 
+        benchmark_spent = starting_midprice * total_executed
+        slip = (cash_spent- benchmark_spent)*10000/benchmark_spent
+        buy_slippage_by_episode.append((episode, slip))
 
     inventory_and_cash = ()
     final_cashs.append(final_cash)
