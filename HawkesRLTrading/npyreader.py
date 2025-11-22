@@ -143,9 +143,13 @@ def getSharpeComplete(data_array):
     }
 
 
-def getSlippagesFromFinalCashInventory(finalcash, total_executed, starting_midprices, side):
+def getSlippagesFromFinalCashInventory(finalcash, total_executed, starting_midprices):
     slippages = []
     for (cash, executed, starting_midprice) in zip(finalcash, total_executed, starting_midprices):
+        if(finalcash < 1000000):
+            side = "sell"
+        else:
+            side = "buy"
         print(cash)
         print(executed)
         # executed = 6
@@ -1373,7 +1377,7 @@ def price_quantity_graph_predecay_mortised_starting_at_0():
     
     return mean_times, mean_path, sampled_indices
 
-side = "sell"
+# side = "sell"
 
 twap_obsv_episodes = np.load(f"/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/logs/observations/retest_uRL_versus_{side}twap_observations.npy", allow_pickle=True)
 
@@ -1449,7 +1453,7 @@ for ep_idx in range(len(episode_boundaries) - 1):
           f"time range: {episode_data['current_time'][0]:.2f} - {episode_data['current_time'][-1]:.2f}")
 
 # # Now calculate slippages
-logdir = f"/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/twap_alone/regPOVoldPIs/"
+# logdir = f"/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/twap_alone/regPOVoldPIs/"
 twap_finalcash = np.load(f"/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/logs/twap_slippages/retest_uRL_versus_{side}final_cash.npy")
 twap_totalexecuted = np.load(f"/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/retest/logs/twap_slippages/retest_uRL_versus_{side}total_executed.npy")
 # starting_midprices = np.load(f"{logdir}/retest_twap_regularpov_oldpis_{side}_alone_start_midprices.npy")

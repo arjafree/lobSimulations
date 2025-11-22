@@ -180,7 +180,7 @@ all_episode_twap_prices = []  # List of price arrays for each episode
 all_episode_twap_times = []   # List of time arrays for each episode
 all_episode_twap_start_prices = []  # Starting price for each episode
 
-def plot_inventory_timeseries(episode_num, all_inventories, all_times, twap_start, twap_end, stop_time, side, save_dir, label_prefix):
+def plot_inventory_timeseries(episode_num, all_inventories, all_times, twap_start, twap_stop, stop_time, side, save_dir, label_prefix):
     """
     Plot inventory time series for all episodes with individual traces (alpha=0.1) and average overlay.
     
@@ -189,7 +189,7 @@ def plot_inventory_timeseries(episode_num, all_inventories, all_times, twap_star
         all_inventories: List of inventory arrays for each episode
         all_times: List of time arrays for each episode
         twap_start: Start time of TWAP metaorder
-        twap_end: End time of TWAP metaorder
+        twap_stop: Stop time of TWAP metaorder (absolute time, not duration)
         stop_time: End time of simulation
         side: 'buy' or 'sell' - determines sign adjustment
         save_dir: Directory to save the plot
@@ -206,10 +206,10 @@ def plot_inventory_timeseries(episode_num, all_inventories, all_times, twap_star
     # Add background rectangles for phases
     # Pre-metaorder phase (0 to twap_start)
     plt.axvspan(0, twap_start, alpha=0.15, color='lightblue', label='Pre-metaorder')
-    # During metaorder phase (twap_start to twap_end)
-    plt.axvspan(twap_start, twap_end, alpha=0.15, color='lightcoral', label='During metaorder')
-    # Post-metaorder phase (twap_end to stop_time)
-    plt.axvspan(twap_end, stop_time, alpha=0.15, color='lightgreen', label='Post-metaorder')
+    # During metaorder phase (twap_start to twap_stop)
+    plt.axvspan(twap_start, twap_stop, alpha=0.15, color='lightcoral', label='During metaorder')
+    # Post-metaorder phase (twap_stop to stop_time)
+    plt.axvspan(twap_stop, stop_time, alpha=0.15, color='lightgreen', label='Post-metaorder')
     
     # Plot individual episode trajectories with low alpha
     for i, (times, inventories) in enumerate(zip(all_times, all_inventories)):
@@ -268,8 +268,10 @@ def plot_twap_execution_prices(episode_num, all_prices, all_times, all_start_pri
     
     plt.figure(figsize=(14, 8))
     
-    # Determine sign multiplier (positive price movement is bad for buy, good for sell)
-    sign_multiplier = -1 if side == 'buy' else 1
+    # Determine sign multiplier (up = bad, down = good)
+    # For buy: price increase is bad (positive), so multiply by +1
+    # For sell: price decrease is bad (negative), so multiply by -1 to flip it to positive
+    sign_multiplier = 1 if side == 'buy' else -1
     
     # Plot individual episode trajectories with low alpha
     for i, (times, prices) in enumerate(zip(all_times, all_prices)):
@@ -301,7 +303,7 @@ def plot_twap_execution_prices(episode_num, all_prices, all_times, all_start_pri
     plt.axhline(y=0, color='black', linestyle='--', linewidth=1, alpha=0.5, label='Start Price')
     plt.xlabel('Time (seconds)', fontsize=12)
     plt.ylabel('Execution Price - Start Price (sign-adjusted)', fontsize=12)
-    plt.title(f'TWAP Execution Prices Relative to Start - Episodes 1-{episode_num+1} ({side.capitalize()} Side)', fontsize=14)
+    plt.title(f'TWAP Execution Prices Relative to Start - Episodes 1-{episode_num+1} (Buy & Sell, Sign-Adjusted)', fontsize=14)
     plt.legend(loc='best', fontsize=10)
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
@@ -353,7 +355,6 @@ for episode in range(50):
     logger.debug(f"\nSimstate: {Simstate}\nObservations: {observations}\nTermination: {termination}")
     TWAPagentid = 0
     prev_inventory = 500
-    twap_end_time = twap_time + twap_off_time
     while Simstate["Done"]==False and termination!=True:
         counter_profit +=1
         logger.debug(f"ENV TERMINATION: {termination}")
@@ -363,7 +364,7 @@ for episode in range(50):
         
         # Update TWAPPresent based on time window (matches trainer logic)
         if isinstance(RLagentInstance, AdversarialPPOAgent):
-            if twap_end_time >= Simstate['TimeCode'] >= twap_time:
+            if twap_off_time >= Simstate['TimeCode'] >= twap_time:
                 if not RLagentInstance.TWAPPresent:
                     RLagentInstance.TWAPPresent = -1 if twap_side == 'sell' else 1
             else:
@@ -532,15 +533,18 @@ for episode in range(50):
     total_RL_obsv.append(RL_agent_obsv)
     total_TWAP_obsv.append(TWAP_agent_obsv)
 
+    # Get TWAP agent's final cash (not RL agent's cash)
+    twap_agent = env.getAgent(ID=TWAPagentid)
+    
     if(twap_side == "sell"):
-        cash_earned = agent.cash - 1000000
+        cash_earned = twap_agent.cash - 1000000
         benchmark_earned = starting_midprice * total_executed
         slip = (benchmark_earned - cash_earned)*10000/benchmark_earned
         sell_slippage_by_episode.append((episode, slip))
     else:
-        cash_spent = 1000000 - agent.cash 
+        cash_spent = 1000000 - twap_agent.cash 
         benchmark_spent = starting_midprice * total_executed
-        slip = (cash_spent- benchmark_spent)*10000/benchmark_spent
+        slip = (cash_spent - benchmark_spent)*10000/benchmark_spent
         buy_slippage_by_episode.append((episode, slip))
 
     inventory_and_cash = ()
@@ -571,8 +575,8 @@ for episode in range(50):
                 
                 # Split into three phases based on time
                 pre_mask = episode_times < twap_time
-                during_mask = (episode_times >= twap_time) & (episode_times < twap_time + twap_off_time)
-                post_mask = episode_times >= twap_time + twap_off_time
+                during_mask = (episode_times >= twap_time) & (episode_times < twap_off_time)
+                post_mask = episode_times >= twap_off_time
                 
                 # Calculate Sharpe for each phase
                 def calc_sharpe(pnl_series):
@@ -650,7 +654,7 @@ for episode in range(50):
             all_inventories=all_episode_inventories,
             all_times=all_episode_times,
             twap_start=twap_time,
-            twap_end=twap_time + twap_off_time,
+            twap_stop=twap_off_time,
             stop_time=550,  # env stop_time
             side=twap_side,
             save_dir=log_dir,
@@ -823,8 +827,8 @@ else:
 
 np.save(log_dir+label+"total_executed.npy", np.array(total_executeds))
 np.save(log_dir+label+"final_cash.npy", np.array(final_cashs))
-np.save(log_dir+label+"twap_observations.npy", np.array(total_TWAP_obsv))
-np.save(log_dir+label+"RL_observations.npy", np.array(total_RL_obsv))
+np.save(log_dir+label+"twap_observations.npy", np.array(total_TWAP_obsv, dtype=object), allow_pickle=True)
+np.save(log_dir+label+"RL_observations.npy", np.array(total_RL_obsv, dtype=object), allow_pickle=True)
 
 # np.save(log_dir + label + '_start_midprices.npy', start_midprices_array)
 # np.savez(log_dir + label + '_twap_executions.npz', **executions_data)
