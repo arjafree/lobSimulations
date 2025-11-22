@@ -413,7 +413,7 @@ for episode in range(50):
 
 
                 prev_inventory = observations['Inventory']
-                total_executed = abs(500 - agent.Inventory["INTC"])
+                
                 final_cash = agent.cash #if we make the twap stop trading early, this will have to be changed
                 
             else:
@@ -535,6 +535,8 @@ for episode in range(50):
 
     # Get TWAP agent's final cash (not RL agent's cash)
     twap_agent = env.getAgent(ID=TWAPagentid)
+
+    total_executed = abs(500 - twap_agent.Inventory["INTC"])
     
     if(twap_side == "sell"):
         cash_earned = twap_agent.cash - 1000000
