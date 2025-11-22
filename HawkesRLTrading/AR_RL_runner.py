@@ -342,7 +342,6 @@ for episode in range(50):
     AgentsIDs=[k for k,v in Simstate["Infos"].items() if v==True]
     agents:List[GymTradingAgent] = [env.getAgent(ID=agentid) for agentid in AgentsIDs]
     observationsDict:Dict[int, Dict] = {agentid: {"Inventory": agent.Inventory, "Positions": []} for agent, agentid in zip(agents, AgentsIDs)}
-    start_midprices.append(float((observations.get('LOB0').get('Ask_L1')[0] + observations.get('LOB0').get('Bid_L1')[0])/2))
     if episode == 0:
         for agent in agents:
             if isinstance(agent, PPOAgent):
@@ -378,6 +377,7 @@ for episode in range(50):
             if not isinstance(agent, PPOAgent):
                 if(new_midprice):
                     starting_midprice = float((observations.get('LOB0').get('Ask_L1')[0] + observations.get('LOB0').get('Bid_L1')[0])/2)
+                    start_midprices.append(starting_midprice)
                     new_midprice = False
                 action_num+=1
                 agentAction:Tuple[int, int] = agent.get_action(data=env.getobservations(agentID=agent.id))
@@ -811,7 +811,7 @@ for episode in range(50):
     torch.cuda.empty_cache()
     # torch.mps.empty_cache()
 
-# start_midprices_array = np.array(start_midprices)
+start_midprices_array = np.array(start_midprices)
 
 # executions_data = {}
 # for episode, executions in twap_agent_executions_by_episode.items():
@@ -830,6 +830,6 @@ np.save(log_dir+label+"final_cash.npy", np.array(final_cashs))
 np.save(log_dir+label+"twap_observations.npy", np.array(total_TWAP_obsv, dtype=object), allow_pickle=True)
 np.save(log_dir+label+"RL_observations.npy", np.array(total_RL_obsv, dtype=object), allow_pickle=True)
 
-# np.save(log_dir + label + '_start_midprices.npy', start_midprices_array)
+np.save(log_dir + label + '_start_midprices.npy', start_midprices_array)
 # np.savez(log_dir + label + '_twap_executions.npz', **executions_data)
 
