@@ -14,8 +14,8 @@ import time
 
 
 
-log_dir = '/home/ajafree/LSTM_fRL/without_expo/training/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/without_expo/training/model'
+log_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/model'
 # log_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/training/logs/'
 # model_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/training/model'
 
