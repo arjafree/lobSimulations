@@ -14,8 +14,8 @@ import time
 
 
 
-log_dir = '/home/ajafree/LSTM_fRL/with_expo/training/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/with_expo/training/model'
+log_dir = '/home/ajafree/LSTM_fRL/without_expo/training/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/without_expo/training/model'
 # log_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/training/logs/'
 # model_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/training/model'
 
@@ -28,7 +28,7 @@ twap_start_time = 150 + start_trading_lag #int(np.clip(np.random.normal(150, 50)
 
 twap_end_time = 300 + start_trading_lag
 
-label = 'train_LSTMRLAgent_vs_TWAP_withExpo'
+label = 'train_LSTMRLAgent_vs_TWAP_withoutExpo'
 layer_widths=50
 n_layers=3
 
@@ -184,7 +184,7 @@ kwargs={
                                      "beta": 0.941,
                                      "avgSpread": 0.0101,
                                      "Pi_Q0": Pi_Q0,
-                                     'expApprox' : True}} #one with true, one with false
+                                     'expApprox' : False}} #one with true, one with false
 }
 
 agents = kwargs['GymTradingAgent']
