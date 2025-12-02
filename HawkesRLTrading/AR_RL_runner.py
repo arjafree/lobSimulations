@@ -160,6 +160,7 @@ total_executeds = []
 # Data structures for inventory time series plotting
 all_episode_inventories = []
 all_episode_times = []
+all_episode_sides = []  # Track which side each episode was (buy/sell)
 
 # Data structures for slippage tracking
 sell_slippage_by_episode = []  # Store (episode_num, slippage) for sell episodes
@@ -180,7 +181,7 @@ all_episode_twap_prices = []  # List of price arrays for each episode
 all_episode_twap_times = []   # List of time arrays for each episode
 all_episode_twap_start_prices = []  # Starting price for each episode
 
-def plot_inventory_timeseries(episode_num, all_inventories, all_times, twap_start, twap_stop, stop_time, side, save_dir, label_prefix):
+def plot_inventory_timeseries(episode_num, all_inventories, all_times, all_sides, twap_start, twap_stop, stop_time, save_dir, label_prefix):
     """
     Plot inventory time series for all episodes with individual traces (alpha=0.1) and average overlay.
     
@@ -188,10 +189,10 @@ def plot_inventory_timeseries(episode_num, all_inventories, all_times, twap_star
         episode_num: Current episode number
         all_inventories: List of inventory arrays for each episode
         all_times: List of time arrays for each episode
+        all_sides: List of sides for each episode ('buy' or 'sell')
         twap_start: Start time of TWAP metaorder
         twap_stop: Stop time of TWAP metaorder (absolute time, not duration)
         stop_time: End time of simulation
-        side: 'buy' or 'sell' - determines sign adjustment
         save_dir: Directory to save the plot
         label_prefix: Prefix for the saved filename
     """
@@ -199,9 +200,6 @@ def plot_inventory_timeseries(episode_num, all_inventories, all_times, twap_star
         return
     
     plt.figure(figsize=(14, 8))
-    
-    # Determine sign multiplier
-    sign_multiplier = -1 if side == 'sell' else 1
     
     # Add background rectangles for phases
     # Pre-metaorder phase (0 to twap_start)
@@ -211,8 +209,10 @@ def plot_inventory_timeseries(episode_num, all_inventories, all_times, twap_star
     # Post-metaorder phase (twap_stop to stop_time)
     plt.axvspan(twap_stop, stop_time, alpha=0.15, color='lightgreen', label='Post-metaorder')
     
-    # Plot individual episode trajectories with low alpha
-    for i, (times, inventories) in enumerate(zip(all_times, all_inventories)):
+    # Plot individual episode trajectories with low alpha, using each episode's own side
+    for i, (times, inventories, side) in enumerate(zip(all_times, all_inventories, all_sides)):
+        # Each episode uses its own sign multiplier
+        sign_multiplier = -1 if side == 'sell' else 1
         adjusted_inventory = np.array(inventories) * sign_multiplier
         plt.plot(times, adjusted_inventory, alpha=0.1, color='gray', linewidth=0.8)
     
@@ -225,8 +225,9 @@ def plot_inventory_timeseries(episode_num, all_inventories, all_times, twap_star
     common_times = np.linspace(0, max_time, max_len)
     interpolated_inventories = []
     
-    for times, inventories in zip(all_times, all_inventories):
-        # Interpolate each episode onto common time grid
+    for times, inventories, side in zip(all_times, all_inventories, all_sides):
+        # Interpolate each episode onto common time grid, using its own sign multiplier
+        sign_multiplier = -1 if side == 'sell' else 1
         adjusted_inventory = np.array(inventories) * sign_multiplier
         interp_inv = np.interp(common_times, times, adjusted_inventory)
         interpolated_inventories.append(interp_inv)
@@ -239,7 +240,7 @@ def plot_inventory_timeseries(episode_num, all_inventories, all_times, twap_star
     
     plt.xlabel('Time (seconds)', fontsize=12)
     plt.ylabel('Inventory (sign-adjusted)', fontsize=12)
-    plt.title(f'RL Agent Inventory Time Series - Episodes 1-{episode_num+1} ({side.capitalize()} Side)', fontsize=14)
+    plt.title(f'RL Agent Inventory Time Series - Episodes 1-{episode_num+1} (Buy & Sell)', fontsize=14)
     plt.legend(loc='best', fontsize=10)
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
@@ -649,16 +650,17 @@ for episode in range(50):
     if len(episode_inventory) > 0:
         all_episode_inventories.append(episode_inventory)
         all_episode_times.append(episode_times)
+        all_episode_sides.append(twap_side)  # Store which side this episode was
         
         # Plot inventory time series with all episodes so far
         plot_inventory_timeseries(
             episode_num=episode,
             all_inventories=all_episode_inventories,
             all_times=all_episode_times,
+            all_sides=all_episode_sides,
             twap_start=twap_time,
             twap_stop=twap_off_time,
             stop_time=550,  # env stop_time
-            side=twap_side,
             save_dir=log_dir,
             label_prefix=label
         )
