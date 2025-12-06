@@ -200,13 +200,13 @@ def plot_inventory_timeseries(all_inventories, all_times, all_sides, twap_start,
     
     plt.figure(figsize=(14, 8))
     
-    # Add background rectangles for phases
-    # Pre-metaorder phase (0 to twap_start)
-    plt.axvspan(0, twap_start, alpha=0.15, color='lightblue', label='Pre-metaorder')
-    # During metaorder phase (twap_start to twap_stop)
-    plt.axvspan(twap_start, twap_stop, alpha=0.15, color='lightcoral', label='During metaorder')
-    # Post-metaorder phase (twap_stop to stop_time)
-    plt.axvspan(twap_stop, stop_time, alpha=0.15, color='lightgreen', label='Post-metaorder')
+    # Add background rectangles for phases (excluding pre-trading period 0-100s)
+    # Before TWAP phase (100s to twap_start)
+    plt.axvspan(100, twap_start, alpha=0.15, color='lightblue', label='Before TWAP')
+    # During TWAP phase (twap_start to twap_stop)
+    plt.axvspan(twap_start, twap_stop, alpha=0.15, color='lightcoral', label='During TWAP')
+    # After TWAP phase (twap_stop to stop_time)
+    plt.axvspan(twap_stop, stop_time, alpha=0.15, color='lightgreen', label='After TWAP')
     
     # Plot individual episode trajectories with low alpha, using each episode's own side
     for i, (times, inventories, side) in enumerate(zip(all_times, all_inventories, all_sides)):
@@ -575,10 +575,10 @@ for episode in range(50):
                 # Calculate PnL time series for this episode
                 episode_pnl_series = episode_cash + episode_inv * agent_ref.mid * (1 - tc * np.sign(episode_inv))
                 
-                # Split into three phases based on time
-                pre_mask = episode_times < twap_time
-                during_mask = (episode_times >= twap_time) & (episode_times < twap_off_time)
-                post_mask = episode_times >= twap_off_time
+                # Split into three phases based on time (excluding pre-trading period 0-100s)
+                pre_mask = (episode_times >= 100) & (episode_times < twap_time)  # 100-250s
+                during_mask = (episode_times >= twap_time) & (episode_times < twap_off_time)  # 250-400s
+                post_mask = episode_times >= twap_off_time  # 400-550s
                 
                 # Calculate annualized Sharpe for each phase
                 def calc_sharpe(pnl_series, times_series):
@@ -619,9 +619,9 @@ for episode in range(50):
                     return None
                 
                 # Calculate stats for each phase
-                pre_stats = calc_inv_stats(episode_inv[pre_mask], 'pre')
-                during_stats = calc_inv_stats(episode_inv[during_mask], 'during')
-                post_stats = calc_inv_stats(episode_inv[post_mask], 'post')
+                pre_stats = calc_inv_stats(episode_inv[pre_mask], 'before_twap')
+                during_stats = calc_inv_stats(episode_inv[during_mask], 'during_twap')
+                post_stats = calc_inv_stats(episode_inv[post_mask], 'after_twap')
                 
                 # Store statistics
                 for stats in [pre_stats, during_stats, post_stats]:
@@ -714,9 +714,9 @@ for episode in range(50):
         fig, axes = plt.subplots(1, 3, figsize=(18, 5))
         
         phases = [
-            (sharpe_pre_twap, 'Pre-TWAP Sharpe', axes[0]),
-            (sharpe_during_twap, 'During-TWAP Sharpe', axes[1]),
-            (sharpe_post_twap, 'Post-TWAP Sharpe', axes[2])
+            (sharpe_pre_twap, 'Before TWAP (100-250s)', axes[0]),
+            (sharpe_during_twap, 'During TWAP (250-400s)', axes[1]),
+            (sharpe_post_twap, 'After TWAP (400-550s)', axes[2])
         ]
         
         for phase_data, phase_title, ax in phases:
