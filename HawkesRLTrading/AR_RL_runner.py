@@ -440,8 +440,8 @@ for episode in range(50):
                 inventories.update({agent.id:inventories.get(agent.id, []) + [observations['Inventory']]})
                 actionss.update({agent.id: actionss.get(agent.id, []) + [action[1][0]]})
                 t += [Simstate['TimeCode']]
-                if 'test' in label:
-                    observations['current_time'] = 100+((observations['current_time'] - 100)%300)
+                # if 'test' in label:
+                #     observations['current_time'] = 100+((observations['current_time'] - 100)%300)
                 # agent.appendER((agent.readData(observations_prev), agentAction, agent.calculaterewards(termination), agent.readData(observations_prev), (termination or truncation)))
                 agent.store_transition(episode, agent.readData(observations_prev), agentAction[1], agent.calculaterewards(termination), agent.readData(observations), (termination or truncation))
                 print(f'Current reward: {agent.calculaterewards(termination):0.4f}')
@@ -581,17 +581,22 @@ for episode in range(50):
                 during_mask = (episode_times >= twap_time) & (episode_times < twap_off_time)
                 post_mask = episode_times >= twap_off_time
                 
-                # Calculate Sharpe for each phase
-                def calc_sharpe(pnl_series):
-                    if len(pnl_series) > 1:
+                # Calculate annualized Sharpe for each phase
+                def calc_sharpe(pnl_series, times_series):
+                    if len(pnl_series) > 1 and len(times_series) > 1:
                         log_returns = np.diff(np.log(pnl_series))
                         if len(log_returns) > 0 and np.std(log_returns) > 0:
-                            return np.mean(log_returns) / np.std(log_returns)
+                            sharpe = np.mean(log_returns) / np.std(log_returns)
+                            # Annualize: sqrt(6.5 * 3600 / episode_duration * 252)
+                            episode_duration = times_series[-1] - times_series[0]
+                            if episode_duration > 0:
+                                ann_factor = np.sqrt(6.5 * 3600 / episode_duration * 252)
+                                return sharpe * ann_factor
                     return 0.0
                 
-                sharpe_pre = calc_sharpe(episode_pnl_series[pre_mask]) if np.sum(pre_mask) > 1 else 0.0
-                sharpe_during = calc_sharpe(episode_pnl_series[during_mask]) if np.sum(during_mask) > 1 else 0.0
-                sharpe_post = calc_sharpe(episode_pnl_series[post_mask]) if np.sum(post_mask) > 1 else 0.0
+                sharpe_pre = calc_sharpe(episode_pnl_series[pre_mask], episode_times[pre_mask]) if np.sum(pre_mask) > 1 else 0.0
+                sharpe_during = calc_sharpe(episode_pnl_series[during_mask], episode_times[during_mask]) if np.sum(during_mask) > 1 else 0.0
+                sharpe_post = calc_sharpe(episode_pnl_series[post_mask], episode_times[post_mask]) if np.sum(post_mask) > 1 else 0.0
                 
                 # Store with episode number and side
                 sharpe_pre_twap.append((episode, sharpe_pre, twap_side))
@@ -731,7 +736,7 @@ for episode in range(50):
                     ax.scatter(sell_episodes, sell_sharpes, color='red', alpha=0.6, s=50, label='Sell', marker='o')
             
             ax.set_xlabel('Episode', fontsize=11)
-            ax.set_ylabel('Sharpe Ratio', fontsize=11)
+            ax.set_ylabel('Annualized Sharpe Ratio', fontsize=11)
             ax.set_title(phase_title, fontsize=12)
             ax.legend(loc='best', fontsize=9)
             ax.grid(True, alpha=0.3)

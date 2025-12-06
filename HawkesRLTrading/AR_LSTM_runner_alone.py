@@ -114,7 +114,8 @@ inventories:Dict[int, List] = {}
 actionss:Dict[int, List] = {}
 RLagentID = 1
 
-stop_time = 300
+trading_time = 300
+stop_time = trading_time + start_trading_lag
 RL_obsv = []
 total_RL_obsv = []
 

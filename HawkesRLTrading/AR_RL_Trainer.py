@@ -24,7 +24,7 @@ twap_off_time = 400
 
 twap_side = "buy"
 #the time that the TWAP agent will kick in:
-twap_start_time = 150 + start_trading_lag #int(np.clip(np.random.normal(150, 50), 1, 300)) + start_trading_lag
+twap_start_time = 150 + start_trading_lag
 
 twap_end_time = 300 + start_trading_lag
 
@@ -329,8 +329,6 @@ for episode in range(100):
                 else:
                     inventory_without_twap.append(observations["Inventory"])
                 t += [Simstate['TimeCode']]
-                if 'test' in label:
-                    observations['current_time'] = 100+((observations['current_time'] - 100)%300)
                 # agent.appendER((agent.readData(observations_prev), agentAction, agent.calculaterewards(termination), agent.readData(observations_prev), (termination or truncation)))
                 agent.store_transition(episode, agent.readData(observations_prev), agentAction[1], agent.calculaterewards(termination), agent.readData(observations), (termination or truncation))
                 print(f'Current reward: {agent.calculaterewards(termination):0.4f}')
