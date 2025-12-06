@@ -181,12 +181,11 @@ all_episode_twap_prices = []  # List of price arrays for each episode
 all_episode_twap_times = []   # List of time arrays for each episode
 all_episode_twap_start_prices = []  # Starting price for each episode
 
-def plot_inventory_timeseries(episode_num, all_inventories, all_times, all_sides, twap_start, twap_stop, stop_time, save_dir, label_prefix):
+def plot_inventory_timeseries(all_inventories, all_times, all_sides, twap_start, twap_stop, stop_time, save_dir, label_prefix):
     """
-    Plot inventory time series for all episodes with individual traces (alpha=0.1) and average overlay.
+    Plot aggregated inventory time series with individual episode traces (alpha=0.1) and average overlay.
     
     Args:
-        episode_num: Current episode number
         all_inventories: List of inventory arrays for each episode
         all_times: List of time arrays for each episode
         all_sides: List of sides for each episode ('buy' or 'sell')
@@ -240,16 +239,16 @@ def plot_inventory_timeseries(episode_num, all_inventories, all_times, all_sides
     
     plt.xlabel('Time (seconds)', fontsize=12)
     plt.ylabel('Inventory (sign-adjusted)', fontsize=12)
-    plt.title(f'RL Agent Inventory Time Series - Episodes 1-{episode_num+1} (Buy & Sell)', fontsize=14)
+    plt.title(f'RL Agent Inventory Time Series - All {len(all_inventories)} Episodes (Buy & Sell)', fontsize=14)
     plt.legend(loc='best', fontsize=10)
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     
-    # Save figure
-    save_path = os.path.join(save_dir, f'{label_prefix}_inventory_timeseries_ep{episode_num+1}.png')
+    # Save figure - overwrites each time to show latest progress
+    save_path = os.path.join(save_dir, f'{label_prefix}_inventory_timeseries_aggregated.png')
     plt.savefig(save_path, dpi=150)
     plt.close()
-    print(f"Saved inventory time series plot to {save_path}")
+    print(f"Saved aggregated inventory time series plot ({len(all_inventories)} episodes) to {save_path}")
 
 def plot_twap_execution_prices(episode_num, all_prices, all_times, all_start_prices, side, save_dir, label_prefix):
     """
@@ -657,9 +656,8 @@ for episode in range(50):
         all_episode_times.append(episode_times)
         all_episode_sides.append(twap_side)  # Store which side this episode was
         
-        # Plot inventory time series with all episodes so far
+        # Plot inventory time series with all episodes so far (updated after each episode)
         plot_inventory_timeseries(
-            episode_num=episode,
             all_inventories=all_episode_inventories,
             all_times=all_episode_times,
             all_sides=all_episode_sides,
