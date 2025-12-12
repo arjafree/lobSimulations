@@ -16,6 +16,7 @@ model_dir = '/home/ajafree/LSTM_fRL/with_expo/testing/model'
 
 start_trading_lag = 100
 twap_off_time = 400
+twap_starting_inventory = 500
 
 # Network architecture parameters - MUST match training
 layer_widths = 50
@@ -325,8 +326,6 @@ for episode in range(50):
     kwargs["GymTradingAgent"][1]["side"] = twap_side
     starting_midprice = 0
     new_midprice = True
-    if(isinstance(RLagentInstance, AdversarialPPOAgent)):
-        RLagentInstance.TWAPPresent = False
 
     twap_time = 250
     kwargs["GymTradingAgent"][1]["start_trading_lag"] = twap_time
@@ -439,8 +438,6 @@ for episode in range(50):
                 inventories.update({agent.id:inventories.get(agent.id, []) + [observations['Inventory']]})
                 actionss.update({agent.id: actionss.get(agent.id, []) + [action[1][0]]})
                 t += [Simstate['TimeCode']]
-                # if 'test' in label:
-                #     observations['current_time'] = 100+((observations['current_time'] - 100)%300)
                 # agent.appendER((agent.readData(observations_prev), agentAction, agent.calculaterewards(termination), agent.readData(observations_prev), (termination or truncation)))
                 agent.store_transition(episode, agent.readData(observations_prev), agentAction[1], agent.calculaterewards(termination), agent.readData(observations), (termination or truncation))
                 print(f'Current reward: {agent.calculaterewards(termination):0.4f}')

@@ -1567,6 +1567,6 @@ getSharpeComplete(rl_alone_data)
 
 
 
-
+getSharpe(np.load("/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/alone/testing/test_LSTMRLAgent_alone_profit.npy"))
 
 
