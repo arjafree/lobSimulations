@@ -19,7 +19,7 @@ label = 'train_LSTMRLAgent_alone'
 layer_widths=50
 n_layers=3
 
-checkpoint_params = None
+checkpoint_params = ("20251212_131954_train_LSTMRLAgent_alone", 48)
 
 with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
     kernelparams = pickle.load(f)
