@@ -10,16 +10,16 @@ import time
 
 
 
-log_dir = '/home/ajafree/LSTM_fRL/alone/training/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/alone/training/model'
+log_dir = '/home/ajafree/LSTM_fRL/alone/100width_10pen/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/alone/100width_10pen/model'
 
 start_trading_lag = 100
 
-label = 'train_LSTMRLAgent_alone'
-layer_widths=50
+label = 'train_LSTMRLAgent_alone_morewidth_more'
+layer_widths=100
 n_layers=3
 
-checkpoint_params = ("20251212_131954_train_LSTMRLAgent_alone", 48)
+checkpoint_params = None
 
 with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
     kernelparams = pickle.load(f)
@@ -63,7 +63,7 @@ kwargs={
                         {"cash": 2500,
                          "strategy": "ICRL",
                          "action_freq": 0.213,
-                         "rewardpenalty": 1,
+                         "rewardpenalty": 10,
                          "Inventory": {"INTC": 0},
                          "log_to_file": True,
                          "cashlimit": 5000000,
@@ -120,7 +120,7 @@ for episode in range(100):
     RL_agent_obsv = []
     i = 0
     action_num = 0
-    env=tradingEnv(stop_time=stop_time+100, wall_time_limit=23400, **kwargs)
+    env=tradingEnv(stop_time=stop_time+start_trading_lag, wall_time_limit=23400, **kwargs)
     print(f"Start of episode {episode}.")
     print("Initial Observations"+ str(env.getobservations()))
     Simstate, observations, termination, truncation =env.step(action=None) 
