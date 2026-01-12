@@ -1034,26 +1034,26 @@ class ActorCriticSeparate(nn.Module):
             actor_output: policy distribution or action
             critic_output: value estimate
         '''
-        if self.actor.typeNN == "dense":
-            actor_output = self.actor(x)
-        elif self.actor.typeNN == "LSTM":
-            S = self.actor.initial_layer(x)
-            # Process through LSTM layers
-            for lstm_layer in self.actor.lstm_layers:
-                S = lstm_layer(S, x)  # LSTMLayer needs both S and X
+        # if self.actor.typeNN == "dense":
+        actor_output = self.actor(x)
+        # elif self.actor.typeNN == "LSTM":
+        #     S = self.actor.initial_layer(x)
+        #     # Process through LSTM layers
+        #     for lstm_layer in self.actor.lstm_layers:
+        #         S = lstm_layer(S, x)  # LSTMLayer needs both S and X
             
-            actor_output = self.actor.output_layer(S)
+        #     actor_output = self.actor.output_layer(S)
         
-        if self.critic.typeNN == "dense":
-            critic_output = self.critic(x)
+        # if self.critic.typeNN == "dense":
+        critic_output = self.critic(x)
 
-        elif self.critic.typeNN == "LSTM":
-            S = self.critic.initial_layer(x)
-            # Process through LSTM layers
-            for lstm_layer in self.critic.lstm_layers:
-                S = lstm_layer(S, x)  # LSTMLayer needs both S and X
+        # elif self.critic.typeNN == "LSTM":
+        #     S = self.critic.initial_layer(x)
+        #     # Process through LSTM layers
+        #     for lstm_layer in self.critic.lstm_layers:
+        #         S = lstm_layer(S, x)  # LSTMLayer needs both S and X
             
-            critic_output = self.critic.output_layer(S) 
+        #     critic_output = self.critic.output_layer(S) 
 
         return actor_output, critic_output
 
