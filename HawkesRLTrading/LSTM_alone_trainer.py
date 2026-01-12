@@ -10,12 +10,12 @@ import time
 
 
 
-log_dir = '/home/ajafree/LSTM_fRL/alone/100width_10pen/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/alone/100width_10pen/model'
+log_dir = '/home/ajafree/LSTM_fRL/alone/training/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/alone/training/model'
 
 start_trading_lag = 100
 
-label = 'train_LSTMRLAgent_alone_morewidth_more'
+label = 'train_LSTMRLAgent_alone'
 layer_widths=100
 n_layers=3
 
@@ -115,7 +115,7 @@ stop_time = 300
 RL_obsv = []
 total_RL_obsv = []
 
-for episode in range(100):
+for episode in range(50):
 
     RL_agent_obsv = []
     i = 0
