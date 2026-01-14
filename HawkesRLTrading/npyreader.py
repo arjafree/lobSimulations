@@ -11,11 +11,11 @@ import matplotlib.pyplot as plt
 # buy_sell_runs = np.load('/Users/alirazajafree/researchprojects/Training Results/slippages/Outputfile/New_data/train_RLAgent_vs_TWAP_standardised_updatedslippagegraphs_profit.npy')
 
 
-file_pattern = "/Users/alirazajafree/30JuneCopy/Market Impact/Price path/TWAP/*.npy"
-file_list = glob.glob(file_pattern)
-data_list = [np.load(f) for f in file_list]
+# file_pattern = "/Users/alirazajafree/30JuneCopy/Market Impact/Price path/TWAP/*.npy"
+# file_list = glob.glob(file_pattern)
+# data_list = [np.load(f) for f in file_list]
 
-times = np.load('/Users/alirazajafree/30JuneCopy/Market Impact/Price path/times.npy')
+# times = np.load('/Users/alirazajafree/30JuneCopy/Market Impact/Price path/times.npy')
 
 
 # times = data[0]
@@ -58,7 +58,7 @@ def getSharpe(data):
     print(f"Ann_sharpe: {ann_sharpe}")
 
 
-def getSharpeComplete(data_array):
+def getSharpeComplete(data_array, times):
     """
     Calculate Sharpe ratio including ALL episodes (first and last episodes included).
     
@@ -709,7 +709,7 @@ def getSharpeWithTWAPExecutionData(data_array, twap_executions_by_episode, start
 
 
 
-def aggregatePricePaths():
+def aggregatePricePaths(data_list):
     plt.figure(figsize=(12, 8))
     
     for i, data in enumerate(data_list):
@@ -744,7 +744,7 @@ def aggregatePricePaths():
 
 
 
-def aggregatePricePaths_decay():
+def aggregatePricePaths_decay(data_list, times):
     plt.figure(figsize=(12, 8))
     
     time_threshold_idx = np.where(times >= 1300)[0]
@@ -788,7 +788,7 @@ def aggregatePricePaths_decay():
     plt.savefig("/Users/alirazajafree/30JuneCopy/Market Impact/Price Decay/TWAP/TWAP_price_decay_unfitted_with_time_1.png", dpi=300, bbox_inches='tight')
     plt.show()
 
-def aggregatePricePaths_decay_fitted_propogatormodel():
+def aggregatePricePaths_decay_fitted_propogatormodel(data_list, times):
     time_threshold_idx = np.where(times >= 1300)[0]
     if len(time_threshold_idx) == 0:
         print("No data after 1300 seconds")
@@ -931,7 +931,7 @@ def aggregatePricePaths_decay_fitted_propogatormodel():
     
 
 
-def aggregatePricePaths_decay_fitted():
+def aggregatePricePaths_decay_fitted(data_list, times):
     time_threshold_idx = np.where(times >= 1300)[0]
     if len(time_threshold_idx) == 0:
         print("No data after 1300 seconds")
@@ -1072,7 +1072,7 @@ def aggregatePricePaths_decay_fitted():
     #             dpi=300, bbox_inches='tight')
     plt.show()
 
-def price_quantity_graph_predecay():
+def price_quantity_graph_predecay(data_list, times):
     # Since TWAP is linear with time step window size, the executed quantity over time can be assumed to be linear
     time_threshold_idx = np.where(times <= 1300)[0]
     if len(time_threshold_idx) == 0:
@@ -1138,7 +1138,7 @@ def price_quantity_graph_predecay():
         print(f"Square root fit failed: {e}")
 
 
-def price_quantity_graph_predecay_mortised():
+def price_quantity_graph_predecay_mortised(data_list, times):
     """
     Same as price_quantity_graph_predecay but sampling data every 50 seconds with tolerance for float imprecision
     """
@@ -1256,7 +1256,7 @@ def price_quantity_graph_predecay_mortised():
 
 
 
-def price_quantity_graph_predecay_mortised_starting_at_0():
+def price_quantity_graph_predecay_mortised_starting_at_0(data_list, times):
     """
     Same as price_quantity_graph_predecay but sampling data every 50 seconds with tolerance for float imprecision
     """
@@ -1524,9 +1524,8 @@ def price_quantity_graph_predecay_mortised_starting_at_0():
 # print(np.mean(slippages))
 # print(len(slippages))
 
-rl_alone_data = np.load('/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/alone/testing/test_LSTMRLAgent_alone_profit.npy')
+rl_alone_data = np.load('/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/alone/train_LSTMRLAgent_alone_profit.npy')
 getSharpe(rl_alone_data)
-getSharpeComplete(rl_alone_data)
 
 
 # rl_alone = np.load("/Users/alirazajafree/researchprojects/RL_alone/RL_alonetest_episodes_RL_alone_profit.npy")
@@ -1567,6 +1566,6 @@ getSharpeComplete(rl_alone_data)
 
 
 
-getSharpe(np.load("/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/alone/testing/test_LSTMRLAgent_alone_profit.npy"))
+# getSharpe(np.load("/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/alone/testing/test_LSTMRLAgent_alone_profit.npy"))
 
 
