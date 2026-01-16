@@ -10,16 +10,16 @@ import time
 
 
 
-log_dir = '/home/ajafree/LSTM_fRL/alone/training/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/alone/training/model'
+log_dir = '/home/ajafree/LSTM_fRL/alone/invpenalty30/testing/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/alone/invpenalty30/testing/model'
 
 start_trading_lag = 100
 
-label = 'train_LSTMRLAgent_alone'
+label = 'test_LSTMRLAgent_alone_30pen'
 layer_widths=100
 n_layers=3
 
-checkpoint_params = None
+checkpoint_params = ("20260114_130054_train_LSTMRLAgent_alone", 48)
 
 with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
     kernelparams = pickle.load(f)
@@ -113,9 +113,8 @@ RLagentID = 1
 
 stop_time = 300
 RL_obsv = []
-total_RL_obsv = []
 
-for episode in range(50):
+for episode in range(20):
 
     RL_agent_obsv = []
     i = 0
@@ -314,4 +313,3 @@ for episode in range(50):
     plt.savefig(log_dir + label+'_avgepisodicreward.png')
     torch.cuda.empty_cache()
 
-np.save(log_dir+label+"RL_observations.npy", np.array(total_RL_obsv))

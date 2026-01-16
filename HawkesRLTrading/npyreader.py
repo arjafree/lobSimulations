@@ -1524,7 +1524,7 @@ def price_quantity_graph_predecay_mortised_starting_at_0(data_list, times):
 # print(np.mean(slippages))
 # print(len(slippages))
 
-rl_alone_data = np.load('/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/alone/train_LSTMRLAgent_alone_profit.npy')
+rl_alone_data = np.load('/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/alone/inventory_pen_30/train_LSTMRLAgent_alone_profit.npy')
 getSharpe(rl_alone_data)
 
 
