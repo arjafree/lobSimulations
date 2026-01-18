@@ -10,12 +10,12 @@ import time
 
 
 
-log_dir = '/home/ajafree/LSTM_fRL/alone/invpenalty50/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/alone/invpenalty50/model'
+log_dir = '/home/ajafree/LSTM_fRL/alone/invpenalty100/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/alone/invpenalty100/model'
 
 start_trading_lag = 100
 
-label = 'train_LSTMRLAgent_alone_50pen'
+label = 'train_LSTMRLAgent_alone_100pen'
 layer_widths=100
 n_layers=3
 
@@ -63,7 +63,7 @@ kwargs={
                         {"cash": 2500,
                          "strategy": "ICRL",
                          "action_freq": 0.213,
-                         "rewardpenalty": 50,
+                         "rewardpenalty": 100,
                          "Inventory": {"INTC": 0},
                          "log_to_file": True,
                          "cashlimit": 5000000,
