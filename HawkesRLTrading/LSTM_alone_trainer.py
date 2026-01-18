@@ -114,7 +114,7 @@ RLagentID = 1
 stop_time = 300
 RL_obsv = []
 
-for episode in range(20):
+for episode in range(52):
 
     RL_agent_obsv = []
     i = 0
