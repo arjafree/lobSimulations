@@ -10,8 +10,8 @@ import time
 
 
 
-log_dir = '/home/ajafree/LSTM_fRL/alone/invpenalty30/testing/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/alone/invpenalty30/testing/model'
+log_dir = '/home/ajafree/LSTM_fRL/alone/invpenalty50/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/alone/invpenalty50/model'
 
 start_trading_lag = 100
 
