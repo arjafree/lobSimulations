@@ -15,7 +15,7 @@ model_dir = '/home/ajafree/LSTM_fRL/alone/invpenalty30/testing/model'
 
 start_trading_lag = 100
 
-label = 'train_LSTMRLAgent_alone_60pen'
+label = 'train_LSTMRLAgent_alone_50pen'
 layer_widths=100
 n_layers=3
 
