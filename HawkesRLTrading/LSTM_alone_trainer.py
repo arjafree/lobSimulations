@@ -1,7 +1,6 @@
 import sys
 import os
 
-
 sys.path.append(os.path.abspath('/home/ajafree/lobSimulations'))
 from HawkesRLTrading.src.Envs.HawkesRLTradingEnv import *
 
@@ -9,24 +8,18 @@ import torch
 import time
 
 
-
-# log_dir = '/home/ajafree/LSTM_fRL/alone/invpenalty100/logs/'
-# model_dir = '/home/ajafree/LSTM_fRL/alone/invpenalty100/model'
-
-log_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/alone/inv_pen_50/logs/'
-
-model_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/alone/inv_pen_50/model'
+log_dir = '/home/ajafree/LSTM_fRL/alone/scaled/50pen/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/alone/scaled/50pen/model'
 
 start_trading_lag = 100
 
-label = 'train_LSTMRLAgent_alone_50pen_debug'
+label = 'train_LSTMAgent_alone_scaled_50pen'
 layer_widths=100
 n_layers=3
 
-checkpoint_params = ("20260118_202322_train_LSTMRLAgent_alone_50pen", 24)
+checkpoint_params = None
 
-# with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
-with open("/Users/alirazajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
+with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
     kernelparams = pickle.load(f)
 kernelparams = preprocessdata(kernelparams)
 
@@ -119,7 +112,7 @@ RLagentID = 1
 stop_time = 300
 RL_obsv = []
 
-for episode in range(10):
+for episode in range(52):
 
     RL_agent_obsv = []
     i = 0
