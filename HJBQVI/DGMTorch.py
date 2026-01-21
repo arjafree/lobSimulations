@@ -954,6 +954,8 @@ class CriticMLP(BaseNet):
             ])
 
             # Output layer (value function) - no activation for value estimation
+            self.scale = nn.Parameter(torch.tensor(1.0))
+            self.shift = nn.Parameter(torch.tensor(0.0))
             self.output_layer = DenseLayer(output_dim, layer_width, activation=None)
             
         self.q_function = q_function

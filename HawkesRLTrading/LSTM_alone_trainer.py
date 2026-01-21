@@ -10,18 +10,23 @@ import time
 
 
 
-log_dir = '/home/ajafree/LSTM_fRL/alone/invpenalty100/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/alone/invpenalty100/model'
+# log_dir = '/home/ajafree/LSTM_fRL/alone/invpenalty100/logs/'
+# model_dir = '/home/ajafree/LSTM_fRL/alone/invpenalty100/model'
+
+log_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/alone/inv_pen_50/logs/'
+
+model_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/alone/inv_pen_50/model'
 
 start_trading_lag = 100
 
-label = 'train_LSTMRLAgent_alone_100pen'
+label = 'train_LSTMRLAgent_alone_50pen_debug'
 layer_widths=100
 n_layers=3
 
-checkpoint_params = None
+checkpoint_params = ("20260118_202322_train_LSTMRLAgent_alone_50pen", 24)
 
-with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
+# with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
+with open("/Users/alirazajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
     kernelparams = pickle.load(f)
 kernelparams = preprocessdata(kernelparams)
 
@@ -63,7 +68,7 @@ kwargs={
                         {"cash": 2500,
                          "strategy": "ICRL",
                          "action_freq": 0.213,
-                         "rewardpenalty": 100,
+                         "rewardpenalty": 50,
                          "Inventory": {"INTC": 0},
                          "log_to_file": True,
                          "cashlimit": 5000000,
@@ -114,7 +119,7 @@ RLagentID = 1
 stop_time = 300
 RL_obsv = []
 
-for episode in range(52):
+for episode in range(10):
 
     RL_agent_obsv = []
     i = 0
@@ -147,7 +152,6 @@ for episode in range(52):
 
         for agent in agents:
             assert isinstance(agent, GymTradingAgent), "Agent with action should be a GymTradingAgent"
-            #check if agent is an RL agent or not
             action_num+=1
             RLagentID = agent.id
             agentAction:Tuple[int, int] = agent.get_action(data=env.getobservations(agentID=agent.id), epsilon = 0.5 if i_eps < 100 else 0.1)
