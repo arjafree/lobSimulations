@@ -8,16 +8,16 @@ import torch
 import time
 
 
-log_dir = '/home/ajafree/LSTM_fRL/alone/scaled/50pen/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/alone/scaled/50pen/model'
+log_dir = '/home/ajafree/LSTM_fRL/alone/scaled/50pen/testing/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/alone/scaled/50pen/testing/model'
 
 start_trading_lag = 100
 
-label = 'train_LSTMAgent_alone_scaled_50pen'
+label = 'test_LSTMAgent_alone_scaled_50pen'
 layer_widths=100
 n_layers=3
 
-checkpoint_params = None
+checkpoint_params = ("20260121_174958_train_LSTMAgent_alone_scaled_50pen", 12)
 
 with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
     kernelparams = pickle.load(f)
@@ -112,7 +112,7 @@ RLagentID = 1
 stop_time = 300
 RL_obsv = []
 
-for episode in range(52):
+for episode in range(12):
 
     RL_agent_obsv = []
     i = 0
