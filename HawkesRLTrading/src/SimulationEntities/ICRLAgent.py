@@ -1637,6 +1637,11 @@ class PPOAgent(GymTradingAgent):
         :param epsilon: Exploration probability
         :return: Chosen action and its log probabilities
         """
+        # Reset LSTM hidden state at episode start (when last_state is None)
+        if self.typeNN == "LSTM" and self.last_state is None:
+            self.Actor_Critic_d.reset_hidden_state(batch_size=1)
+            self.Actor_Critic_u.reset_hidden_state(batch_size=1)
+
         if self.action_space_config <2:
             if self.breach:
                 mo = 4 if self.countInventory() > 0 else 7
@@ -1929,6 +1934,11 @@ class PPOAgent(GymTradingAgent):
         for _ in range(self.epochs):
             idxs =np.random.choice(np.arange(len(_states)), self.batch_size)
             states, d_actions, u_actions, d_logits_old, values_d_old, d_log_probs_old, u_logits_old, values_u_old, u_log_probs_old, advantages_d, returns_d, advantages_u, returns_u = _states[idxs,:], _d_actions[idxs], _u_actions[idxs], _d_logits_old[idxs,:], _values_d_old[idxs,:], _d_log_probs_old[idxs], _u_logits_old[idxs,:], _values_u_old[idxs,:], _u_log_probs_old[idxs], _advantages_d[idxs], _returns_d[idxs], _advantages_u[idxs], _returns_u[idxs]
+
+            # Reset LSTM hidden state before minibatch forward pass
+            if self.typeNN == "LSTM":
+                self.Actor_Critic_d.reset_hidden_state(batch_size=len(states))
+
             # Decision Network Training
             # Current policy output
             d_logits, d_values_pred = self.Actor_Critic_d(states)
@@ -1976,6 +1986,10 @@ class PPOAgent(GymTradingAgent):
                 advantages_u_filtered = advantages_u[d_mask]
                 returns_u_filtered = returns_u[d_mask]
                 u_log_probs_old_filtered = u_log_probs_old[d_mask]
+
+                # Reset LSTM hidden state before minibatch forward pass
+                if self.typeNN == "LSTM":
+                    self.Actor_Critic_u.reset_hidden_state(batch_size=len(states_u))
 
                 # Current policy output
                 u_logits, u_values_pred = self.Actor_Critic_u(states_u)
