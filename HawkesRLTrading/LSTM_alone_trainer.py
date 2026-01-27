@@ -8,16 +8,16 @@ import torch
 import time
 
 
-log_dir = '/home/ajafree/LSTM_fRL/alone/scaled/50pen/testing/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/alone/scaled/50pen/testing/model'
+log_dir = '/home/ajafree/LSTM_fRL/alone/scaled/training/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/alone/scaled/training/model'
 
 start_trading_lag = 100
 
-label = 'test_LSTMAgent_alone_scaled_50pen'
+label = 'train_LSTMAgent_alone'
 layer_widths=100
 n_layers=3
 
-checkpoint_params = ("20260121_174958_train_LSTMAgent_alone_scaled_50pen", 12)
+checkpoint_params = None
 
 with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
     kernelparams = pickle.load(f)
@@ -61,7 +61,7 @@ kwargs={
                         {"cash": 2500,
                          "strategy": "ICRL",
                          "action_freq": 0.213,
-                         "rewardpenalty": 50,
+                         "rewardpenalty": 20,
                          "Inventory": {"INTC": 0},
                          "log_to_file": True,
                          "cashlimit": 5000000,
@@ -93,7 +93,6 @@ RLagentInstance = PPOAgent( seed=1, log_events=True, log_to_file=True, strategy=
                           wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"], cashlimit=j["cashlimit"],inventorylimit=j['inventorylimit'], batch_size=512,
                           layer_widths=layer_widths, n_layers =n_layers, buffer_capacity = 100000, rewardpenalty = j["rewardpenalty"], epochs = 100, transaction_cost=1e-4, start_trading_lag = j['start_trading_lag'],
                           gae_lambda=0.5, truncation_enabled=False, action_space_config = 1, alt_state=True, enhance_state=True, include_time=True, optim_type='ADAM',entropy_coef=0, exploration_bonus = 0, hidden_activation='sigmoid', typeNN = "LSTM", lr = 3e-4)
-inventories_without_twap = []
 
 j['agent_instance'] = RLagentInstance
 kwargs['GymTradingAgent'] = agents
@@ -112,7 +111,7 @@ RLagentID = 1
 stop_time = 300
 RL_obsv = []
 
-for episode in range(12):
+for episode in range(50):
 
     RL_agent_obsv = []
     i = 0
