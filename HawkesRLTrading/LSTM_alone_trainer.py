@@ -8,12 +8,12 @@ import torch
 import time
 
 
-log_dir = '/home/ajafree/LSTM_fRL/alone/scaled/training/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/alone/scaled/training/model'
+log_dir = '/home/ajafree/LSTM_fRL/alone/scaled/testing/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/alone/scaled/testing/model'
 
 start_trading_lag = 100
 
-label = 'train_LSTMAgent_alone'
+label = 'test_LSTMAgent_alone'
 layer_widths=100
 n_layers=3
 
