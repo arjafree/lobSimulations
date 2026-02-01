@@ -19,10 +19,10 @@ twap_off_time = 400
 twap_starting_inventory = 500
 
 # Network architecture parameters - MUST match training
-layer_widths = 50
-n_layers = 3
+layer_widths=100
+n_layers=3
 
-label = f'test_LSTM_fRL_52withExpo'
+label = f'test_LSTM_TWAP'
 
 checkpoint_params = ("20251115_164214_train_LSTMRLAgent_vs_TWAP_withExpo", 52)
 
@@ -70,7 +70,7 @@ kwargs={
                         {"cash": 2500,
                          "strategy": "ICRL",
                          "action_freq": 0.213,
-                         "rewardpenalty": 1,
+                         "rewardpenalty": 20,
                          "Inventory": {"INTC": 0},
                          "log_to_file": True,
                          "cashlimit": 5000000,
@@ -107,7 +107,7 @@ kwargs={
                                      "beta": 0.941,
                                      "avgSpread": 0.0101,
                                      "Pi_Q0": Pi_Q0,
-                                     'expApprox' : True}}
+                                     'expApprox' : False}}
 }
 
 agents = kwargs['GymTradingAgent']
@@ -116,7 +116,7 @@ tc = 0.0001
 RLagentInstance = AdversarialPPOAgent( seed=1, log_events=True, log_to_file=True, strategy=j["strategy"], Inventory=j["Inventory"], cash=j["cash"], action_freq=j["action_freq"],
                           wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"], cashlimit=j["cashlimit"],inventorylimit=j['inventorylimit'], batch_size=512,
                           layer_widths=layer_widths, n_layers =n_layers, buffer_capacity = 100000, rewardpenalty = j["rewardpenalty"], epochs = 100, transaction_cost=1e-4, start_trading_lag = j['start_trading_lag'],
-                          gae_lambda=0.5, truncation_enabled=False, action_space_config = 1, alt_state=True, enhance_state=True, include_time=True, optim_type='ADAM',entropy_coef=0, exploration_bonus = 0, TWAPPresent=0 , hidden_activation='sigmoid', typeNN = "LSTM")
+                          gae_lambda=0.5, truncation_enabled=False, action_space_config = 1, alt_state=True, enhance_state=True, include_time=True, optim_type='ADAM',entropy_coef=0, exploration_bonus = 0, hidden_activation='sigmoid', typeNN = "LSTM", lr = 3e-4, TWAPPresent=0)
 
 
 # RLagentInstance = PPOAgent( seed=1, log_events=True, log_to_file=True, strategy=j["strategy"], Inventory=j["Inventory"], cash=j["cash"], action_freq=j["action_freq"],
