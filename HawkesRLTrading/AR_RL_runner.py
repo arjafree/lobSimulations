@@ -11,8 +11,8 @@ import random
 # log_dir = '/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/outputs/'
 # model_dir = '/home/ajafree/testing_adversarial/models'
 # model_dir = '/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/models/'
-log_dir = '/home/ajafree/LSTM_fRL/with_expo/testing/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/with_expo/testing/model'
+log_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/model'
 
 start_trading_lag = 100
 twap_off_time = 400
@@ -24,7 +24,7 @@ n_layers=3
 
 label = f'test_LSTM_TWAP'
 
-checkpoint_params = ("20251115_164214_train_LSTMRLAgent_vs_TWAP_withExpo", 52)
+checkpoint_params = ("20260202_114437_train_LSTM_TWAP", 20)
 
 # with open("/Users/alirazajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
 with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
@@ -70,7 +70,7 @@ kwargs={
                         {"cash": 2500,
                          "strategy": "ICRL",
                          "action_freq": 0.213,
-                         "rewardpenalty": 20,
+                         "rewardpenalty": 50,
                          "Inventory": {"INTC": 0},
                          "log_to_file": True,
                          "cashlimit": 5000000,
@@ -315,7 +315,7 @@ def plot_twap_execution_prices(episode_num, all_prices, all_times, all_start_pri
     plt.close()
     print(f"Saved TWAP execution price plot to {save_path}")
 
-for episode in range(50):
+for episode in range(28):
     RL_agent_obsv = []
     TWAP_agent_obsv = []
     total_executed = 0
