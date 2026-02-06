@@ -128,8 +128,9 @@ j['agent_instance'] = RLagentInstance
 kwargs['GymTradingAgent'] = agents
 i_eps=0
 # cash, inventory, t, actions = [], [], [], []
-t, t_with_twap_buy, t_with_twap_sell, t_without_twap = [], [], [], []
-avgEpisodicRewards, stdEpisodicRewards, finalcash, finalcash2, profit_with_twap_sell, profit_with_twap_buy, profit_without_twap = [], [], [], [], [], [], []
+t, t_before_twap, t_during_twap_buy, t_during_twap_sell, t_after_twap_buy, t_after_twap_sell = [], [], [], [], [], []
+avgEpisodicRewards, stdEpisodicRewards, finalcash, finalcash2 = [], [], [], []
+profit_before_twap, profit_during_twap_sell, profit_during_twap_buy, profit_after_twap_sell, profit_after_twap_buy = [], [], [], [], []
 train_logger = TrainingLogger(layer_widths=layer_widths, n_layers=n_layers, log_dir=log_dir, label = label)
 model_manager = ModelManager(model_dir = model_dir, label = label)
 counter_profit = 0
@@ -145,9 +146,11 @@ RLagentID = 1
 
 
 
-inventory_without_twap = []
-inventory_with_twap_sell = []
-inventory_with_twap_buy = []
+inventory_before_twap = []
+inventory_during_twap_sell = []
+inventory_during_twap_buy = []
+inventory_after_twap_sell = []
+inventory_after_twap_buy = []
 
 
 percentage_of_volume = []
@@ -425,13 +428,21 @@ for episode in range(28):
                 print(f"RL Inventory: {observationsDict.get(agent.id, {}).get('Inventory', '')}")
                 observations_prev = observationsDict[agent.id].copy() if i != 0 else observations.copy()
                 Simstate, observations, termination, truncation=env.step(action=action) #do not try and use this data before this line in the loop
-                if(Simstate["TimeCode"] >= twap_time):
+                if Simstate["TimeCode"] < twap_time:
+                    # Before TWAP phase (0-249)
+                    inventory_before_twap.append(observations["Inventory"])
+                elif Simstate["TimeCode"] <= twap_off_time:
+                    # During TWAP phase (250-400)
                     if twap_side == "sell":
-                        inventory_with_twap_sell.append(observations["Inventory"])
+                        inventory_during_twap_sell.append(observations["Inventory"])
                     else:
-                        inventory_with_twap_buy.append(observations["Inventory"])
+                        inventory_during_twap_buy.append(observations["Inventory"])
                 else:
-                    inventory_without_twap.append(observations["Inventory"])
+                    # After TWAP phase (401+)
+                    if twap_side == "sell":
+                        inventory_after_twap_sell.append(observations["Inventory"])
+                    else:
+                        inventory_after_twap_buy.append(observations["Inventory"])
                 observationsDict.update({agent.id:observations})
                 logger.debug(f"\n Agent: {agent.id}\n Simstate: {Simstate}\nObservations: {observations}\nTermination: {termination}\nTruncation: {truncation}")
                 cashs.update({agent.id:cashs.get(agent.id, [])+[observations['Cash']]})
@@ -451,16 +462,26 @@ for episode in range(28):
                 current_pnl = cashs[agent.id][-1] + inventories[agent.id][-1] * agent.mid * (1 - tc*np.sign(inventories[agent.id][-1]))
                 finalcash2.append(current_pnl)
 
-                if(Simstate['TimeCode'] >= twap_time):
+                if Simstate['TimeCode'] < twap_time:
+                    # Before TWAP phase (0-249)
+                    profit_before_twap.append(current_pnl)
+                    t_before_twap += [Simstate['TimeCode']]
+                elif Simstate['TimeCode'] <= twap_off_time:
+                    # During TWAP phase (250-400)
                     if twap_side == "buy":
-                        profit_with_twap_buy.append(current_pnl)
-                        t_with_twap_buy += [Simstate['TimeCode']]
+                        profit_during_twap_buy.append(current_pnl)
+                        t_during_twap_buy += [Simstate['TimeCode']]
                     else:
-                        profit_with_twap_sell.append(current_pnl)
-                        t_with_twap_sell += [Simstate['TimeCode']]
+                        profit_during_twap_sell.append(current_pnl)
+                        t_during_twap_sell += [Simstate['TimeCode']]
                 else:
-                    profit_without_twap.append(current_pnl)
-                    t_without_twap += [Simstate['TimeCode']]
+                    # After TWAP phase (401+)
+                    if twap_side == "buy":
+                        profit_after_twap_buy.append(current_pnl)
+                        t_after_twap_buy += [Simstate['TimeCode']]
+                    else:
+                        profit_after_twap_sell.append(current_pnl)
+                        t_after_twap_sell += [Simstate['TimeCode']]
 
                 
                 #Sharpe ratio
@@ -508,17 +529,22 @@ for episode in range(28):
                             else:
                                 plt.plot(episode_t, episode_profit, alpha=0.7)
 
-                plt.legend()
-                plt.ticklabel_format(useOffset=False, style='plain')
-                plt.xlabel('Time in seconds')
-                plt.ylabel('Profit in Dollars')
-                plt.title('Final Profit - All Episodes Overlaid')
-                plt.savefig(log_dir + label + '_profit.png')
+                    plt.legend()
+                    plt.ticklabel_format(useOffset=False, style='plain')
+                    plt.xlabel('Time in seconds')
+                    plt.ylabel('Profit in Dollars')
+                    plt.title('Final Profit - All Episodes Overlaid')
+                    plt.savefig(log_dir + label + '_profit.png')
+                    plt.close()
+
+                # Save data every step
                 np.save(log_dir + label + '_profit', np.array([t, finalcash2]))
-                # Save buy/sell profits with their respective time arrays
-                np.save(log_dir+label+"_profit_w_twap_buy", np.array([t_with_twap_buy, profit_with_twap_buy]))
-                np.save(log_dir+label+"_profit_w_twap_sell", np.array([t_with_twap_sell, profit_with_twap_sell]))
-                np.save(log_dir+label+"_profit_wout_twap", np.array([t_without_twap, profit_without_twap]))
+                # Save profits by phase with their respective time arrays
+                np.save(log_dir+label+"_profit_before_twap", np.array([t_before_twap, profit_before_twap]))
+                np.save(log_dir+label+"_profit_during_twap_buy", np.array([t_during_twap_buy, profit_during_twap_buy]))
+                np.save(log_dir+label+"_profit_during_twap_sell", np.array([t_during_twap_sell, profit_during_twap_sell]))
+                np.save(log_dir+label+"_profit_after_twap_buy", np.array([t_after_twap_buy, profit_after_twap_buy]))
+                np.save(log_dir+label+"_profit_after_twap_sell", np.array([t_after_twap_sell, profit_after_twap_sell]))
                 if TWAPagentid in observationsDict:
                     TWAP_agent_obsv.append(observationsDict[TWAPagentid])
                 RL_agent_obsv.append(observationsDict[RLagentID])
@@ -822,12 +848,20 @@ start_midprices_array = np.array(start_midprices)
 #     if executions:
 #         executions_data[f"episode_{episode}"] = np.array(executions, dtype=[('price', 'f8'), ('quantity', 'f8'), ('side', 'U4')])
 
-np.save(log_dir + label+ "_inventory_without_twap.npy", np.array(inventory_without_twap))
+# Save inventory arrays by phase
+np.save(log_dir + label+ "_inventory_before_twap.npy", np.array(inventory_before_twap))
+np.save(log_dir + label+ "_inventory_during_twap_sell.npy", np.array(inventory_during_twap_sell))
+np.save(log_dir + label+ "_inventory_during_twap_buy.npy", np.array(inventory_during_twap_buy))
+np.save(log_dir + label+ "_inventory_after_twap_sell.npy", np.array(inventory_after_twap_sell))
+np.save(log_dir + label+ "_inventory_after_twap_buy.npy", np.array(inventory_after_twap_buy))
 
-if(twap_side == "sell"):
-    np.save(log_dir + label+ "_inventory_with_twap_sell.npy", np.array(inventory_with_twap_sell))
-else:
-    np.save(log_dir + label+ "_inventory_with_twap_buy.npy", np.array(inventory_with_twap_buy))
+# Save final profit arrays by phase
+np.save(log_dir + label + '_profit', np.array([t, finalcash2]))
+np.save(log_dir+label+"_profit_before_twap", np.array([t_before_twap, profit_before_twap]))
+np.save(log_dir+label+"_profit_during_twap_buy", np.array([t_during_twap_buy, profit_during_twap_buy]))
+np.save(log_dir+label+"_profit_during_twap_sell", np.array([t_during_twap_sell, profit_during_twap_sell]))
+np.save(log_dir+label+"_profit_after_twap_buy", np.array([t_after_twap_buy, profit_after_twap_buy]))
+np.save(log_dir+label+"_profit_after_twap_sell", np.array([t_after_twap_sell, profit_after_twap_sell]))
 
 np.save(log_dir+label+"total_executed.npy", np.array(total_executeds))
 np.save(log_dir+label+"final_cash.npy", np.array(final_cashs))
