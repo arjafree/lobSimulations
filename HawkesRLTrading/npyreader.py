@@ -143,21 +143,21 @@ def getSharpeComplete(data_array, times):
     }
 
 
-def getSlippagesFromFinalCashInventory(finalcash, total_executed, starting_midprices):
+def getSlippagesFromFinalCashInventory(finalcash, total_executed, starting_midprices, starting_cash=1000000):
     slippages = []
     for (cash, executed, starting_midprice) in zip(finalcash, total_executed, starting_midprices):
-        if(finalcash < 1000000):
+        if(cash > starting_cash): 
             side = "sell"
         else:
             side = "buy"
         print(cash)
         print(executed)
+        print(side)
         # executed = 6
         print(starting_midprice)
         benchmark_cost = executed*starting_midprice
-        executed_cost = 1000000-cash if side == "buy" else cash-1000000
-        # print(executed_cost)
-        # print(benchmark_cost)
+        executed_cost = starting_cash-cash if side == "buy" else cash-starting_cash
+        assert(executed_cost>0, "error")
         diff = executed_cost-benchmark_cost
         slippage = diff/benchmark_cost
         slippage *= 10000
@@ -1524,9 +1524,44 @@ def price_quantity_graph_predecay_mortised_starting_at_0(data_list, times):
 # print(np.mean(slippages))
 # print(len(slippages))
 
-rl_alone_data = np.load('/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/alone/scaled/testing_logs/test_LSTMAgent_alone_profit.npy')
-getSharpe(rl_alone_data)
 
+
+# rl_alone_data = np.load('/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/alone/scaled/testing_logs/test_LSTMAgent_alone_profit.npy')
+# getSharpe(rl_alone_data)
+
+slip = getSlippagesFromFinalCashInventory(np.load("/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/test_LSTM_TWAPfinal_cash.npy"), np.load("/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/test_LSTM_TWAPtotal_executed.npy"), np.load("/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/test_LSTM_TWAP_start_midprices.npy"))
+print(slip)
+
+import matplotlib.pyplot as plt
+from matplotlib.scale import SymmetricalLogTransform
+
+final_cash = np.load("/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/test_LSTM_TWAPfinal_cash.npy")
+starting_cash = 1000000
+buy_mask = final_cash <= starting_cash
+sell_mask = final_cash > starting_cash
+slip_buy = [s for s, m in zip(slip, buy_mask) if m]
+slip_sell = [s for s, m in zip(slip, sell_mask) if m]
+
+fig, ax = plt.subplots()
+# symlog-spaced bins: linear near zero, log-spaced in tails
+linthresh = max(np.median(np.abs(slip)) * 0.1, 1e-6)
+smin, smax = np.min(slip), np.max(slip)
+transform = SymmetricalLogTransform(base=10, linthresh=linthresh, linscale=1)
+inv_transform = transform.inverted()
+bins = inv_transform.transform(np.linspace(transform.transform(smin), transform.transform(smax), 31))
+ax.hist(slip_buy, bins=bins, edgecolor='black', alpha=0.6, label=f'Buy ({len(slip_buy)} eps)', color='tab:red')
+ax.hist(slip_sell, bins=bins, edgecolor='black', alpha=0.6, label=f'Sell ({len(slip_sell)} eps)', color='tab:green')
+mean_val = np.mean(slip)
+median_val = np.median(slip)
+ax.axvline(mean_val, color='red', linestyle='--', linewidth=1.5, label=f'Mean: {mean_val:.4f}')
+ax.axvline(median_val, color='blue', linestyle='-', linewidth=1.5, label=f'Median: {median_val:.4f}')
+ax.set_xscale('symlog', linthresh=linthresh)
+ax.set_xlabel('Slippage')
+ax.set_ylabel('Frequency')
+ax.set_title('Slippage Distribution')
+ax.legend()
+plt.tight_layout()
+plt.show()
 
 # rl_alone = np.load("/Users/alirazajafree/researchprojects/RL_alone/RL_alonetest_episodes_RL_alone_profit.npy")
 # print("uRL Alone")

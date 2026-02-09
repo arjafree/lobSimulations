@@ -24,7 +24,7 @@ n_layers=3
 
 label = f'test_LSTM_TWAP'
 
-checkpoint_params = ("20260202_114437_train_LSTM_TWAP", 20)
+checkpoint_params = ("20260201_105711_train_LSTM_TWAP", 16)
 
 # with open("/Users/alirazajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
 with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
@@ -212,34 +212,48 @@ def plot_inventory_timeseries(all_inventories, all_times, all_sides, twap_start,
     # After TWAP phase (twap_stop to stop_time)
     plt.axvspan(twap_stop, stop_time, alpha=0.15, color='lightgreen', label='After TWAP')
     
-    # Plot individual episode trajectories with low alpha, using each episode's own side
+    # Plot individual episode trajectories with low alpha, coloured by regime
+    buy_label_added = False
+    sell_label_added = False
     for i, (times, inventories, side) in enumerate(zip(all_times, all_inventories, all_sides)):
-        # Each episode uses its own sign multiplier
         sign_multiplier = -1 if side == 'sell' else 1
         adjusted_inventory = np.array(inventories) * sign_multiplier
-        plt.plot(times, adjusted_inventory, alpha=0.1, color='gray', linewidth=0.8)
-    
-    # Compute and plot average trajectory
-    # Find common time grid (use the longest episode's time array)
+        color = 'tab:red' if side == 'buy' else 'tab:green'
+        label = None
+        if side == 'buy' and not buy_label_added:
+            label = 'Buy episodes'
+            buy_label_added = True
+        elif side == 'sell' and not sell_label_added:
+            label = 'Sell episodes'
+            sell_label_added = True
+        plt.plot(times, adjusted_inventory, alpha=0.15, color=color, linewidth=0.8, label=label)
+
+    # Compute and plot average trajectory per regime and overall
     max_len = max(len(t) for t in all_times)
     max_time = max(t[-1] for t in all_times)
-    
-    # Create interpolated inventories on a common time grid
     common_times = np.linspace(0, max_time, max_len)
-    interpolated_inventories = []
-    
+
+    buy_interp = []
+    sell_interp = []
     for times, inventories, side in zip(all_times, all_inventories, all_sides):
-        # Interpolate each episode onto common time grid, using its own sign multiplier
         sign_multiplier = -1 if side == 'sell' else 1
         adjusted_inventory = np.array(inventories) * sign_multiplier
         interp_inv = np.interp(common_times, times, adjusted_inventory)
-        interpolated_inventories.append(interp_inv)
-    
-    # Compute average across episodes
-    avg_inventory = np.mean(interpolated_inventories, axis=0)
-    
-    # Plot average with full opacity and thicker line
-    plt.plot(common_times, avg_inventory, alpha=1.0, color='darkblue', linewidth=2.5, label=f'Average (n={len(all_inventories)})')
+        if side == 'buy':
+            buy_interp.append(interp_inv)
+        else:
+            sell_interp.append(interp_inv)
+
+    if buy_interp:
+        avg_buy = np.mean(buy_interp, axis=0)
+        plt.plot(common_times, avg_buy, alpha=1.0, color='darkred', linewidth=2.5, label=f'Avg Buy (n={len(buy_interp)})')
+    if sell_interp:
+        avg_sell = np.mean(sell_interp, axis=0)
+        plt.plot(common_times, avg_sell, alpha=1.0, color='darkgreen', linewidth=2.5, label=f'Avg Sell (n={len(sell_interp)})')
+
+    all_interp = buy_interp + sell_interp
+    avg_inventory = np.mean(all_interp, axis=0)
+    plt.plot(common_times, avg_inventory, alpha=1.0, color='darkblue', linewidth=2.5, linestyle='--', label=f'Avg Overall (n={len(all_interp)})')
     
     plt.xlabel('Time (seconds)', fontsize=12)
     plt.ylabel('Inventory (sign-adjusted)', fontsize=12)
