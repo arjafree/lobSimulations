@@ -24,7 +24,7 @@ n_layers=3
 
 label = f'test_LSTM_TWAP'
 
-checkpoint_params = ("20260201_105711_train_LSTM_TWAP", 16)
+checkpoint_params = ("20260202_114437_train_LSTM_TWAP", 16)
 
 # with open("/Users/alirazajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
 with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
