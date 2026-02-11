@@ -11,8 +11,8 @@ import random
 # log_dir = '/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/outputs/'
 # model_dir = '/home/ajafree/testing_adversarial/models'
 # model_dir = '/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/models/'
-log_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/model'
+log_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/12thep/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/12thep/model'
 
 start_trading_lag = 100
 twap_off_time = 400
