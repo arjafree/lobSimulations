@@ -11,8 +11,8 @@ import random
 # log_dir = '/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/outputs/'
 # model_dir = '/home/ajafree/testing_adversarial/models'
 # model_dir = '/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/models/'
-log_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/12thep/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/12thep/model'
+log_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/model'
 
 start_trading_lag = 100
 twap_off_time = 400
@@ -24,7 +24,7 @@ n_layers=3
 
 label = f'test_LSTM_TWAP'
 
-checkpoint_params = ("20260202_114437_train_LSTM_TWAP", 12)
+checkpoint_params = ("20260202_114437_train_LSTM_TWAP", 20)
 
 # with open("/Users/alirazajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
 with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
@@ -332,7 +332,7 @@ def plot_twap_execution_prices(episode_num, all_prices, all_times, all_start_pri
     plt.close()
     print(f"Saved TWAP execution price plot to {save_path}")
 
-for episode in range(28):
+for episode in range(36):
     RL_agent_obsv = []
     TWAP_agent_obsv = []
     total_executed = 0
@@ -855,6 +855,73 @@ for episode in range(28):
     torch.cuda.empty_cache()
     # torch.mps.empty_cache()
 
+# ---- Policy Plot (episode aware, 3 subplots, time resets per episode) ----
+plt.figure(figsize=(12, 10))
+
+cash_arr = np.array(cashs[RLagentID])
+inv_arr = np.array(inventories[RLagentID])
+act_arr = np.array(actionss[RLagentID])
+
+all_cash, all_inv = [], []
+
+# Prepare subplots
+ax1 = plt.subplot(311)  # Cash
+ax2 = plt.subplot(312)  # Inventory
+ax3 = plt.subplot(313)  # Actions
+
+for i in range(len(episode_boundaries)):
+    start_idx = episode_boundaries[i]
+    end_idx = episode_boundaries[i + 1] if i + 1 < len(episode_boundaries) else len(cash_arr)
+
+    if end_idx > start_idx:
+        ep_cash = cash_arr[start_idx:end_idx]
+        ep_inv = inv_arr[start_idx:end_idx]
+        ep_act = act_arr[start_idx:end_idx]
+        ep_t = np.arange(len(ep_cash))  # <-- reset time per episode
+
+        # Store for mean calculation (align by episode step count)
+        all_cash.append(ep_cash)
+        all_inv.append(ep_inv)
+
+        # Faint episode traces
+        ax1.plot(ep_t, ep_cash, color="blue", alpha=0.1)
+        ax2.plot(ep_t, ep_inv, color="red", alpha=0.1)
+
+        # Actions
+        ax3.scatter(ep_t, ep_act, s=8, c="black", alpha=0.6)
+
+# --- Mean calculation across episodes ---
+from itertools import zip_longest
+def pad(list_of_arrays):
+    return np.array(list(zip_longest(*list_of_arrays, fillvalue=np.nan))).T
+
+all_cash = pad(all_cash)
+all_inv = pad(all_inv)
+
+mean_cash = np.nanmean(all_cash, axis=0)
+mean_inv = np.nanmean(all_inv, axis=0)
+steps = np.arange(len(mean_cash))  # common x-axis for mean lines
+
+# --- Mean lines ---
+ax1.plot(steps, mean_cash, color="blue", linewidth=2, label="Cash (mean)")
+ax2.plot(steps, mean_inv, color="red", linewidth=2, label="Inventory (mean)")
+
+# --- Styling ---
+ax1.set_title("Cash")
+ax1.legend()
+ax2.set_title("Inventory")
+ax2.legend()
+ax3.set_title("Actions")
+ax3.set_yticks(np.arange(0, len(agent.actions)))
+ax3.set_yticklabels(agent.actions)
+
+for ax in (ax1, ax2, ax3):
+    ax.set_xlabel("Time steps (per episode)")
+    ax.grid(True, linestyle="--", alpha=0.6)
+
+plt.tight_layout()
+plt.savefig(log_dir + label + "_policy.png")
+
 start_midprices_array = np.array(start_midprices)
 
 # executions_data = {}
@@ -884,4 +951,3 @@ np.save(log_dir+label+"RL_observations.npy", np.array(total_RL_obsv, dtype=objec
 
 np.save(log_dir + label + '_start_midprices.npy', start_midprices_array)
 # np.savez(log_dir + label + '_twap_executions.npz', **executions_data)
-

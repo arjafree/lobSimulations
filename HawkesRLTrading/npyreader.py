@@ -1529,39 +1529,42 @@ def price_quantity_graph_predecay_mortised_starting_at_0(data_list, times):
 # rl_alone_data = np.load('/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/alone/scaled/testing_logs/test_LSTMAgent_alone_profit.npy')
 # getSharpe(rl_alone_data)
 
-slip = getSlippagesFromFinalCashInventory(np.load("/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/test_LSTM_TWAPfinal_cash.npy"), np.load("/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/test_LSTM_TWAPtotal_executed.npy"), np.load("/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/test_LSTM_TWAP_start_midprices.npy"))
-print(slip)
 
-import matplotlib.pyplot as plt
-from matplotlib.scale import SymmetricalLogTransform
 
-final_cash = np.load("/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/test_LSTM_TWAPfinal_cash.npy")
-starting_cash = 1000000
-buy_mask = final_cash <= starting_cash
-sell_mask = final_cash > starting_cash
-slip_buy = [s for s, m in zip(slip, buy_mask) if m]
-slip_sell = [s for s, m in zip(slip, sell_mask) if m]
+#SLIPPAGE DISTRIBUTION CALCULATION
+# slip = getSlippagesFromFinalCashInventory(np.load("/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/test_LSTM_TWAPfinal_cash.npy"), np.load("/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/test_LSTM_TWAPtotal_executed.npy"), np.load("/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/test_LSTM_TWAP_start_midprices.npy"))
+# print(slip)
 
-fig, ax = plt.subplots()
-# symlog-spaced bins: linear near zero, log-spaced in tails
-linthresh = max(np.median(np.abs(slip)) * 0.1, 1e-6)
-smin, smax = np.min(slip), np.max(slip)
-transform = SymmetricalLogTransform(base=10, linthresh=linthresh, linscale=1)
-inv_transform = transform.inverted()
-bins = inv_transform.transform(np.linspace(transform.transform(smin), transform.transform(smax), 31))
-ax.hist(slip_buy, bins=bins, edgecolor='black', alpha=0.6, label=f'Buy ({len(slip_buy)} eps)', color='tab:red')
-ax.hist(slip_sell, bins=bins, edgecolor='black', alpha=0.6, label=f'Sell ({len(slip_sell)} eps)', color='tab:green')
-mean_val = np.mean(slip)
-median_val = np.median(slip)
-ax.axvline(mean_val, color='red', linestyle='--', linewidth=1.5, label=f'Mean: {mean_val:.4f}')
-ax.axvline(median_val, color='blue', linestyle='-', linewidth=1.5, label=f'Median: {median_val:.4f}')
-ax.set_xscale('symlog', linthresh=linthresh)
-ax.set_xlabel('Slippage')
-ax.set_ylabel('Frequency')
-ax.set_title('Slippage Distribution')
-ax.legend()
-plt.tight_layout()
-plt.show()
+# import matplotlib.pyplot as plt
+# from matplotlib.scale import SymmetricalLogTransform
+
+# final_cash = np.load("/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/test_LSTM_TWAPfinal_cash.npy")
+# starting_cash = 1000000
+# buy_mask = final_cash <= starting_cash
+# sell_mask = final_cash > starting_cash
+# slip_buy = [s for s, m in zip(slip, buy_mask) if m]
+# slip_sell = [s for s, m in zip(slip, sell_mask) if m]
+
+# fig, ax = plt.subplots()
+# # symlog-spaced bins: linear near zero, log-spaced in tails
+# linthresh = max(np.median(np.abs(slip)) * 0.1, 1e-6)
+# smin, smax = np.min(slip), np.max(slip)
+# transform = SymmetricalLogTransform(base=10, linthresh=linthresh, linscale=1)
+# inv_transform = transform.inverted()
+# bins = inv_transform.transform(np.linspace(transform.transform(smin), transform.transform(smax), 31))
+# ax.hist(slip_buy, bins=bins, edgecolor='black', alpha=0.6, label=f'Buy ({len(slip_buy)} eps)', color='tab:red')
+# ax.hist(slip_sell, bins=bins, edgecolor='black', alpha=0.6, label=f'Sell ({len(slip_sell)} eps)', color='tab:green')
+# mean_val = np.mean(slip)
+# median_val = np.median(slip)
+# ax.axvline(mean_val, color='red', linestyle='--', linewidth=1.5, label=f'Mean: {mean_val:.4f}')
+# ax.axvline(median_val, color='blue', linestyle='-', linewidth=1.5, label=f'Median: {median_val:.4f}')
+# ax.set_xscale('symlog', linthresh=linthresh)
+# ax.set_xlabel('Slippage')
+# ax.set_ylabel('Frequency')
+# ax.set_title('Slippage Distribution')
+# ax.legend()
+# plt.tight_layout()
+# plt.show()
 
 # rl_alone = np.load("/Users/alirazajafree/researchprojects/RL_alone/RL_alonetest_episodes_RL_alone_profit.npy")
 # print("uRL Alone")
@@ -1604,3 +1607,38 @@ plt.show()
 # getSharpe(np.load("/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/alone/testing/test_LSTMRLAgent_alone_profit.npy"))
 
 
+# Find and calculate Sharpe ratio for all files with 'profit' in the directory
+import os
+
+target_directory = "/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/"
+file_pattern = os.path.join(target_directory, "*profit*")
+
+# Get all files matching the pattern
+profit_files = glob.glob(file_pattern)
+
+print(f"\n{'='*80}")
+print(f"Found {len(profit_files)} files with 'profit' in {target_directory}")
+print(f"{'='*80}\n")
+
+# Process each file
+for i, file_path in enumerate(sorted(profit_files), 1):
+    filename = os.path.basename(file_path)
+    print(f"\n[{i}/{len(profit_files)}] Processing: {filename}")
+    print("-" * 80)
+    
+    try:
+        # Load the numpy file
+        data = np.load(file_path)
+        
+        # Calculate Sharpe ratio using the existing function
+        results = getSharpe(data)
+        
+        
+    except Exception as e:
+        print(f"ERROR loading or processing file: {e}")
+    
+    print("-" * 80)
+
+print(f"\n{'='*80}")
+print("Completed processing all files")
+print(f"{'='*80}\n")
