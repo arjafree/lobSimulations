@@ -386,10 +386,10 @@ digraph TradingStrategy {
 }
 """
 # Render to file
-src = Source(dot_code)
-src.render('trading_logic_graph', format='png', view=True)
+# src = Source(dot_code)
+# src.render('trading_logic_graph', format='png', view=True)
 
 # This will:
 # 1. Create trading_logic_graph.png
 # 2. Automatically open it in your default image viewer
-print("Graph rendered successfully!")
+# print("Graph rendered successfully!")
