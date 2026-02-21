@@ -332,7 +332,7 @@ def plot_twap_execution_prices(episode_num, all_prices, all_times, all_start_pri
     plt.close()
     print(f"Saved TWAP execution price plot to {save_path}")
 
-for episode in range(36):
+for episode in range(4):
     RL_agent_obsv = []
     TWAP_agent_obsv = []
     total_executed = 0
@@ -805,6 +805,7 @@ for episode in range(36):
             agent.cash = j['cash']
             agent.Inventory = {"INTC": 0}
             agent.positions = {'INTC':{}}
+            agent.last_state = None  # Triggers LSTM reset on next get_action()
             j['agent_instance'] = agent
             kwargs['GymTradingAgent'][0] = j
 
@@ -860,14 +861,13 @@ plt.figure(figsize=(12, 10))
 
 cash_arr = np.array(cashs[RLagentID])
 inv_arr = np.array(inventories[RLagentID])
-act_arr = np.array(actionss[RLagentID])
 
-all_cash, all_inv = [], []
+all_cash, all_inv, all_profit = [], [], []
 
 # Prepare subplots
 ax1 = plt.subplot(311)  # Cash
 ax2 = plt.subplot(312)  # Inventory
-ax3 = plt.subplot(313)  # Actions
+ax3 = plt.subplot(313)  # Profit
 
 for i in range(len(episode_boundaries)):
     start_idx = episode_boundaries[i]
@@ -876,19 +876,18 @@ for i in range(len(episode_boundaries)):
     if end_idx > start_idx:
         ep_cash = cash_arr[start_idx:end_idx]
         ep_inv = inv_arr[start_idx:end_idx]
-        ep_act = act_arr[start_idx:end_idx]
+        ep_profit = ep_cash - j["cash"]
         ep_t = np.arange(len(ep_cash))  # <-- reset time per episode
 
         # Store for mean calculation (align by episode step count)
         all_cash.append(ep_cash)
         all_inv.append(ep_inv)
+        all_profit.append(ep_profit)
 
         # Faint episode traces
         ax1.plot(ep_t, ep_cash, color="blue", alpha=0.1)
         ax2.plot(ep_t, ep_inv, color="red", alpha=0.1)
-
-        # Actions
-        ax3.scatter(ep_t, ep_act, s=8, c="black", alpha=0.6)
+        ax3.plot(ep_t, ep_profit, color="green", alpha=0.1)
 
 # --- Mean calculation across episodes ---
 from itertools import zip_longest
@@ -897,23 +896,25 @@ def pad(list_of_arrays):
 
 all_cash = pad(all_cash)
 all_inv = pad(all_inv)
+all_profit = pad(all_profit)
 
 mean_cash = np.nanmean(all_cash, axis=0)
 mean_inv = np.nanmean(all_inv, axis=0)
+mean_profit = np.nanmean(all_profit, axis=0)
 steps = np.arange(len(mean_cash))  # common x-axis for mean lines
 
 # --- Mean lines ---
 ax1.plot(steps, mean_cash, color="blue", linewidth=2, label="Cash (mean)")
 ax2.plot(steps, mean_inv, color="red", linewidth=2, label="Inventory (mean)")
+ax3.plot(steps, mean_profit, color="green", linewidth=2, label="Profit (mean)")
 
 # --- Styling ---
 ax1.set_title("Cash")
 ax1.legend()
 ax2.set_title("Inventory")
 ax2.legend()
-ax3.set_title("Actions")
-ax3.set_yticks(np.arange(0, len(agent.actions)))
-ax3.set_yticklabels(agent.actions)
+ax3.set_title("Profit")
+ax3.legend()
 
 for ax in (ax1, ax2, ax3):
     ax.set_xlabel("Time steps (per episode)")
