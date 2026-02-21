@@ -840,7 +840,7 @@ class ActorResNet(BaseNet):
 class ActorMLP(BaseNet):
     def __init__(self, input_dim, layer_width, n_layers,
                  output_dim, output_activation="softmax",
-                 hidden_activation="tanh"):
+                 hidden_activation="tanh", typeNN="dense"):
         '''
         Actor network for policy learning
 
@@ -854,17 +854,60 @@ class ActorMLP(BaseNet):
         '''
         super(ActorMLP, self).__init__()
 
-        # Initial layer
-        self.initial_layer = DenseLayer(layer_width, input_dim, activation=hidden_activation)
+        self.typeNN = typeNN
 
-        # Build hidden layers
-        layers = []
-        for _ in range(n_layers):
-            layers.append(DenseLayer(layer_width, layer_width, activation=hidden_activation))
-        self.hidden_layers = nn.Sequential(*layers)
+        if typeNN == "dense":
+            # Initial layer
+            self.initial_layer = DenseLayer(layer_width, input_dim, activation=hidden_activation)
 
-        # Output layer (policy network)
-        self.output_layer = DenseLayer(output_dim, layer_width, activation=output_activation)
+            # Build hidden layers
+            layers = []
+            for _ in range(n_layers):
+                layers.append(DenseLayer(layer_width, layer_width, activation=hidden_activation))
+            self.hidden_layers = nn.Sequential(*layers)
+
+            # Output layer (policy network)
+            self.output_layer = DenseLayer(output_dim, layer_width, activation=output_activation)
+
+        elif typeNN == "LSTM":
+            # Use PyTorch's standard LSTM with persistent hidden state
+            self.hidden_dim = layer_width
+            self.n_layers = n_layers
+            self.lstm = nn.LSTM(
+                input_size=input_dim,
+                hidden_size=layer_width,
+                num_layers=n_layers,
+                batch_first=True
+            )
+
+            # Output layer (policy network)
+            self.output_layer = DenseLayer(output_dim, layer_width, activation=output_activation)
+
+            # Persistent hidden state (h, c) - maintained across forward calls
+            self._hidden_state = None
+            self._cell_state = None
+            self._batch_size = None
+
+
+
+
+    def reset_hidden_state(self, batch_size=1):
+        """
+        Reset LSTM hidden state to zeros. Call at episode boundaries.
+
+        Args:
+            batch_size (int): Batch size for the hidden state
+        """
+        if self.typeNN != "LSTM":
+            return
+        device = next(self.parameters()).device
+        self._batch_size = batch_size
+        self._hidden_state = torch.zeros(
+            self.n_layers, batch_size, self.hidden_dim, device=device
+        )
+        self._cell_state = torch.zeros(
+            self.n_layers, batch_size, self.hidden_dim, device=device
+        )
 
     def forward(self, x):
         '''
@@ -876,15 +919,38 @@ class ActorMLP(BaseNet):
         Returns:
             policy distribution or action probabilities
         '''
-        x = self.initial_layer(x)
-        x = self.hidden_layers(x)
-        output = self.output_layer(x)
+        if self.typeNN == "dense":
+            x = self.initial_layer(x)
+            x = self.hidden_layers(x)
+            output = self.output_layer(x)
+
+        elif self.typeNN == "LSTM":
+            batch_size = x.size(0)
+
+            # Initialize hidden state if needed or batch size changed
+            if self._hidden_state is None or self._batch_size != batch_size:
+                self.reset_hidden_state(batch_size)
+
+            # Add sequence dimension: (batch, features) -> (batch, 1, features)
+            x_seq = x.unsqueeze(1)
+
+            # LSTM forward with persistent hidden state
+            with torch.backends.cudnn.flags(enabled=False):
+                output, (h_n, c_n) = self.lstm(x_seq, (self._hidden_state, self._cell_state))
+
+            # Update persistent state (detached to prevent gradient accumulation across episodes)
+            self._hidden_state = h_n.detach()
+            self._cell_state = c_n.detach()
+
+            # Remove sequence dim and pass to output layer
+            output = self.output_layer(output.squeeze(1))
+
         return output
 
 
 class CriticMLP(BaseNet):
     def __init__(self, input_dim, layer_width, n_layers,
-                 output_dim=1, hidden_activation="tanh", q_function=False):
+                 output_dim=1, hidden_activation="tanh", typeNN = "dense", q_function=False):
         '''
         Critic network for value function estimation
 
@@ -898,19 +964,62 @@ class CriticMLP(BaseNet):
         '''
         super(CriticMLP, self).__init__()
 
-        # Initial layer
-        self.initial_layer = DenseLayer(layer_width, input_dim, activation=hidden_activation)
+        self.typeNN = typeNN
 
-        # Build hidden layers
-        layers = []
-        for _ in range(n_layers):
-            layers.append(DenseLayer(layer_width, layer_width, activation=hidden_activation))
-        self.hidden_layers = nn.Sequential(*layers)
+        if typeNN == "dense":
 
-        # Output layer (value function) - no activation for value estimation
-        self.output_layer = DenseLayer(output_dim, layer_width, activation=None)
+            # Initial layer
+            self.initial_layer = DenseLayer(layer_width, input_dim, activation=hidden_activation)
+
+            # Build hidden layers
+            layers = []
+            for _ in range(n_layers):
+                layers.append(DenseLayer(layer_width, layer_width, activation=hidden_activation))
+            self.hidden_layers = nn.Sequential(*layers)
+
+            # Output layer (value function) - no activation for value estimation
+            self.output_layer = DenseLayer(output_dim, layer_width, activation=None)
+
+        elif typeNN == "LSTM":
+            # Use PyTorch's standard LSTM with persistent hidden state
+            self.hidden_dim = layer_width
+            self.n_layers = n_layers
+            self.lstm = nn.LSTM(
+                input_size=input_dim,
+                hidden_size=layer_width,
+                num_layers=n_layers,
+                batch_first=True
+            )
+
+            # Output layer (value function) - no activation for value estimation
+            self.scale = nn.Parameter(torch.tensor(1.0))
+            self.shift = nn.Parameter(torch.tensor(0.0))
+            self.output_layer = DenseLayer(output_dim, layer_width, activation=None)
+
+            # Persistent hidden state (h, c) - maintained across forward calls
+            self._hidden_state = None
+            self._cell_state = None
+            self._batch_size = None
 
         self.q_function = q_function
+
+    def reset_hidden_state(self, batch_size=1):
+        """
+        Reset LSTM hidden state to zeros. Call at episode boundaries.
+
+        Args:
+            batch_size (int): Batch size for the hidden state
+        """
+        if self.typeNN != "LSTM":
+            return
+        device = next(self.parameters()).device
+        self._batch_size = batch_size
+        self._hidden_state = torch.zeros(
+            self.n_layers, batch_size, self.hidden_dim, device=device
+        )
+        self._cell_state = torch.zeros(
+            self.n_layers, batch_size, self.hidden_dim, device=device
+        )
 
     def forward(self, x):
         '''
@@ -922,16 +1031,39 @@ class CriticMLP(BaseNet):
         Returns:
             value estimate
         '''
-        x = self.initial_layer(x)
-        x = self.hidden_layers(x)
-        output = self.output_layer(x)
+        if self.typeNN == "dense":
+            x = self.initial_layer(x)
+            x = self.hidden_layers(x)
+            output = self.output_layer(x)
+
+        elif self.typeNN == "LSTM":
+            batch_size = x.size(0)
+
+            # Initialize hidden state if needed or batch size changed
+            if self._hidden_state is None or self._batch_size != batch_size:
+                self.reset_hidden_state(batch_size)
+
+            # Add sequence dimension: (batch, features) -> (batch, 1, features)
+            x_seq = x.unsqueeze(1)
+
+            # LSTM forward with persistent hidden state
+            with torch.backends.cudnn.flags(enabled=False):
+                output, (h_n, c_n) = self.lstm(x_seq, (self._hidden_state, self._cell_state))
+
+            # Update persistent state (detached to prevent gradient accumulation across episodes)
+            self._hidden_state = h_n.detach()
+            self._cell_state = c_n.detach()
+
+            # Remove sequence dim and pass to output layer
+            output = self.output_layer(output.squeeze(1))
+
         return output
 
 
 class ActorCriticSeparate(nn.Module):
     def __init__(self, input_dim, layer_width, n_layers,
                  actor_output_dim, actor_activation="softmax",
-                 hidden_activation="tanh", q_function=True):
+                 hidden_activation="tanh", q_function=True, typeNN = "dense"):
         '''
         Separate Actor-Critic networks
 
@@ -952,7 +1084,8 @@ class ActorCriticSeparate(nn.Module):
             n_layers=n_layers,
             output_dim=actor_output_dim,
             output_activation=actor_activation,
-            hidden_activation=hidden_activation
+            hidden_activation=hidden_activation, 
+            typeNN=typeNN
         )
 
         critic_output_dim = actor_output_dim if q_function else 1
@@ -962,7 +1095,8 @@ class ActorCriticSeparate(nn.Module):
             n_layers=n_layers,
             output_dim=critic_output_dim,
             hidden_activation=hidden_activation,
-            q_function=q_function
+            q_function=q_function,
+            typeNN=typeNN
         )
 
     def forward(self, x):
@@ -976,8 +1110,27 @@ class ActorCriticSeparate(nn.Module):
             actor_output: policy distribution or action
             critic_output: value estimate
         '''
+        # if self.actor.typeNN == "dense":
         actor_output = self.actor(x)
+        # elif self.actor.typeNN == "LSTM":
+        #     S = self.actor.initial_layer(x)
+        #     # Process through LSTM layers
+        #     for lstm_layer in self.actor.lstm_layers:
+        #         S = lstm_layer(S, x)  # LSTMLayer needs both S and X
+            
+        #     actor_output = self.actor.output_layer(S)
+        
+        # if self.critic.typeNN == "dense":
         critic_output = self.critic(x)
+
+        # elif self.critic.typeNN == "LSTM":
+        #     S = self.critic.initial_layer(x)
+        #     # Process through LSTM layers
+        #     for lstm_layer in self.critic.lstm_layers:
+        #         S = lstm_layer(S, x)  # LSTMLayer needs both S and X
+            
+        #     critic_output = self.critic.output_layer(S) 
+
         return actor_output, critic_output
 
     def actor_forward(self, x):
@@ -987,6 +1140,17 @@ class ActorCriticSeparate(nn.Module):
     def critic_forward(self, x):
         '''Forward pass through critic only'''
         return self.critic(x)
+
+    def reset_hidden_state(self, batch_size=1):
+        """
+        Reset LSTM hidden state for both actor and critic networks.
+        Call at episode boundaries.
+
+        Args:
+            batch_size (int): Batch size for the hidden state
+        """
+        self.actor.reset_hidden_state(batch_size)
+        self.critic.reset_hidden_state(batch_size)
 
     def parameters(self):
         '''Get all parameters from both networks'''

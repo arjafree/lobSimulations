@@ -253,7 +253,8 @@ class ModelManager:
             suffix = f"_epoch_{epoch}" if epoch >= 0 else "_final"
             meta_path = os.path.join(
                 self.model_dir,
-                f"models\\model_metadata{suffix}_{timestamp}.json"
+                f"model_metadata{suffix}_{timestamp}.json"
+                # f"models\\model_metadata{suffix}_{timestamp}.json"
             )
 
         # Load metadata
@@ -459,4 +460,4 @@ def symlog_plot(json_path):
     plt.show()
 
 # Example usage
-symlog_plot('D:\\PhD\\results - hjbqvi\\training_logs_20250924_163938_LSTM_INTC_hawkes.json')
+# symlog_plot('D:\\PhD\\results - hjbqvi\\training_logs_20250924_163938_LSTM_INTC_hawkes.json')

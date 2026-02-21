@@ -5,13 +5,13 @@ import numpy as np
 from decimal import Decimal
 
 class TWAPGymTradingAgent(GymTradingAgent):
-    def __init__(self, seed, log_events:bool, log_to_file:bool, strategy:str, Inventory:Optional[Dict[str, Any]], cash:int, cashlimit:int, action_freq:float, total_order_size:int, total_time:int, window_size:int, side:str, order_target:str,  start_trading_lag:int=0, wake_on_MO:bool=False, wake_on_Spread:bool=False):
+    def __init__(self, seed, log_events:bool, log_to_file:bool, strategy:str, Inventory:Optional[Dict[str, Any]], cash:int, cashlimit:int, action_freq:float, total_order_size:int, total_time:int, window_size:int, side:str, order_target:str,  off_time:int, start_trading_lag:int=0, wake_on_MO:bool=False, wake_on_Spread:bool=False):
         if side=="sell": assert Inventory[order_target] >= total_order_size, "Not enough volume in inventory to execute sell order"
-        assert total_order_size%window_size == 0, f"Order size {total_order_size} cannot be executed with window size {window_size}"
+        # assert total_order_size%window_size == 0, f"Order size {total_order_size} cannot be executed with window size {window_size}"
         # assert total_order_size % ((total_time-start_trading_lag)/action_freq) == 0, f"Order size {total_order_size} cannot be executed evenly with time {total_time} with start trading lag {start_trading_lag} and action frequency {action_freq} "
 
         super().__init__(seed=seed, log_events = log_events, log_to_file = log_to_file, strategy=strategy, Inventory=Inventory, cash=cash, action_freq=action_freq, wake_on_MO=wake_on_MO, wake_on_Spread=wake_on_Spread, cashlimit=cashlimit,start_trading_lag=start_trading_lag)
-        self.total_time = 300 #hard coded to 300 for now
+        self.total_time = total_time
         self.start_trading_lag = start_trading_lag
         self.actions_per_second:int = 1/self.action_freq
         self.total_order_size:int = total_order_size
@@ -24,6 +24,7 @@ class TWAPGymTradingAgent(GymTradingAgent):
         self.starting_volume:int = self.old_volume
         self.agent_time = self.current_time
         self.urgent = False
+        self.off_time = off_time
         # self.num_calls = 0
 
         self._set_slices()
@@ -39,6 +40,7 @@ class TWAPGymTradingAgent(GymTradingAgent):
         self.num_windows:int = self.total_time // self.window_size 
         
         self.total_volume_window:int = self.total_order_size // self.num_windows #the amount of volume to trade in each window
+        print("window_volume: ", self.total_volume_window)
         self.market_order_size:int = 0
         self.volume_traded_in_window:int = 0
         self.window_time_elapsed:float = 0.0
@@ -49,6 +51,8 @@ class TWAPGymTradingAgent(GymTradingAgent):
         
 
     def get_action(self, data) -> Optional[Tuple[int, int]]:
+        if(self.current_time > self.off_time):
+            return(12,0)
         self.agent_time = self.current_time - self.start_trading_lag
         # self.num_calls +=1
         # print(f"Num calls: {self.num_calls}")
@@ -80,7 +84,7 @@ class TWAPGymTradingAgent(GymTradingAgent):
         self.old_volume = self.agent_volume
 
         #if we have traded more than or equal to how much we should have traded so far, cancel some of the most viable limit orders
-        if (self.traded_so_far >= self.total_order_size*(self.agent_time/self.total_time) or self.traded_so_far >= self.total_order_size or self.volume_traded_in_window>=self.total_volume_window):
+        if (self.traded_so_far >= self.total_order_size*(self.agent_time/self.total_time) or self.traded_so_far >= self.total_order_size): #or ((self.volume_traded_in_window>=self.total_volume_window) and )): commented out for this specific run
             lvl = self.actionsToLevels[self.actions[9]] if self.side=="buy" else self.actionsToLevels[self.actions[2]]
             if len(data["Positions"][lvl]) > 0:
                  return(8, 0) if self.side == "buy" else (3, 0)
@@ -89,7 +93,7 @@ class TWAPGymTradingAgent(GymTradingAgent):
         
 
         
-        # #if we have gone through 75% of our window time and have less than a 90% execution rate
+        #if we have gone through 75% of our window time and have less than a 90% execution rate
         if  time_ratio > 0.75 and self.volume_traded_in_window/(self.total_volume_window*time_ratio) < 0.9 and not self.urgent:
             self.urgent = True
         

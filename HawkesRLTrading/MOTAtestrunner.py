@@ -4,6 +4,10 @@ sys.path.append(os.path.abspath('/home/ajafree/lobSimulations'))
 # sys.path.append(os.path.abspath('/Users/alirazajafree/Documents/GitHub/lobSimulations/'))
 from HawkesRLTrading.src.Envs.HawkesRLTradingEnv import *
 # import matplotlib.pyplot as plt
+log_dir = "/home/ajafree/october_retest/twap_alone/logs/"
+twap_side = "sell"
+label = f'retest_twap_regularpov_oldpis_{twap_side}_alone'
+
             
 # from scipy.optimize import curve_fit
 # import numpy as np
@@ -22,57 +26,108 @@ for k in cols:
 tod=np.zeros(shape=(len(cols), 13))
 for i in range(len(cols)):
     tod[i]=[faketod[cols[i]][k] for k in range(13)]
+# Pis={'Bid_L2': [0.,
+#                 [(1, 1.)]],
+#         'Bid_inspread': [0.,
+#                         [(1, 1.)]],
+#         'Bid_L1': [0.,
+#                 [(1, 1.)]],
+#         'Bid_MO': [0.,
+#                 [(1, 1.)]]}
+# Pis["Ask_MO"] = Pis["Bid_MO"]
+# Pis["Ask_L1"] = Pis["Bid_L1"]
+# Pis["Ask_inspread"] = Pis["Bid_inspread"]
+# Pis["Ask_L2"] = Pis["Bid_L2"]
+# Pi_Q0= {'Ask_L1': [0.,
+#                     [(10, 1.)]],
+#         'Ask_L2': [0.,
+#                     [(10, 1.)]],
+#         'Bid_L1': [0.,
+#                     [(10, 1.)]],
+#         'Bid_L2': [0.,
+#                     [(10, 1.)]]}
 Pis={'Bid_L2': [0.,
-                [(1, 1.)]],
-        'Bid_inspread': [0.,
-                        [(1, 1.)]],
-        'Bid_L1': [0.,
-                [(1, 1.)]],
-        'Bid_MO': [0.,
-                [(1, 1.)]]}
+                [(40, 1.)]],
+     'Bid_inspread': [0.,
+                      [(40, 1.)]],
+     'Bid_L1': [0.,
+                [(40, 1.)]],
+     'Bid_MO': [0.,
+                [(40, 1.)]]}
 Pis["Ask_MO"] = Pis["Bid_MO"]
 Pis["Ask_L1"] = Pis["Bid_L1"]
 Pis["Ask_inspread"] = Pis["Bid_inspread"]
 Pis["Ask_L2"] = Pis["Bid_L2"]
 Pi_Q0= {'Ask_L1': [0.,
-                    [(10, 1.)]],
+                   [(200, 1.)]],
         'Ask_L2': [0.,
-                    [(10, 1.)]],
+                   [(200, 1.)]],
         'Bid_L1': [0.,
-                    [(10, 1.)]],
+                   [(200, 1.)]],
         'Bid_L2': [0.,
-                    [(10, 1.)]]}
+                   [(200, 1.)]]}
+
 kwargs={
             "TradingAgent": [],
             "GymTradingAgent":
-                                [{"cash":10000000,
+                                [
+                                # {"cash":1000000,
+                                # "cashlimit": 1000000000,
+                                # "strategy": "TWAP", #"POV",
+                                # "on_trade":False,
+                                # "total_order_size":8,
+                                # "order_target":"INTC",
+                                # # "participation_rate":0.05,
+                                # "total_time":420,
+                                # "window_size":160, #window size, measured in seconds
+                                # "side":"buy", #buy or sell
+                                # "action_freq":1,
+                                # "Inventory": {"INTC":500},
+                                # 'start_trading_lag': 100,
+                                # "side":"buy",
+                                # "wake_on_MO": False,
+                                # "wake_on_Spread": False}
+                                # {"cash":1000000,
+                                # "cashlimit": 1000000000,
+                                # "strategy": "TWAP",
+                                # "on_trade":False,
+                                # "total_order_size":300,
+                                # "order_target":"INTC",
+                                # "total_time":400,
+                                # "window_size":50, #window size, measured in seconds
+                                # "action_freq":1,
+                                # "Inventory": {"INTC":500},
+                                # 'start_trading_lag': 100,
+                                # "wake_on_MO": False,
+                                # "wake_on_Spread": False}
+                                {"cash":1000000,
                                 "cashlimit": 1000000000,
-                                "strategy": "POV",
+                                "strategy": "TWAP",
                                 "on_trade":False,
-                                "total_order_size":2300,
+                                "total_order_size":8,
                                 "order_target":"INTC",
-                                "participation_rate":0.05,
-                                "total_time":2600,
-                                "window_size":60, #window size, measured in seconds
-                                "side":"buy", #buy or sell
-                                "action_freq":1,
-                                "Inventory": {"INTC":0},
-                                'start_trading_lag': 300,
+                                "total_time":420,
+                                "window_size":160, #window size, measured in seconds
+                                "action_freq":40,
+                                "Inventory": {"INTC":500},
+                                'start_trading_lag': 100,
                                 "wake_on_MO": False,
-                                "wake_on_Spread": False}],
+                                "wake_on_Spread": False}
+                                ],
             "Exchange": {"symbol": "INTC",
-            "ticksize":0.01,
-            "LOBlevels": 2,
-            "numOrdersPerLevel": 10,
-            "PriceMid0": 100,
-            "spread0": 0.03},
+                 "ticksize":0.01,
+                 "LOBlevels": 2,
+                 "numOrdersPerLevel": 10,
+                 "PriceMid0": 100,
+                 "spread0": 0.03},
             "Arrival_model": {"name": "Hawkes",
-                                "parameters": {"kernelparams": kernelparams,
-                                        "tod": tod,
-                                        "Pis": Pis,
-                                        "beta": 0.941,
-                                        "avgSpread": 0.0101,
-                                        "Pi_Q0": Pi_Q0}}
+                            "parameters": {"kernelparams": kernelparams,
+                                            "tod": tod,
+                                            "Pis": Pis,
+                                            "beta": 0.941,
+                                            "avgSpread": 0.0101,
+                                            "Pi_Q0": Pi_Q0,
+                                            'expApprox' : True}}
 
 }
 agents = kwargs['GymTradingAgent']
@@ -89,88 +144,123 @@ execution_history:List[Tuple] = []
 price_paths_non_agent = []
 times = []
 market_volumes = []
-
-cash_differences = 0
-
-new_mv = True
-
-env=tradingEnv(stop_time=2600, wall_time_limit=23400, seed=1, **kwargs)
-prev_inventory = 0
+percentage_of_volume = []
+final_cashs = []
+total_executeds = []
 
 start_midprices = []
-twap_agent_executions_by_episode:Dict[int, List] = {}
 
-Simstate, observations, termination, truncation =env.step(action=None) 
-AgentsIDs=[k for k,v in Simstate["Infos"].items() if v==True]
-agents:List[GymTradingAgent] = [env.getAgent(ID=agentid) for agentid in AgentsIDs]
-observationsDict:Dict[int, Dict] = {agentid: {"Inventory": agent.Inventory, "Positions": []} for agent, agentid in zip(agents, AgentsIDs)}
-while Simstate["Done"]==False and termination!=True:
-    logger.debug(f"ENV TERMINATION: {termination}")
+total_TWAP_obsv = []
+start_midprices = []
+
+
+for episode in range(20):
+    kwargs["GymTradingAgent"][0]["side"] = twap_side
+    kwargs["GymTradingAgent"][0]["Inventory"] = {"INTC": 500}
+    kwargs["GymTradingAgent"][0]["cash"] = 1000000
+    total_executed = 0
+    final_cash = 0
+    cash_differences = 0
+
+    new_mv = True
+    new_mp = True
+
+    env=tradingEnv(stop_time=520, wall_time_limit=23400, **kwargs)
+    prev_inventory = 0
+
+    twap_agent_executions_by_episode:Dict[int, List] = {}
+
+    Simstate, observations, termination, truncation =env.step(action=None) 
     AgentsIDs=[k for k,v in Simstate["Infos"].items() if v==True]
-    print(f"Agents with IDs {AgentsIDs} have an action available")
     agents:List[GymTradingAgent] = [env.getAgent(ID=agentid) for agentid in AgentsIDs]
-    action:list[Tuple] = []
-    # price_paths_non_agent.append(float(observations.get('LOB0').get('Ask_L1')[0] + observations.get('LOB0').get('Bid_L1')[0])/2)
-    times.append(Simstate["TimeCode"])
+    observationsDict:Dict[int, Dict] = {agentid: {"Inventory": agent.Inventory, "Positions": []} for agent, agentid in zip(agents, AgentsIDs)}
     
-    for agent in agents:
+    while Simstate["Done"]==False and termination!=True:
+        logger.debug(f"ENV TERMINATION: {termination}")
+        AgentsIDs=[k for k,v in Simstate["Infos"].items() if v==True]
+        print(f"Agents with IDs {AgentsIDs} have an action available")
+        agents:List[GymTradingAgent] = [env.getAgent(ID=agentid) for agentid in AgentsIDs]
+        action:list[Tuple] = []
+        # price_paths_non_agent.append(float(observations.get('LOB0').get('Ask_L1')[0] + observations.get('LOB0').get('Bid_L1')[0])/2)
+        times.append(Simstate["TimeCode"])
         
-        assert isinstance(agent, GymTradingAgent), "Agent with action should be a GymTradingAgent"
-        agentAction:Tuple[int, int] = agent.get_action(data=env.getobservations(agentID=agent.id))
-        action = (agent.id, agentAction)
-        observations_prev = copy.deepcopy(observationsDict.get(agent.id, {}))
-        print(f"Limit Order Book: {observationsDict.get(agent.id, {}).get('LOB0', '')}")
-        print(f"Inventory: {observationsDict.get(agent.id, {}).get('Inventory', '')}")
+        for agent in agents:
+            if(new_mp):
+                midprice = float((observations.get('LOB0').get('Ask_L1')[0] + observations.get('LOB0').get('Bid_L1')[0])/2)
+                start_midprices.append(midprice)
+                new_mp = False
 
-        Simstate, observations, termination, truncation=env.step(action=action) #do not try and use this data before this line in the loop
+            
+            assert isinstance(agent, GymTradingAgent), "Agent with action should be a GymTradingAgent"
 
-        # midprice = float((observations.get('LOB0').get('Ask_L1')[0] + observations.get('LOB0').get('Bid_L1')[0])/2)
+            agentAction:Tuple[int, int] = agent.get_action(data=env.getobservations(agentID=agent.id))
+            action = (agent.id, agentAction)
+            observations_prev = copy.deepcopy(observationsDict.get(agent.id, {}))
+            TWAPagentid = agent.id
+            print(f"Limit Order Book: {observationsDict.get(agent.id, {}).get('LOB0', '')}")
+            print(f"TWAP Inventory: {observationsDict.get(agent.id, {}).get('Inventory', '')}")
 
-        # price_paths.append(midprice)
+            Simstate, observations, termination, truncation=env.step(action=action) #do not try and use this data before this line in the loop
 
-        # if(i==0):
-        #     starting_midprice = float(observations.get('LOB0').get('Ask_L1')[0] + observations.get('LOB0').get('Bid_L1')[0])/2
+            # midprice = float((observations.get('LOB0').get('Ask_L1')[0] + observations.get('LOB0').get('Bid_L1')[0])/2)
 
-        observationsDict.update({agent.id:observations})
-        logger.debug(f"\n Agent: {agent.id}\n Simstate: {Simstate}\nObservations: {observations}\nTermination: {termination}\nTruncation: {truncation}")
+            # price_paths.append(midprice)
 
-        cashs.update({agent.id:cashs.get(agent.id, [])+[observations['Cash']]})
+            # if(i==0):
+            #     starting_midprice = float(observations.get('LOB0').get('Ask_L1')[0] + observations.get('LOB0').get('Bid_L1')[0])/2
 
-        inventories.update({agent.id:inventories.get(agent.id, []) + [observations['Inventory']]})
+            observationsDict.update({agent.id:observations})
+            logger.debug(f"\n Agent: {agent.id}\n Simstate: {Simstate}\nObservations: {observations}\nTermination: {termination}\nTruncation: {truncation}")
 
-        diff = abs(inventories[agent.id][-1] - prev_inventory)
+            cashs.update({agent.id:cashs.get(agent.id, [])+[observations['Cash']]})
+
+            inventories.update({agent.id:inventories.get(agent.id, []) + [observations['Inventory']]})
+            actionss.update({agent.id: actionss.get(agent.id, []) + [action[1][0]]})
+
+            # diff = abs(inventories[agent.id][-1] - prev_inventory)
+
+            # market_volumes.append(observations["market_volume"])
+            # if((observations["current_time"]-100)%60 == 0):
+            #     new_mv = True
+
+            # if new_mv:
+            #      if observations["market_volume"] > 1:
+            #         if(observations["market_volume"]*60 + observations["Inventory"] > 120):
+            #             market_volumes.append(observations["market_volume"]*60)
+            #         else:
+            #             market_volumes.append(120-observations["Inventory"])
+            #         new_mv = False
+            # if(diff != 0):
+            #     percentage_of_volume.append(diff/observations["market_volume"])
+            #     #inventory has changed, order has gone through
+            #     if kwargs['GymTradingAgent'][0]["side"] == 'sell':
+            #         execution_history.append((observationsDict.get(agent.id, {}).get('LOB0', '').get('Bid_L1'), diff))  
+            #         cash_differences += (observationsDict.get(agent.id, {}).get('LOB0', '').get('Bid_L1')[0])*diff
+            #     else:
+            #         execution_history.append((observationsDict.get(agent.id, {}).get('LOB0', '').get('Ask_L1'), diff)) 
+            #         cash_differences += (observationsDict.get(agent.id, {}).get('LOB0', '').get('Ask_L1')[0])*diff
+
+            # prev_inventory = observations['Inventory']
+
+            prev_inventory = observations['Inventory']
+            total_executed = abs(500 - agent.Inventory["INTC"])
+            final_cash = agent.cash
 
 
-        # if((observations["current_time"]-100)%60 == 0):
-        #     new_mv = True
 
-        # if new_mv:
-        #      if observations["market_volume"] > 1:
-        #         if(observations["market_volume"]*60 + observations["Inventory"] > 120):
-        #             market_volumes.append(observations["market_volume"]*60)
-        #         else:
-        #             market_volumes.append(120-observations["Inventory"])
-        #         new_mv = False
-
-        # if(diff != 0):
-        #     #inventory has changed, order has gone through
-        #     if kwargs['GymTradingAgent'][0]["side"] == 'sell':
-        #         execution_history.append((observationsDict.get(agent.id, {}).get('LOB0', '').get('Bid_L1'), diff))  
-        #         cash_differences += (observationsDict.get(agent.id, {}).get('LOB0', '').get('Bid_L1')[0])*diff
-        #     else:
-        #         execution_history.append((observationsDict.get(agent.id, {}).get('LOB0', '').get('Ask_L1'), diff)) 
-        #         cash_differences += (observationsDict.get(agent.id, {}).get('LOB0', '').get('Ask_L1')[0])*diff
-
-        prev_inventory = observations['Inventory']
-        actionss.update({agent.id: actionss.get(agent.id, []) + [action[1][0]]})
-        print(f"ACTION DONE{i}")
-        t += [Simstate['TimeCode']]
-        i+=1
-        # if episode not in inventoryhistories:
-        #     inventoryhistories[episode] = {}
-        # if agent.id not in inventoryhistories[episode]:
-        #     inventoryhistories[episode][agent.id] = []
-        # inventoryhistories[episode][agent.id].append((Simstate['TimeCode'], observations['Inventory']))
+            print(f"ACTION DONE{i}")
+            t += [Simstate['TimeCode']]
+            i+=1
+            # if episode not in inventoryhistories:
+            #     inventoryhistories[episode] = {}
+            # if agent.id not in inventoryhistories[episode]:
+            #     inventoryhistories[episode][agent.id] = []
+            # inventoryhistories[episode][agent.id].append((Simstate['TimeCode'], observations['Inventory']))
+    final_cashs.append(final_cash)
+    total_executeds.append(total_executed)
+    np.save(log_dir+label+"total_executed.npy", np.array(total_executeds))
+    np.save(log_dir+label+"final_cash.npy", np.array(final_cashs))
+    np.save(log_dir+label+"_start_midprices.npy", np.array(start_midprices))
 
 # Plot the final inventory trajectory after the simulation completes
 # plt.figure(figsize=(10, 6))
@@ -182,6 +272,9 @@ while Simstate["Done"]==False and termination!=True:
 # plt.grid(True, alpha=0.3)
 # plt.tight_layout()
 # plt.show()
+np.save(log_dir+label+"total_executed.npy", np.array(total_executeds))
+np.save(log_dir+label+"final_cash.npy", np.array(final_cashs))
+np.save(log_dir+label+"_start_midprices.npy", np.array(start_midprices))
 
 # agent_ids = set()
 # for ep in inventoryhistories:
@@ -509,5 +602,6 @@ def plot_inventory_and_participation_normalized():
     plt.show()
 
 # Call both plotting functions
-plot_inventory_with_participation_rate()
+# plot_inventory_with_participation_rate()
 # plot_inventory_and_participation_normalized()
+
