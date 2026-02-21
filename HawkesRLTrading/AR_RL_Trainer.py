@@ -12,8 +12,6 @@ from HawkesRLTrading.src.SimulationEntities.MetaOrderTradingAgents import TWAPGy
 import torch
 import time
 
-
-
 log_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/logs/'
 model_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/model'
 # log_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/training/logs/'
@@ -28,8 +26,8 @@ twap_start_time = 150 + start_trading_lag
 
 twap_end_time = 300 + start_trading_lag
 
-label = 'train_LSTMRLAgent_vs_TWAP_withoutExpo'
-layer_widths=50
+label = 'train_LSTM_TWAP'
+layer_widths=100
 n_layers=3
 
 checkpoint_params = None
@@ -136,7 +134,7 @@ kwargs={
                         {"cash": 2500,
                          "strategy": "ICRL",
                          "action_freq": 0.213,
-                         "rewardpenalty": 1,
+                         "rewardpenalty": 50,
                          "Inventory": {"INTC": 0},
                          "log_to_file": True,
                          "cashlimit": 5000000,
@@ -144,17 +142,6 @@ kwargs={
                          'start_trading_lag': start_trading_lag,
                          "wake_on_MO": True,
                          "wake_on_Spread": True}
-                        # {"cash": 2500,
-                        #  "strategy": "Probabilistic",
-                        #  "action_freq": 0.213,
-                        #  "rewardpenalty": 0.5,
-                        #  "Inventory": {"INTC": 0},
-                        #  "log_to_file": True,
-                        #  "cashlimit": 5000000,
-                        #  "inventorylimit": 25,
-                        #  'start_trading_lag': 100,
-                        #  "wake_on_MO": True,
-                        #  "wake_on_Spread": True}
                          ,
                          {"cash":1000000,
                           "cashlimit": 100000000000,
@@ -193,7 +180,7 @@ tc = 0.0001
 RLagentInstance = AdversarialPPOAgent( seed=1, log_events=True, log_to_file=True, strategy=j["strategy"], Inventory=j["Inventory"], cash=j["cash"], action_freq=j["action_freq"],
                           wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"], cashlimit=j["cashlimit"],inventorylimit=j['inventorylimit'], batch_size=512,
                           layer_widths=layer_widths, n_layers =n_layers, buffer_capacity = 100000, rewardpenalty = j["rewardpenalty"], epochs = 100, transaction_cost=1e-4, start_trading_lag = j['start_trading_lag'],
-                          gae_lambda=0.5, truncation_enabled=False, action_space_config = 1, alt_state=True, enhance_state=True, include_time=True, optim_type='ADAM',entropy_coef=0, exploration_bonus = 0, TWAPPresent=0 , hidden_activation='sigmoid', typeNN = "LSTM")
+                          gae_lambda=0.5, truncation_enabled=False, action_space_config = 1, alt_state=True, enhance_state=True, include_time=True, optim_type='ADAM',entropy_coef=0, exploration_bonus = 0, hidden_activation='sigmoid', typeNN = "LSTM", lr = 3e-4, TWAPPresent=0)
 
 inventories_with_twap_buy = []
 inventories_with_twap_sell = []
@@ -228,7 +215,7 @@ total_RL_obsv = []
 
 final_cashs = []
 total_executeds = []
-for episode in range(100):
+for episode in range(80):
     inventory_with_twap_buy = []
     inventory_with_twap_sell = []
     inventory_without_twap = []
@@ -453,6 +440,7 @@ for episode in range(100):
             agent.cash = j['cash']
             agent.Inventory = {"INTC": 0}
             agent.positions = {'INTC':{}}
+            agent.last_state = None  # Triggers LSTM reset on next get_action()
             j['agent_instance'] = agent
             kwargs['GymTradingAgent'][0] = j
 
