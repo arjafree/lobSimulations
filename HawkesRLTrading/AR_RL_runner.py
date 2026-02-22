@@ -853,75 +853,79 @@ for episode in range(17):
     plt.title('Final Profit Raw')
 
     plt.savefig(log_dir + label+'_avgepisodicreward.png')
+    plt.close()
+
+    # ---- Policy Plot (episode aware, 3 subplots, time resets per episode) ----
+    cash_arr = np.array(cashs[RLagentID])
+    inv_arr = np.array(inventories[RLagentID])
+
+    all_cash, all_inv, all_profit = [], [], []
+
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 10))
+
+    n_episodes = len(episode_boundaries) - 1 if episode_boundaries[-1] == len(cash_arr) else len(episode_boundaries)
+    for i in range(n_episodes):
+        start_idx = episode_boundaries[i]
+        end_idx = episode_boundaries[i + 1] if i + 1 < len(episode_boundaries) else len(cash_arr)
+
+        if end_idx <= start_idx:
+            continue
+
+        ep_cash = cash_arr[start_idx:end_idx]
+        ep_inv = inv_arr[start_idx:end_idx]
+        ep_profit = ep_cash - j["cash"]
+        ep_t = np.arange(len(ep_cash))
+
+        all_cash.append(ep_cash)
+        all_inv.append(ep_inv)
+        all_profit.append(ep_profit)
+
+        ax1.plot(ep_t, ep_cash, color="steelblue", alpha=0.15, linewidth=0.8)
+        ax2.plot(ep_t, ep_inv, color="tomato", alpha=0.15, linewidth=0.8)
+        ax3.plot(ep_t, ep_profit, color="mediumseagreen", alpha=0.15, linewidth=0.8)
+
+    if all_cash:
+        # --- Mean across episodes (pad shorter episodes with NaN) ---
+        max_len = max(len(a) for a in all_cash)
+        def pad_to(arr, length):
+            out = np.full(length, np.nan)
+            out[:len(arr)] = arr
+            return out
+
+        all_cash_mat = np.array([pad_to(a, max_len) for a in all_cash])
+        all_inv_mat = np.array([pad_to(a, max_len) for a in all_inv])
+        all_profit_mat = np.array([pad_to(a, max_len) for a in all_profit])
+
+        mean_cash = np.nanmean(all_cash_mat, axis=0)
+        mean_inv = np.nanmean(all_inv_mat, axis=0)
+        mean_profit = np.nanmean(all_profit_mat, axis=0)
+        steps = np.arange(max_len)
+
+        ax1.plot(steps, mean_cash, color="darkblue", linewidth=2.5, zorder=5, label="Mean")
+        ax2.plot(steps, mean_inv, color="darkred", linewidth=2.5, zorder=5, label="Mean")
+        ax3.plot(steps, mean_profit, color="darkgreen", linewidth=2.5, zorder=5, label="Mean")
+
+    # --- Styling ---
+    ax1.set_title(f"Cash (episodes 1-{episode+1})")
+    ax1.set_ylabel("Cash")
+    ax1.legend()
+    ax2.set_title("Inventory")
+    ax2.set_ylabel("Inventory")
+    ax2.legend()
+    ax3.set_title("Profit")
+    ax3.set_ylabel("Profit")
+    ax3.legend()
+
+    for ax in (ax1, ax2, ax3):
+        ax.set_xlabel("Time steps (per episode)")
+        ax.grid(True, linestyle="--", alpha=0.4)
+
+    plt.tight_layout()
+    plt.savefig(log_dir + label + "_policy_byepisode.png")
+    plt.close()
+
     torch.cuda.empty_cache()
     # torch.mps.empty_cache()
-
-# ---- Policy Plot (episode aware, 3 subplots, time resets per episode) ----
-fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 10))
-
-cash_arr = np.array(cashs[RLagentID])
-inv_arr = np.array(inventories[RLagentID])
-
-all_cash, all_inv, all_profit = [], [], []
-
-n_episodes = len(episode_boundaries) - 1 if episode_boundaries[-1] == len(cash_arr) else len(episode_boundaries)
-for i in range(n_episodes):
-    start_idx = episode_boundaries[i]
-    end_idx = episode_boundaries[i + 1] if i + 1 < len(episode_boundaries) else len(cash_arr)
-
-    if end_idx <= start_idx:
-        continue
-
-    ep_cash = cash_arr[start_idx:end_idx]
-    ep_inv = inv_arr[start_idx:end_idx]
-    ep_profit = ep_cash - j["cash"]
-    ep_t = np.arange(len(ep_cash))
-
-    all_cash.append(ep_cash)
-    all_inv.append(ep_inv)
-    all_profit.append(ep_profit)
-
-    ax1.plot(ep_t, ep_cash, color="steelblue", alpha=0.15, linewidth=0.8)
-    ax2.plot(ep_t, ep_inv, color="tomato", alpha=0.15, linewidth=0.8)
-    ax3.plot(ep_t, ep_profit, color="mediumseagreen", alpha=0.15, linewidth=0.8)
-
-# --- Mean across episodes (pad shorter episodes with NaN) ---
-max_len = max(len(a) for a in all_cash)
-def pad_to(arr, length):
-    out = np.full(length, np.nan)
-    out[:len(arr)] = arr
-    return out
-
-all_cash_mat = np.array([pad_to(a, max_len) for a in all_cash])
-all_inv_mat = np.array([pad_to(a, max_len) for a in all_inv])
-all_profit_mat = np.array([pad_to(a, max_len) for a in all_profit])
-
-mean_cash = np.nanmean(all_cash_mat, axis=0)
-mean_inv = np.nanmean(all_inv_mat, axis=0)
-mean_profit = np.nanmean(all_profit_mat, axis=0)
-steps = np.arange(max_len)
-
-ax1.plot(steps, mean_cash, color="darkblue", linewidth=2.5, zorder=5, label="Mean")
-ax2.plot(steps, mean_inv, color="darkred", linewidth=2.5, zorder=5, label="Mean")
-ax3.plot(steps, mean_profit, color="darkgreen", linewidth=2.5, zorder=5, label="Mean")
-
-# --- Styling ---
-ax1.set_title("Cash")
-ax1.set_ylabel("Cash")
-ax1.legend()
-ax2.set_title("Inventory")
-ax2.set_ylabel("Inventory")
-ax2.legend()
-ax3.set_title("Profit")
-ax3.set_ylabel("Profit")
-ax3.legend()
-
-for ax in (ax1, ax2, ax3):
-    ax.set_xlabel("Time steps (per episode)")
-    ax.grid(True, linestyle="--", alpha=0.4)
-
-plt.tight_layout()
-plt.savefig(log_dir + label + "_policy_byepisode.png")
 
 start_midprices_array = np.array(start_midprices)
 
