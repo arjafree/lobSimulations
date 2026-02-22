@@ -332,7 +332,7 @@ def plot_twap_execution_prices(episode_num, all_prices, all_times, all_start_pri
     plt.close()
     print(f"Saved TWAP execution price plot to {save_path}")
 
-for episode in range(4):
+for episode in range(17):
     RL_agent_obsv = []
     TWAP_agent_obsv = []
     total_executed = 0
@@ -921,7 +921,7 @@ for ax in (ax1, ax2, ax3):
     ax.grid(True, linestyle="--", alpha=0.6)
 
 plt.tight_layout()
-plt.savefig(log_dir + label + "_policy.png")
+plt.savefig(log_dir + label + "_policy_byepisode.png")
 
 start_midprices_array = np.array(start_midprices)
 
