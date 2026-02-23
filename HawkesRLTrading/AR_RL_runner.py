@@ -469,7 +469,7 @@ for episode in range(17):
                 # print(f'Prev avg reward: {np.mean([r[2] for r in agent.experience_replay[-100:]]):0.4f}')
                 i_eps+=1
                 logger.debug(f"\nSimstate: {Simstate}\nObservations: {observations}\nTermination: {termination}\nTruncation: {truncation}")
-                if len(t) > 0 and Simstate['TimeCode'] < t[-1]:
+                if len(t) > 1 and t[-1] < t[-2]:
                     # Episode has reset - mark boundary
                     episode_boundaries.append(len(cashs[agent.id]))
                 # Calculate current PnL (cash + inventory value)
