@@ -315,9 +315,6 @@ for episode in range(80):
                         inventory_with_twap_buy.append(observations["Inventory"])
                 else:
                     inventory_without_twap.append(observations["Inventory"])
-                if len(t) > 0 and Simstate['TimeCode'] < t[-1]:
-                    # Episode has reset - mark boundary
-                    episode_boundaries.append(len(cashs[agent.id]))
                 t += [Simstate['TimeCode']]
                 # agent.appendER((agent.readData(observations_prev), agentAction, agent.calculaterewards(termination), agent.readData(observations_prev), (termination or truncation)))
                 agent.store_transition(episode, agent.readData(observations_prev), agentAction[1], agent.calculaterewards(termination), agent.readData(observations), (termination or truncation))
@@ -325,6 +322,9 @@ for episode in range(80):
                 # print(f'Prev avg reward: {np.mean([r[2] for r in agent.experience_replay[-100:]]):0.4f}')
                 i_eps+=1
                 logger.debug(f"\nSimstate: {Simstate}\nObservations: {observations}\nTermination: {termination}\nTruncation: {truncation}")
+                if len(t) > 0 and Simstate['TimeCode'] < t[-1]:
+                    # Episode has reset - mark boundary
+                    episode_boundaries.append(len(cashs[agent.id]))
                 # Calculate current PnL (cash + inventory value)
                 current_pnl = cashs[agent.id][-1] + inventories[agent.id][-1] * agent.mid * (1 - tc*np.sign(inventories[agent.id][-1]))
                 finalcash2.append(current_pnl)
