@@ -1433,7 +1433,7 @@ class PPOAgent(GymTradingAgent):
         self.resetseed(seed)
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-        # self.device = torch.device("cuda:0" if torch.cuda.is_available() else "mps")
+        # self.device = torch.device("c/uda:0" if torch.cuda.is_available() else "mps")
 
         #allowed actions:
 

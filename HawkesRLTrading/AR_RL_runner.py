@@ -9,8 +9,8 @@ import random
 
 # log_dir = '/home/ajafree/untrained_rl_testing/outputs'
 # log_dir = '/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/outputs/'
-# model_dir = '/home/ajafree/testing_adversarial/models'
-# model_dir = '/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/models/'
+# model_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/model'
+# log_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/logs/'
 log_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/logs/'
 model_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/model'
 
@@ -352,6 +352,7 @@ for episode in range(17):
     episode_twap_exec_times = []   # Track execution times for this episode
     i = 0
     action_num = 0
+    prev_readData = None
     env=tradingEnv(stop_time=550, wall_time_limit=23400, **kwargs)
     print("Initial Observations"+ str(env.getobservations()))
     Simstate, observations, termination, truncation =env.step(action=None) 
@@ -440,7 +441,6 @@ for episode in range(17):
                 print(f"RL Action: {action}")
                 print(f"Limit Order Book: {observationsDict.get(agent.id, {}).get('LOB0', '')}")
                 print(f"RL Inventory: {observationsDict.get(agent.id, {}).get('Inventory', '')}")
-                observations_prev = observationsDict[agent.id].copy() if i != 0 else observations.copy()
                 Simstate, observations, termination, truncation=env.step(action=action) #do not try and use this data before this line in the loop
                 if Simstate["TimeCode"] < twap_time:
                     # Before TWAP phase (0-249)
@@ -464,7 +464,10 @@ for episode in range(17):
                 actionss.update({agent.id: actionss.get(agent.id, []) + [action[1][0]]})
                 t += [Simstate['TimeCode']]
                 # agent.appendER((agent.readData(observations_prev), agentAction, agent.calculaterewards(termination), agent.readData(observations_prev), (termination or truncation)))
-                agent.store_transition(episode, agent.readData(observations_prev), agentAction[1], agent.calculaterewards(termination), agent.readData(observations), (termination or truncation))
+                current_readData = agent.readData(observations)
+                if prev_readData is not None:
+                    agent.store_transition(episode, prev_readData, agentAction[1], agent.calculaterewards(termination), current_readData, (termination or truncation))
+                prev_readData = current_readData
                 print(f'Current reward: {agent.calculaterewards(termination):0.4f}')
                 # print(f'Prev avg reward: {np.mean([r[2] for r in agent.experience_replay[-100:]]):0.4f}')
                 i_eps+=1
