@@ -238,6 +238,7 @@ for episode in range(80):
     kwargs["GymTradingAgent"][1]["side"] = twap_side
     i = 0
     action_num = 0
+    prev_readData = None
     env=tradingEnv(stop_time=550, wall_time_limit=23400, **kwargs)
     print(f"Start of episode {episode}. TWAP side is {twap_side}")
     print("Initial Observations"+ str(env.getobservations()))
@@ -301,13 +302,7 @@ for episode in range(80):
                 RLagentID = agent.id
                 agentAction:Tuple[int, int] = agent.get_action(data=env.getobservations(agentID=agent.id), epsilon = 0.5 if i_eps < 100 else 0.1)
                 action = (agent.id, (agentAction[0],1))
-                observations_prev = observationsDict[agent.id].copy() if i != 0 else observations.copy()
                 Simstate, observations, termination, truncation=env.step(action=action) #do not try and use this data before this line in the loop
-                observationsDict.update({agent.id:observations})
-                logger.debug(f"\n Agent: {agent.id}\n Simstate: {Simstate}\nObservations: {observations}\nTermination: {termination}\nTruncation: {truncation}")
-                cashs.update({agent.id:cashs.get(agent.id, [])+[observations['Cash']]})
-                inventories.update({agent.id:inventories.get(agent.id, []) + [observations['Inventory']]})
-                actionss.update({agent.id: actionss.get(agent.id, []) + [action[1][0]]})
                 if(twap_end_time > Simstate['TimeCode'] > twap_start_time):
                     if twap_side == "sell":
                         inventory_with_twap_sell.append(observations["Inventory"])
@@ -315,14 +310,21 @@ for episode in range(80):
                         inventory_with_twap_buy.append(observations["Inventory"])
                 else:
                     inventory_without_twap.append(observations["Inventory"])
+                observationsDict.update({agent.id:observations})
+                logger.debug(f"\n Agent: {agent.id}\n Simstate: {Simstate}\nObservations: {observations}\nTermination: {termination}\nTruncation: {truncation}")
+                cashs.update({agent.id:cashs.get(agent.id, [])+[observations['Cash']]})
+                inventories.update({agent.id:inventories.get(agent.id, []) + [observations['Inventory']]})
+                actionss.update({agent.id: actionss.get(agent.id, []) + [action[1][0]]})
                 t += [Simstate['TimeCode']]
-                # agent.appendER((agent.readData(observations_prev), agentAction, agent.calculaterewards(termination), agent.readData(observations_prev), (termination or truncation)))
-                agent.store_transition(episode, agent.readData(observations_prev), agentAction[1], agent.calculaterewards(termination), agent.readData(observations), (termination or truncation))
+                current_readData = agent.readData(observations)
+                if prev_readData is not None:
+                    agent.store_transition(episode, prev_readData, agentAction[1], agent.calculaterewards(termination), current_readData, (termination or truncation))
+                prev_readData = current_readData
                 print(f'Current reward: {agent.calculaterewards(termination):0.4f}')
                 # print(f'Prev avg reward: {np.mean([r[2] for r in agent.experience_replay[-100:]]):0.4f}')
                 i_eps+=1
                 logger.debug(f"\nSimstate: {Simstate}\nObservations: {observations}\nTermination: {termination}\nTruncation: {truncation}")
-                if len(t) > 0 and Simstate['TimeCode'] < t[-1]:
+                if len(t) > 1 and t[-1] < t[-2]:
                     # Episode has reset - mark boundary
                     episode_boundaries.append(len(cashs[agent.id]))
                 # Calculate current PnL (cash + inventory value)
