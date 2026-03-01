@@ -1401,7 +1401,7 @@ class PPOAgent(GymTradingAgent):
                  buffer_capacity=10000, batch_size=64, epochs=1000, layer_widths = 128, n_layers = 3, clip_ratio=0.2,
                  value_loss_coef=0.5, entropy_coef=10, max_grad_norm=0.5, gae_lambda=0.95, rewardpenalty = 0.1, hidden_activation='leaky_relu',
                  transaction_cost = 0.01, start_trading_lag=0, truncation_enabled=True, action_space_config = 0, include_time = False, alt_state=False, enhance_state=False,
-                 policy_loss_coef = 1, optim_type = 'ADAM',lr=1e-3, exploration_bonus = 0, two_sided_reward = True, ablation_params= {}, typeNN = "dense"):
+                 policy_loss_coef = 1, optim_type = 'ADAM',lr=1e-3, exploration_bonus = 0, two_sided_reward = True, ablation_params= {}, typeNN = "dense", chunk_length=64):
         """
         PPO Agent with Generalized Advantage Estimation (GAE)
         Maintains two networks: one for decision (d) and one for utility (u)
@@ -1481,6 +1481,7 @@ class PPOAgent(GymTradingAgent):
         self.ablation_params = ablation_params
         # NN Type
         self.typeNN = typeNN
+        self.chunk_length = chunk_length
         # Enable anomaly detection for debugging
         torch.autograd.set_detect_anomaly(True)
 
@@ -1889,34 +1890,44 @@ class PPOAgent(GymTradingAgent):
 
     def train(self, train_logger, use_CEM = False):
         """
-        PPO training method using entire episode trajectory
+        PPO training method using entire episode trajectory.
+        Dense branch: random timestep sampling (stateless networks).
+        LSTM branch: chunk-based PPO with preserved temporal context.
         """
         # Ensure we have a full trajectory
         if len(self.trajectory_buffer) < 2:
             return
+
+        if self.typeNN == "LSTM":
+            self._train_lstm(train_logger)
+        else:
+            self._train_dense(train_logger, use_CEM)
+
+        # Clear trajectory buffer after training
+        while len(self.trajectory_buffer) > self.buffer_capacity:
+            eID = self.trajectory_buffer[0][0]
+            end_idx = np.max([i for i in range(len(self.trajectory_buffer)) if self.trajectory_buffer[i][0] == eID]) + 1
+            self.trajectory_buffer = self.trajectory_buffer[end_idx:]
+            gc.collect()
+        return [0]*6
+
+    def _train_dense(self, train_logger, use_CEM=False):
+        """Dense (stateless) PPO training — original random timestep sampling."""
         tmp_buffer = []
         eIDs = np.unique([tr[0] for tr in self.trajectory_buffer])
         for eID in eIDs:
-            # Prepare training data
             states = torch.cat([tr[1][0] for tr in self.trajectory_buffer if tr[0] == eID]).to(self.device)
             d_actions = torch.tensor([tr[1][1] for tr in self.trajectory_buffer if tr[0] == eID]).to(self.device)
             u_actions = torch.tensor([tr[1][2] for tr in self.trajectory_buffer if tr[0] == eID]).to(self.device)
             rewards = [tr[1][3] for tr in self.trajectory_buffer if tr[0] == eID]
             dones = [tr[1][5] for tr in self.trajectory_buffer if tr[0] == eID]
 
-            # Compute values and log probabilities
             with torch.no_grad():
-                # Decision network
                 d_logits_old, values_d_old = self.Actor_Critic_d(states)
                 d_log_probs_old = F.log_softmax(d_logits_old, dim=1).gather(1, d_actions.unsqueeze(1)).squeeze()
-                # values_d_old = torch.stack([self.Critic_d(s)[1] for s in states]).squeeze()
-
-                # Utility network
                 u_logits_old, values_u_old = self.Actor_Critic_u(states)
                 u_log_probs_old = F.log_softmax(u_logits_old, dim=1).gather(1, u_actions.unsqueeze(1)).squeeze()
-                # values_u_old = torch.stack([self.Critic_u(s)[1] for s in states]).squeeze()
 
-            # Compute Generalized Advantage Estimation
             advantages_d, returns_d, advantages_u, returns_u = self.compute_gae(
                 rewards,
                 values_d_old.cpu().numpy().flatten().tolist(),
@@ -1929,69 +1940,42 @@ class PPOAgent(GymTradingAgent):
         if use_CEM:
             cem_states_d, cem_d_actions = self.get_CEM_data(type='d')
             cem_states_u, cem_u_actions = self.get_CEM_data(type='u')
-        # PPO training for multiple epochs
-        # idxs =np.random.choice(np.arange(len(_states)), self.batch_size)
         for _ in range(self.epochs):
             idxs =np.random.choice(np.arange(len(_states)), self.batch_size)
             states, d_actions, u_actions, d_logits_old, values_d_old, d_log_probs_old, u_logits_old, values_u_old, u_log_probs_old, advantages_d, returns_d, advantages_u, returns_u = _states[idxs,:], _d_actions[idxs], _u_actions[idxs], _d_logits_old[idxs,:], _values_d_old[idxs,:], _d_log_probs_old[idxs], _u_logits_old[idxs,:], _values_u_old[idxs,:], _u_log_probs_old[idxs], _advantages_d[idxs], _returns_d[idxs], _advantages_u[idxs], _returns_u[idxs]
 
-            # Reset LSTM hidden state before minibatch forward pass
-            if self.typeNN == "LSTM":
-                self.Actor_Critic_d.reset_hidden_state(batch_size=len(states))
-
-            # Decision Network Training
-            # Current policy output
             d_logits, d_values_pred = self.Actor_Critic_d(states)
             if use_CEM:
                 idxs =np.random.choice(np.arange(len(cem_states_d)), self.batch_size)
                 d_logits, _ = self.Actor_Critic_d(torch.cat(cem_states_d)[idxs,:])
                 d_policy_loss = F.cross_entropy(d_logits, torch.tensor(cem_d_actions)[idxs].to(self.device))
-
             else:
                 d_log_probs = F.log_softmax(d_logits, dim=1).gather(1, d_actions.unsqueeze(1)).squeeze()
-
-                # Compute ratios
                 d_ratios = torch.exp(d_log_probs - d_log_probs_old)
-
-                # PPO Clipped Objective for Decision Network
                 d_surr1 = d_ratios * advantages_d
                 d_surr2 = torch.clamp(d_ratios, 1 - self.clip_ratio, 1 + self.clip_ratio) * advantages_d
                 d_policy_loss = -torch.min(d_surr1, d_surr2).mean()
 
-            # Value loss for Decision Network
-            # d_values_pred, _ = self.Critic_d(states)
             d_value_loss = F.mse_loss(d_values_pred.squeeze(), returns_d)
-
-            # Entropy for Decision Network
             d_entropy_loss = -(torch.softmax(d_logits, dim=1) * F.log_softmax(d_logits, dim=1)).sum(dim=1).mean()
-
-            # Total Decision Network Loss
             d_loss = (self.policy_loss_coef*d_policy_loss +
                       self.value_loss_coef * d_value_loss -
                       self.entropy_coef * d_entropy_loss)
 
-            # Optimize Decision Network
             self.optimizer_d.zero_grad()
             d_loss.backward(retain_graph=True)
             torch.nn.utils.clip_grad_norm_(self.Actor_Critic_d.parameters(), self.max_grad_norm)
             self.optimizer_d.step()
             self.scheduler_d.step()
-            # Utility Network Training
-            # Only train utility network for trajectories with d=1
+
             d_mask = (d_actions == 1)
             if d_mask.any():
-                # Filter states and other tensors
                 states_u = states[d_mask]
                 u_actions_u = u_actions[d_mask]
                 advantages_u_filtered = advantages_u[d_mask]
                 returns_u_filtered = returns_u[d_mask]
                 u_log_probs_old_filtered = u_log_probs_old[d_mask]
 
-                # Reset LSTM hidden state before minibatch forward pass
-                if self.typeNN == "LSTM":
-                    self.Actor_Critic_u.reset_hidden_state(batch_size=len(states_u))
-
-                # Current policy output
                 u_logits, u_values_pred = self.Actor_Critic_u(states_u)
                 if use_CEM:
                     idxs =np.random.choice(np.arange(len(cem_states_u)), self.batch_size)
@@ -1999,60 +1983,301 @@ class PPOAgent(GymTradingAgent):
                     u_policy_loss = F.cross_entropy(u_logits, torch.tensor(cem_u_actions)[idxs].to(self.device))
                 else:
                     u_log_probs = F.log_softmax(u_logits, dim=1).gather(1, u_actions_u.unsqueeze(1)).squeeze()
-
-                    # Compute ratios
                     u_ratios = torch.exp(u_log_probs - u_log_probs_old_filtered)
-
-                    # PPO Clipped Objective for Utility Network
                     u_surr1 = u_ratios * advantages_u_filtered
                     u_surr2 = torch.clamp(u_ratios, 1 - self.clip_ratio, 1 + self.clip_ratio) * advantages_u_filtered
                     u_policy_loss = -torch.min(u_surr1, u_surr2).mean()
 
                 u_value_loss = F.mse_loss(u_values_pred.squeeze(), returns_u_filtered)
-
-                # Entropy for Utility Network
                 u_entropy_loss = -(torch.softmax(u_logits, dim=1) * F.log_softmax(u_logits, dim=1)).sum(dim=1).mean()
-
-                # Total Utility Network Loss
                 u_loss = (u_policy_loss +
                           self.value_loss_coef * u_value_loss -
                           self.entropy_coef * u_entropy_loss)
 
-                # Optimize Utility Network
                 self.optimizer_u.zero_grad()
                 u_loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.Actor_Critic_u.parameters(), self.max_grad_norm)
                 self.optimizer_u.step()
                 self.scheduler_u.step()
-                # Print losses for monitoring
                 print(f'Utility Network - Policy Loss: {u_policy_loss.item():.4f}, '
                       f'Value Loss: {u_value_loss.item():.4f}, '
                       f'Entropy Loss: {u_entropy_loss.item():.4f}')
 
-            # Print losses for monitoring
             print(f'Decision Network - Policy Loss: {d_policy_loss.item():.4f}, '
                   f'Value Loss: {d_value_loss.item():.4f}, '
                   f'Entropy Loss: {d_entropy_loss.item():.4f}')
 
             train_logger.log_losses(d_policy_loss  = d_policy_loss.item(), d_value_loss = d_value_loss.item(), d_entropy_loss = d_entropy_loss.item(), u_policy_loss = u_policy_loss.item(), u_value_loss = u_value_loss.item(), u_entropy_loss = u_entropy_loss.item())
-            del d_policy_loss
-            del d_value_loss
-            del d_entropy_loss
-            del u_policy_loss
-            del u_value_loss
-            del u_entropy_loss
-            del u_logits
-            del u_values_pred
-            del d_logits
-            del d_values_pred
-        # Clear trajectory buffer after training
-        while len(self.trajectory_buffer) > self.buffer_capacity:
-            eID = self.trajectory_buffer[0][0]
-            end_idx = np.max([i for i in range(len(self.trajectory_buffer)) if self.trajectory_buffer[i][0] == eID]) + 1
-            self.trajectory_buffer = self.trajectory_buffer[end_idx:]
-            gc.collect()
-        # return d_policy_loss.item(), d_value_loss.item(), d_entropy_loss.item(), u_policy_loss.item(), u_value_loss.item(), u_entropy_loss.item()
-        return [0]*6
+            del d_policy_loss, d_value_loss, d_entropy_loss
+            del u_policy_loss, u_value_loss, u_entropy_loss
+            del u_logits, u_values_pred, d_logits, d_values_pred
+
+    def _train_lstm(self, train_logger):
+        """
+        Chunk-based PPO-LSTM training.
+        Preserves temporal context by splitting episodes into sequential chunks,
+        sampling chunks randomly, and restoring hidden states at chunk boundaries.
+        """
+        chunk_length = self.chunk_length
+        eIDs = np.unique([tr[0] for tr in self.trajectory_buffer])
+        all_chunks = []
+
+        # ---- Phase A: Compute old log probs sequentially per episode ----
+        for eID in eIDs:
+            ep_data = [(tr[1]) for tr in self.trajectory_buffer if tr[0] == eID]
+            states = torch.cat([t[0] for t in ep_data]).to(self.device)
+            d_actions = torch.tensor([t[1] for t in ep_data]).to(self.device)
+            u_actions = torch.tensor([t[2] for t in ep_data]).to(self.device)
+            rewards = [t[3] for t in ep_data]
+            dones = [t[5] for t in ep_data]
+            T = len(states)
+
+            # Initialize hidden states to zeros (episode boundary)
+            n_layers_d = self.Actor_Critic_d.actor.n_layers
+            hidden_dim_d = self.Actor_Critic_d.actor.hidden_dim
+            n_layers_u = self.Actor_Critic_u.actor.n_layers
+            hidden_dim_u = self.Actor_Critic_u.actor.hidden_dim
+            # Critic may have different dims if architecture differs, but typically same
+            hidden_dim_d_c = self.Actor_Critic_d.critic.hidden_dim
+            hidden_dim_u_c = self.Actor_Critic_u.critic.hidden_dim
+
+            d_actor_h = torch.zeros(n_layers_d, 1, hidden_dim_d, device=self.device)
+            d_actor_c = torch.zeros(n_layers_d, 1, hidden_dim_d, device=self.device)
+            d_critic_h = torch.zeros(n_layers_d, 1, hidden_dim_d_c, device=self.device)
+            d_critic_c = torch.zeros(n_layers_d, 1, hidden_dim_d_c, device=self.device)
+            u_actor_h = torch.zeros(n_layers_u, 1, hidden_dim_u, device=self.device)
+            u_actor_c = torch.zeros(n_layers_u, 1, hidden_dim_u, device=self.device)
+            u_critic_h = torch.zeros(n_layers_u, 1, hidden_dim_u_c, device=self.device)
+            u_critic_c = torch.zeros(n_layers_u, 1, hidden_dim_u_c, device=self.device)
+
+            # Collect per-chunk hidden states and logits/values
+            chunk_boundaries = []  # (chunk_start, chunk_end, saved_hidden_dict)
+            all_d_logits = []
+            all_d_values = []
+            all_u_logits = []
+            all_u_values = []
+
+            with torch.no_grad():
+                for chunk_start in range(0, T, chunk_length):
+                    chunk_end = min(chunk_start + chunk_length, T)
+                    chunk_states = states[chunk_start:chunk_end].unsqueeze(0)  # (1, actual_len, features)
+
+                    # Save hidden states BEFORE processing this chunk
+                    saved_hidden = {
+                        'd_actor_h': d_actor_h.clone(), 'd_actor_c': d_actor_c.clone(),
+                        'd_critic_h': d_critic_h.clone(), 'd_critic_c': d_critic_c.clone(),
+                        'u_actor_h': u_actor_h.clone(), 'u_actor_c': u_actor_c.clone(),
+                        'u_critic_h': u_critic_h.clone(), 'u_critic_c': u_critic_c.clone(),
+                    }
+
+                    # Forward through d-network
+                    d_logits_chunk, d_values_chunk, d_actor_final, d_critic_final = \
+                        self.Actor_Critic_d.forward_sequence(
+                            chunk_states, (d_actor_h, d_actor_c), (d_critic_h, d_critic_c))
+                    d_actor_h, d_actor_c = d_actor_final
+                    d_critic_h, d_critic_c = d_critic_final
+
+                    # Forward through u-network
+                    u_logits_chunk, u_values_chunk, u_actor_final, u_critic_final = \
+                        self.Actor_Critic_u.forward_sequence(
+                            chunk_states, (u_actor_h, u_actor_c), (u_critic_h, u_critic_c))
+                    u_actor_h, u_actor_c = u_actor_final
+                    u_critic_h, u_critic_c = u_critic_final
+
+                    # Remove batch dim: (1, seq_len, dim) -> (seq_len, dim)
+                    all_d_logits.append(d_logits_chunk.squeeze(0))
+                    all_d_values.append(d_values_chunk.squeeze(0))
+                    all_u_logits.append(u_logits_chunk.squeeze(0))
+                    all_u_values.append(u_values_chunk.squeeze(0))
+                    chunk_boundaries.append((chunk_start, chunk_end, saved_hidden))
+
+            # Concatenate for full episode
+            d_logits_all = torch.cat(all_d_logits, dim=0)  # (T, action_dim)
+            d_values_all = torch.cat(all_d_values, dim=0)  # (T, 1)
+            u_logits_all = torch.cat(all_u_logits, dim=0)
+            u_values_all = torch.cat(all_u_values, dim=0)
+
+            # Compute old log probs
+            d_log_probs_old = F.log_softmax(d_logits_all, dim=-1).gather(1, d_actions.unsqueeze(1)).squeeze(1)
+            u_log_probs_old = F.log_softmax(u_logits_all, dim=-1).gather(1, u_actions.unsqueeze(1)).squeeze(1)
+
+            # Compute GAE
+            advantages_d, returns_d, advantages_u, returns_u = self.compute_gae(
+                rewards,
+                d_values_all.cpu().numpy().flatten().tolist(),
+                u_values_all.cpu().numpy().flatten().tolist(),
+                dones
+            )
+
+            # Package each chunk with padded data and validity mask
+            for chunk_start, chunk_end, saved_hidden in chunk_boundaries:
+                actual_len = chunk_end - chunk_start
+                pad_len = chunk_length - actual_len
+
+                cs, ce = chunk_start, chunk_end
+                chunk_s = states[cs:ce]
+                chunk_da = d_actions[cs:ce]
+                chunk_ua = u_actions[cs:ce]
+                chunk_dlp = d_log_probs_old[cs:ce]
+                chunk_ulp = u_log_probs_old[cs:ce]
+                chunk_adv_d = advantages_d[cs:ce]
+                chunk_ret_d = returns_d[cs:ce]
+                chunk_adv_u = advantages_u[cs:ce]
+                chunk_ret_u = returns_u[cs:ce]
+
+                mask = torch.ones(chunk_length, device=self.device)
+
+                if pad_len > 0:
+                    chunk_s = F.pad(chunk_s, (0, 0, 0, pad_len))
+                    chunk_da = F.pad(chunk_da, (0, pad_len))
+                    chunk_ua = F.pad(chunk_ua, (0, pad_len))
+                    chunk_dlp = F.pad(chunk_dlp, (0, pad_len))
+                    chunk_ulp = F.pad(chunk_ulp, (0, pad_len))
+                    chunk_adv_d = F.pad(chunk_adv_d, (0, pad_len))
+                    chunk_ret_d = F.pad(chunk_ret_d, (0, pad_len))
+                    chunk_adv_u = F.pad(chunk_adv_u, (0, pad_len))
+                    chunk_ret_u = F.pad(chunk_ret_u, (0, pad_len))
+                    mask[actual_len:] = 0
+
+                all_chunks.append({
+                    'states': chunk_s,           # (chunk_length, features)
+                    'd_actions': chunk_da,       # (chunk_length,)
+                    'u_actions': chunk_ua,
+                    'd_log_probs_old': chunk_dlp,
+                    'u_log_probs_old': chunk_ulp,
+                    'advantages_d': chunk_adv_d,
+                    'returns_d': chunk_ret_d,
+                    'advantages_u': chunk_adv_u,
+                    'returns_u': chunk_ret_u,
+                    'mask': mask,
+                    **saved_hidden,  # d_actor_h/c, d_critic_h/c, u_actor_h/c, u_critic_h/c
+                })
+
+        # ---- Phase B: PPO minibatch updates using chunks ----
+        num_chunks = len(all_chunks)
+        num_chunks_per_batch = max(1, self.batch_size // chunk_length)
+
+        for _ in range(self.epochs):
+            chunk_idxs = np.random.choice(num_chunks, min(num_chunks_per_batch, num_chunks), replace=False)
+            B = len(chunk_idxs)
+
+            # Stack sampled chunks into batched tensors
+            batch_states = torch.stack([all_chunks[i]['states'] for i in chunk_idxs])         # (B, chunk_length, features)
+            batch_d_actions = torch.stack([all_chunks[i]['d_actions'] for i in chunk_idxs])   # (B, chunk_length)
+            batch_u_actions = torch.stack([all_chunks[i]['u_actions'] for i in chunk_idxs])
+            batch_d_lp_old = torch.stack([all_chunks[i]['d_log_probs_old'] for i in chunk_idxs])
+            batch_u_lp_old = torch.stack([all_chunks[i]['u_log_probs_old'] for i in chunk_idxs])
+            batch_adv_d = torch.stack([all_chunks[i]['advantages_d'] for i in chunk_idxs])
+            batch_ret_d = torch.stack([all_chunks[i]['returns_d'] for i in chunk_idxs])
+            batch_adv_u = torch.stack([all_chunks[i]['advantages_u'] for i in chunk_idxs])
+            batch_ret_u = torch.stack([all_chunks[i]['returns_u'] for i in chunk_idxs])
+            batch_mask = torch.stack([all_chunks[i]['mask'] for i in chunk_idxs])
+
+            # Stack hidden states along batch dim: (n_layers, 1, hidden_dim) -> (n_layers, B, hidden_dim)
+            batch_d_actor_h = torch.cat([all_chunks[i]['d_actor_h'] for i in chunk_idxs], dim=1)
+            batch_d_actor_c = torch.cat([all_chunks[i]['d_actor_c'] for i in chunk_idxs], dim=1)
+            batch_d_critic_h = torch.cat([all_chunks[i]['d_critic_h'] for i in chunk_idxs], dim=1)
+            batch_d_critic_c = torch.cat([all_chunks[i]['d_critic_c'] for i in chunk_idxs], dim=1)
+            batch_u_actor_h = torch.cat([all_chunks[i]['u_actor_h'] for i in chunk_idxs], dim=1)
+            batch_u_actor_c = torch.cat([all_chunks[i]['u_actor_c'] for i in chunk_idxs], dim=1)
+            batch_u_critic_h = torch.cat([all_chunks[i]['u_critic_h'] for i in chunk_idxs], dim=1)
+            batch_u_critic_c = torch.cat([all_chunks[i]['u_critic_c'] for i in chunk_idxs], dim=1)
+
+            # === Decision Network ===
+            d_logits_seq, d_values_seq, _, _ = self.Actor_Critic_d.forward_sequence(
+                batch_states, (batch_d_actor_h, batch_d_actor_c), (batch_d_critic_h, batch_d_critic_c))
+
+            # Flatten: (B, chunk_length, dim) -> (B*chunk_length, dim)
+            d_logits_flat = d_logits_seq.reshape(B * chunk_length, -1)
+            d_values_flat = d_values_seq.reshape(B * chunk_length, -1)
+            d_actions_flat = batch_d_actions.reshape(B * chunk_length)
+            d_lp_old_flat = batch_d_lp_old.reshape(B * chunk_length)
+            adv_d_flat = batch_adv_d.reshape(B * chunk_length)
+            ret_d_flat = batch_ret_d.reshape(B * chunk_length)
+            mask_flat = batch_mask.reshape(B * chunk_length)
+
+            valid = mask_flat.bool()
+            d_logits_v = d_logits_flat[valid]
+            d_values_v = d_values_flat[valid]
+            d_actions_v = d_actions_flat[valid]
+            d_lp_old_v = d_lp_old_flat[valid]
+            adv_d_v = adv_d_flat[valid]
+            ret_d_v = ret_d_flat[valid]
+
+            d_log_probs = F.log_softmax(d_logits_v, dim=1).gather(1, d_actions_v.unsqueeze(1)).squeeze(1)
+            d_ratios = torch.exp(d_log_probs - d_lp_old_v)
+            d_surr1 = d_ratios * adv_d_v
+            d_surr2 = torch.clamp(d_ratios, 1 - self.clip_ratio, 1 + self.clip_ratio) * adv_d_v
+            d_policy_loss = -torch.min(d_surr1, d_surr2).mean()
+            d_value_loss = F.mse_loss(d_values_v.squeeze(), ret_d_v)
+            d_entropy_loss = -(torch.softmax(d_logits_v, dim=1) * F.log_softmax(d_logits_v, dim=1)).sum(dim=1).mean()
+
+            d_loss = (self.policy_loss_coef * d_policy_loss +
+                      self.value_loss_coef * d_value_loss -
+                      self.entropy_coef * d_entropy_loss)
+
+            self.optimizer_d.zero_grad()
+            d_loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.Actor_Critic_d.parameters(), self.max_grad_norm)
+            self.optimizer_d.step()
+            self.scheduler_d.step()
+
+            # === Utility Network: process full chunks for temporal context, loss only on d==1 ===
+            u_logits_seq, u_values_seq, _, _ = self.Actor_Critic_u.forward_sequence(
+                batch_states, (batch_u_actor_h, batch_u_actor_c), (batch_u_critic_h, batch_u_critic_c))
+
+            u_logits_flat = u_logits_seq.reshape(B * chunk_length, -1)
+            u_values_flat = u_values_seq.reshape(B * chunk_length, -1)
+            u_actions_flat = batch_u_actions.reshape(B * chunk_length)
+            u_lp_old_flat = batch_u_lp_old.reshape(B * chunk_length)
+            adv_u_flat = batch_adv_u.reshape(B * chunk_length)
+            ret_u_flat = batch_ret_u.reshape(B * chunk_length)
+
+            # Mask: valid timesteps AND d_actions == 1
+            u_mask = valid & (d_actions_flat == 1)
+
+            if u_mask.any():
+                u_logits_v = u_logits_flat[u_mask]
+                u_values_v = u_values_flat[u_mask]
+                u_actions_v = u_actions_flat[u_mask]
+                u_lp_old_v = u_lp_old_flat[u_mask]
+                adv_u_v = adv_u_flat[u_mask]
+                ret_u_v = ret_u_flat[u_mask]
+
+                u_log_probs = F.log_softmax(u_logits_v, dim=1).gather(1, u_actions_v.unsqueeze(1)).squeeze(1)
+                u_ratios = torch.exp(u_log_probs - u_lp_old_v)
+                u_surr1 = u_ratios * adv_u_v
+                u_surr2 = torch.clamp(u_ratios, 1 - self.clip_ratio, 1 + self.clip_ratio) * adv_u_v
+                u_policy_loss = -torch.min(u_surr1, u_surr2).mean()
+                u_value_loss = F.mse_loss(u_values_v.squeeze(), ret_u_v)
+                u_entropy_loss = -(torch.softmax(u_logits_v, dim=1) * F.log_softmax(u_logits_v, dim=1)).sum(dim=1).mean()
+
+                u_loss = (u_policy_loss +
+                          self.value_loss_coef * u_value_loss -
+                          self.entropy_coef * u_entropy_loss)
+
+                self.optimizer_u.zero_grad()
+                u_loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.Actor_Critic_u.parameters(), self.max_grad_norm)
+                self.optimizer_u.step()
+                self.scheduler_u.step()
+
+                print(f'Utility Network - Policy Loss: {u_policy_loss.item():.4f}, '
+                      f'Value Loss: {u_value_loss.item():.4f}, '
+                      f'Entropy Loss: {u_entropy_loss.item():.4f}')
+            else:
+                u_policy_loss = torch.tensor(0.0)
+                u_value_loss = torch.tensor(0.0)
+                u_entropy_loss = torch.tensor(0.0)
+
+            print(f'Decision Network - Policy Loss: {d_policy_loss.item():.4f}, '
+                  f'Value Loss: {d_value_loss.item():.4f}, '
+                  f'Entropy Loss: {d_entropy_loss.item():.4f}')
+
+            train_logger.log_losses(
+                d_policy_loss=d_policy_loss.item(), d_value_loss=d_value_loss.item(),
+                d_entropy_loss=d_entropy_loss.item(), u_policy_loss=u_policy_loss.item(),
+                u_value_loss=u_value_loss.item(), u_entropy_loss=u_entropy_loss.item())
 
     def get_max_contiguous_rewards(self, K):
         """
