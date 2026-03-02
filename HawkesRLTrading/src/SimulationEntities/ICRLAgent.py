@@ -1940,42 +1940,59 @@ class PPOAgent(GymTradingAgent):
         if use_CEM:
             cem_states_d, cem_d_actions = self.get_CEM_data(type='d')
             cem_states_u, cem_u_actions = self.get_CEM_data(type='u')
+        # PPO training for multiple epochs
         for _ in range(self.epochs):
             idxs =np.random.choice(np.arange(len(_states)), self.batch_size)
             states, d_actions, u_actions, d_logits_old, values_d_old, d_log_probs_old, u_logits_old, values_u_old, u_log_probs_old, advantages_d, returns_d, advantages_u, returns_u = _states[idxs,:], _d_actions[idxs], _u_actions[idxs], _d_logits_old[idxs,:], _values_d_old[idxs,:], _d_log_probs_old[idxs], _u_logits_old[idxs,:], _values_u_old[idxs,:], _u_log_probs_old[idxs], _advantages_d[idxs], _returns_d[idxs], _advantages_u[idxs], _returns_u[idxs]
 
+            # Decision Network Training
+            # Current policy output
             d_logits, d_values_pred = self.Actor_Critic_d(states)
             if use_CEM:
                 idxs =np.random.choice(np.arange(len(cem_states_d)), self.batch_size)
                 d_logits, _ = self.Actor_Critic_d(torch.cat(cem_states_d)[idxs,:])
                 d_policy_loss = F.cross_entropy(d_logits, torch.tensor(cem_d_actions)[idxs].to(self.device))
+
             else:
                 d_log_probs = F.log_softmax(d_logits, dim=1).gather(1, d_actions.unsqueeze(1)).squeeze()
+
+                # Compute ratios
                 d_ratios = torch.exp(d_log_probs - d_log_probs_old)
+
+                # PPO Clipped Objective for Decision Network
                 d_surr1 = d_ratios * advantages_d
                 d_surr2 = torch.clamp(d_ratios, 1 - self.clip_ratio, 1 + self.clip_ratio) * advantages_d
                 d_policy_loss = -torch.min(d_surr1, d_surr2).mean()
 
+            # Value loss for Decision Network
             d_value_loss = F.mse_loss(d_values_pred.squeeze(), returns_d)
+
+            # Entropy for Decision Network
             d_entropy_loss = -(torch.softmax(d_logits, dim=1) * F.log_softmax(d_logits, dim=1)).sum(dim=1).mean()
+
+            # Total Decision Network Loss
             d_loss = (self.policy_loss_coef*d_policy_loss +
                       self.value_loss_coef * d_value_loss -
                       self.entropy_coef * d_entropy_loss)
 
+            # Optimize Decision Network
             self.optimizer_d.zero_grad()
             d_loss.backward(retain_graph=True)
             torch.nn.utils.clip_grad_norm_(self.Actor_Critic_d.parameters(), self.max_grad_norm)
             self.optimizer_d.step()
             self.scheduler_d.step()
-
+            # Utility Network Training
+            # Only train utility network for trajectories with d=1
             d_mask = (d_actions == 1)
             if d_mask.any():
+                # Filter states and other tensors
                 states_u = states[d_mask]
                 u_actions_u = u_actions[d_mask]
                 advantages_u_filtered = advantages_u[d_mask]
                 returns_u_filtered = returns_u[d_mask]
                 u_log_probs_old_filtered = u_log_probs_old[d_mask]
 
+                # Current policy output
                 u_logits, u_values_pred = self.Actor_Critic_u(states_u)
                 if use_CEM:
                     idxs =np.random.choice(np.arange(len(cem_states_u)), self.batch_size)
@@ -1983,26 +2000,37 @@ class PPOAgent(GymTradingAgent):
                     u_policy_loss = F.cross_entropy(u_logits, torch.tensor(cem_u_actions)[idxs].to(self.device))
                 else:
                     u_log_probs = F.log_softmax(u_logits, dim=1).gather(1, u_actions_u.unsqueeze(1)).squeeze()
+
+                    # Compute ratios
                     u_ratios = torch.exp(u_log_probs - u_log_probs_old_filtered)
+
+                    # PPO Clipped Objective for Utility Network
                     u_surr1 = u_ratios * advantages_u_filtered
                     u_surr2 = torch.clamp(u_ratios, 1 - self.clip_ratio, 1 + self.clip_ratio) * advantages_u_filtered
                     u_policy_loss = -torch.min(u_surr1, u_surr2).mean()
 
                 u_value_loss = F.mse_loss(u_values_pred.squeeze(), returns_u_filtered)
+
+                # Entropy for Utility Network
                 u_entropy_loss = -(torch.softmax(u_logits, dim=1) * F.log_softmax(u_logits, dim=1)).sum(dim=1).mean()
+
+                # Total Utility Network Loss
                 u_loss = (u_policy_loss +
                           self.value_loss_coef * u_value_loss -
                           self.entropy_coef * u_entropy_loss)
 
+                # Optimize Utility Network
                 self.optimizer_u.zero_grad()
                 u_loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.Actor_Critic_u.parameters(), self.max_grad_norm)
                 self.optimizer_u.step()
                 self.scheduler_u.step()
+                # Print losses for monitoring
                 print(f'Utility Network - Policy Loss: {u_policy_loss.item():.4f}, '
                       f'Value Loss: {u_value_loss.item():.4f}, '
                       f'Entropy Loss: {u_entropy_loss.item():.4f}')
 
+            # Print losses for monitoring
             print(f'Decision Network - Policy Loss: {d_policy_loss.item():.4f}, '
                   f'Value Loss: {d_value_loss.item():.4f}, '
                   f'Entropy Loss: {d_entropy_loss.item():.4f}')
