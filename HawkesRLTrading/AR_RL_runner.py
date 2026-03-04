@@ -7,6 +7,8 @@ from HawkesRLTrading.src.Envs.HawkesRLTradingEnv import *
 import torch
 import random
 
+#TODO: change graph so it shows when twap starts, stops
+
 # log_dir = '/home/ajafree/untrained_rl_testing/outputs'
 # log_dir = '/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/outputs/'
 # model_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/model'

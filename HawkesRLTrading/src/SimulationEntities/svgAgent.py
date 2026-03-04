@@ -98,14 +98,28 @@ Tensor = torch.Tensor
 class LSTMModel(nn.Module):
     """A general LSTM feature extractor replacing the MLP."""
     def __init__(self, in_dim: int, out_dim: int, hidden_dim: int = 256, num_layers: int = 2,
-                 layernorm: bool = True):
+                 layernorm: bool = True, stateful: bool = False):
         super().__init__()
+        self.hidden_dim = hidden_dim
+        self.num_layers = num_layers
+        self.stateful = stateful
         self.lstm = nn.LSTM(input_size=in_dim,
                             hidden_size=hidden_dim,
                             num_layers=num_layers,
                             batch_first=True)
         self.layernorm = nn.LayerNorm(hidden_dim) if layernorm else nn.Identity()
         self.fc_out = nn.Linear(hidden_dim, out_dim)
+        self._hidden_state: Optional[torch.Tensor] = None
+        self._cell_state: Optional[torch.Tensor] = None
+        self._batch_size: Optional[int] = None
+
+    def reset_hidden_state(self, batch_size: int = 1):
+        if not self.stateful:
+            return
+        device = next(self.parameters()).device
+        self._hidden_state = torch.zeros(self.num_layers, batch_size, self.hidden_dim, device=device)
+        self._cell_state = torch.zeros(self.num_layers, batch_size, self.hidden_dim, device=device)
+        self._batch_size = batch_size
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -114,7 +128,15 @@ class LSTMModel(nn.Module):
         """
         if x.dim() == 2:
             x = x.unsqueeze(1)  # add sequence dimension
-        out, _ = self.lstm(x)
+        if self.stateful:
+            batch = x.size(0)
+            if self._hidden_state is None or self._batch_size != batch:
+                self.reset_hidden_state(batch)
+            out, (h_n, c_n) = self.lstm(x, (self._hidden_state, self._cell_state))
+            self._hidden_state = h_n.detach()
+            self._cell_state = c_n.detach()
+        else:
+            out, _ = self.lstm(x)
         out = out[:, -1, :]  # last time step
         out = self.layernorm(out)
         out = self.fc_out(out)
@@ -126,7 +148,7 @@ class PolicyNet(nn.Module):
     def __init__(self, state_dim: int, n_actions_d: int = 13, n_actions_u: int = 13,
                  hidden_dim: int = 256, num_layers: int = 2):
         super().__init__()
-        self.trunk = LSTMModel(state_dim, hidden_dim, hidden_dim=hidden_dim, num_layers=num_layers)
+        self.trunk = LSTMModel(state_dim, hidden_dim, hidden_dim=hidden_dim, num_layers=num_layers, stateful=True)
         self.logits_d = nn.Linear(hidden_dim, n_actions_d)
         self.logits_u = nn.Linear(hidden_dim, n_actions_u)
 
@@ -144,6 +166,9 @@ class PolicyNet(nn.Module):
             a_d = Categorical(logits=ld).sample()
             a_u = Categorical(logits=lu).sample()
         return int(a_d.item()), int(a_u.item())
+
+    def reset_hidden_state(self, batch_size: int = 1):
+        self.trunk.reset_hidden_state(batch_size)
 
     def gumbel_actions(self, s: torch.Tensor, tau: float = 1.0, hard: bool = True
                        ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -301,6 +326,10 @@ class SVGAgent(GymTradingAgent):
         if self.include_time:
             state = torch.cat([state,torch.tensor([[time]], dtype=torch.float32).to(self.device)], 1)
         return state
+
+    def reset_hidden_state(self):
+        if self.policy is not None:
+            self.policy.reset_hidden_state(batch_size=1)
 
     def readData(self, data):
         return self.getState(data)
@@ -461,6 +490,7 @@ class SVGAgent(GymTradingAgent):
 
         # iterate episodes and accumulate v_theta^0
         for ep_idx, trans_list in episodes.items():
+            self.policy.reset_hidden_state(batch_size=1)
             # initialize backwards accumulators
             v_s_next = torch.zeros(self.state_dim, device=device)  # shape (S,)
             v_theta_next = [torch.zeros_like(p, device=device) for p in policy_params]
@@ -638,6 +668,9 @@ class SVGAgent(GymTradingAgent):
         :param epsilon: Exploration probability
         :return: (chosen_action, (d_idx, u_idx), d_log_prob, u_log_prob, d_value, u_value)
         """
+        if self.last_state is None and self.policy is not None:
+            self.policy.reset_hidden_state(batch_size=1)
+
         if self.action_space_config < 2:
             if self.breach:
                 mo = 4 if self.countInventory() > 0 else 7
