@@ -12,8 +12,8 @@ from HawkesRLTrading.src.SimulationEntities.MetaOrderTradingAgents import TWAPGy
 import torch
 import time
 
-log_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/model'
+log_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/model'
 # log_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/training/logs/'
 # model_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/training/model'
 
@@ -427,7 +427,7 @@ for episode in range(80):
         if ('test' not in label) and ((checkpoint_params is None) or (episode >= 0)):
             for epoch in range(1):
                 start_time = time.time()
-                d_policy_loss, d_value_loss, d_entropy_loss, u_policy_loss, u_value_loss, u_entropy_loss = agent.train(train_logger) #, use_CEM = bool((episode+1) % 4))
+                d_policy_loss, d_value_loss, d_entropy_loss, u_policy_loss, u_value_loss, u_entropy_loss = agent.train(train_logger use_CEM = bool((episode+1) % 4)))
                 train_time = time.time() - start_time
                 # store timing on the train_logger (create list if necessary)
                 print(f"Agent.train took {train_time:.4f}s for episode {episode}")
