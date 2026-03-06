@@ -11,8 +11,8 @@ import random
 # log_dir = '/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/outputs/'
 # model_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/model'
 # log_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/logs/'
-log_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/model'
+log_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/self_imitation/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/self_imitation/model'
 
 start_trading_lag = 100
 twap_off_time = 400
@@ -24,7 +24,7 @@ n_layers=3
 
 label = f'test_LSTM_TWAP'
 
-checkpoint_params = ("20260301_114931_train_LSTM_TWAP", 8)
+checkpoint_params = ("20260305_093310_train_LSTM_TWAP", 12)
 
 # with open("/Users/alirazajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
 with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
@@ -796,7 +796,7 @@ for episode in range(17):
     if ((episode) % 4 == 0):
         if ('test' not in label) and ((checkpoint_params is None) or (episode >= 0)):
             for epoch in range(1):
-                d_policy_loss, d_value_loss, d_entropy_loss, u_policy_loss, u_value_loss, u_entropy_loss = agent.train(train_logger) #, use_CEM = bool((episode+1) % 4))
+                d_policy_loss, d_value_loss, d_entropy_loss, u_policy_loss, u_value_loss, u_entropy_loss = agent.train(train_logger, use_CEM = bool((episode+1) % 4))
                 train_logger.save_logs()
             train_logger.plot_losses(show=False, save=True)
 
