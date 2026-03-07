@@ -1610,7 +1610,7 @@ def price_quantity_graph_predecay_mortised_starting_at_0(data_list, times):
 # Find and calculate Sharpe ratio for all files with 'profit' in the directory
 import os
 
-target_directory = "/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/"
+target_directory = "/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/self_imitation/"
 file_pattern = os.path.join(target_directory, "*profit*")
 
 # Get all files matching the pattern

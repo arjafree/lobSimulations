@@ -862,7 +862,8 @@ for episode in range(17):
     cash_arr = np.array(cashs[RLagentID])
     inv_arr = np.array(inventories[RLagentID])
 
-    all_cash, all_inv, all_profit = [], [], []
+    buy_cash, buy_inv, buy_profit = [], [], []
+    sell_cash, sell_inv, sell_profit = [], [], []
 
     fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 10))
 
@@ -879,34 +880,72 @@ for episode in range(17):
         ep_profit = ep_cash - j["cash"]
         ep_t = np.arange(len(ep_cash))
 
-        all_cash.append(ep_cash)
-        all_inv.append(ep_inv)
-        all_profit.append(ep_profit)
+        side = all_episode_sides[i] if i < len(all_episode_sides) else "buy"
+        if side == "buy":
+            buy_cash.append(ep_cash)
+            buy_inv.append(ep_inv)
+            buy_profit.append(ep_profit)
+            color_trace = "lightskyblue"
+        else:
+            sell_cash.append(ep_cash)
+            sell_inv.append(ep_inv)
+            sell_profit.append(ep_profit)
+            color_trace = "lightsalmon"
 
-        ax1.plot(ep_t, ep_cash, color="steelblue", alpha=0.15, linewidth=0.8)
-        ax2.plot(ep_t, ep_inv, color="tomato", alpha=0.15, linewidth=0.8)
-        ax3.plot(ep_t, ep_profit, color="mediumseagreen", alpha=0.15, linewidth=0.8)
+        ax1.plot(ep_t, ep_cash, color=color_trace, alpha=0.15, linewidth=0.8)
+        ax2.plot(ep_t, ep_inv, color=color_trace, alpha=0.15, linewidth=0.8)
+        ax3.plot(ep_t, ep_profit, color=color_trace, alpha=0.15, linewidth=0.8)
 
-    if all_cash:
-        # --- Mean across episodes (pad shorter episodes with NaN) ---
-        max_len = max(len(a) for a in all_cash)
-        def pad_to(arr, length):
-            out = np.full(length, np.nan)
-            out[:len(arr)] = arr
-            return out
+    def pad_to(arr, length):
+        out = np.full(length, np.nan)
+        out[:len(arr)] = arr
+        return out
 
-        all_cash_mat = np.array([pad_to(a, max_len) for a in all_cash])
-        all_inv_mat = np.array([pad_to(a, max_len) for a in all_inv])
-        all_profit_mat = np.array([pad_to(a, max_len) for a in all_profit])
-
-        mean_cash = np.nanmean(all_cash_mat, axis=0)
-        mean_inv = np.nanmean(all_inv_mat, axis=0)
-        mean_profit = np.nanmean(all_profit_mat, axis=0)
+    all_lists = buy_cash + sell_cash
+    if all_lists:
+        max_len = max(len(a) for a in all_lists)
         steps = np.arange(max_len)
 
-        ax1.plot(steps, mean_cash, color="darkblue", linewidth=2.5, zorder=5, label="Mean")
-        ax2.plot(steps, mean_inv, color="darkred", linewidth=2.5, zorder=5, label="Mean")
-        ax3.plot(steps, mean_profit, color="darkgreen", linewidth=2.5, zorder=5, label="Mean")
+        if buy_cash:
+            buy_cash_mat = np.array([pad_to(a, max_len) for a in buy_cash])
+            buy_inv_mat = np.array([pad_to(a, max_len) for a in buy_inv])
+            buy_profit_mat = np.array([pad_to(a, max_len) for a in buy_profit])
+            ax1.plot(steps, np.nanmean(buy_cash_mat, axis=0), color="blue", linewidth=2.5, zorder=5, label="Mean (Buy)")
+            ax2.plot(steps, np.nanmean(buy_inv_mat, axis=0), color="blue", linewidth=2.5, zorder=5, label="Mean (Buy)")
+            ax3.plot(steps, np.nanmean(buy_profit_mat, axis=0), color="blue", linewidth=2.5, zorder=5, label="Mean (Buy)")
+
+        if sell_cash:
+            sell_cash_mat = np.array([pad_to(a, max_len) for a in sell_cash])
+            sell_inv_mat = np.array([pad_to(a, max_len) for a in sell_inv])
+            sell_profit_mat = np.array([pad_to(a, max_len) for a in sell_profit])
+            ax1.plot(steps, np.nanmean(sell_cash_mat, axis=0), color="red", linewidth=2.5, zorder=5, label="Mean (Sell)")
+            ax2.plot(steps, np.nanmean(sell_inv_mat, axis=0), color="red", linewidth=2.5, zorder=5, label="Mean (Sell)")
+            ax3.plot(steps, np.nanmean(sell_profit_mat, axis=0), color="red", linewidth=2.5, zorder=5, label="Mean (Sell)")
+
+    # --- TWAP start/end vertical lines ---
+    t_arr = np.array(t)
+    twap_start_indices = []
+    twap_end_indices = []
+    for i in range(n_episodes):
+        start_idx = episode_boundaries[i]
+        end_idx = episode_boundaries[i + 1] if i + 1 < len(episode_boundaries) else len(cash_arr)
+        if end_idx <= start_idx:
+            continue
+        ep_times = t_arr[start_idx:end_idx]
+        starts = np.where(ep_times >= twap_time)[0]
+        ends = np.where(ep_times >= twap_off_time)[0]
+        if len(starts) > 0:
+            twap_start_indices.append(starts[0])
+        if len(ends) > 0:
+            twap_end_indices.append(ends[0])
+
+    for ax in (ax1, ax2, ax3):
+        if twap_start_indices:
+            avg_start = int(np.mean(twap_start_indices))
+            ax.axvline(avg_start, color="orange", linestyle="--", linewidth=1.5, alpha=0.8, label="TWAP Start" if ax is ax1 else None)
+        if twap_end_indices:
+            avg_end = int(np.mean(twap_end_indices))
+            ax.axvline(avg_end, color="purple", linestyle="--", linewidth=1.5, alpha=0.8, label="TWAP End" if ax is ax1 else None)
 
     # --- Styling ---
     ax1.set_title(f"Cash (episodes 1-{episode+1})")
