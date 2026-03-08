@@ -858,12 +858,13 @@ for episode in range(17):
     plt.savefig(log_dir + label+'_avgepisodicreward.png')
     plt.close()
 
-    # ---- Policy Plot (episode aware, 3 subplots, time resets per episode) ----
+    # ---- Policy Plot (episode aware, 3 subplots, time on x-axis) ----
     cash_arr = np.array(cashs[RLagentID])
     inv_arr = np.array(inventories[RLagentID])
+    t_arr = np.array(t)
 
-    buy_cash, buy_inv, buy_profit = [], [], []
-    sell_cash, sell_inv, sell_profit = [], [], []
+    buy_times, buy_cash, buy_inv, buy_profit = [], [], [], []
+    sell_times, sell_cash, sell_inv, sell_profit = [], [], [], []
 
     fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 10))
 
@@ -875,77 +876,53 @@ for episode in range(17):
         if end_idx <= start_idx:
             continue
 
+        ep_times = t_arr[start_idx:end_idx]
         ep_cash = cash_arr[start_idx:end_idx]
         ep_inv = inv_arr[start_idx:end_idx]
         ep_profit = ep_cash - j["cash"]
-        ep_t = np.arange(len(ep_cash))
 
         side = all_episode_sides[i] if i < len(all_episode_sides) else "buy"
         if side == "buy":
+            buy_times.append(ep_times)
             buy_cash.append(ep_cash)
             buy_inv.append(ep_inv)
             buy_profit.append(ep_profit)
             color_trace = "lightskyblue"
         else:
+            sell_times.append(ep_times)
             sell_cash.append(ep_cash)
             sell_inv.append(ep_inv)
             sell_profit.append(ep_profit)
             color_trace = "lightsalmon"
 
-        ax1.plot(ep_t, ep_cash, color=color_trace, alpha=0.15, linewidth=0.8)
-        ax2.plot(ep_t, ep_inv, color=color_trace, alpha=0.15, linewidth=0.8)
-        ax3.plot(ep_t, ep_profit, color=color_trace, alpha=0.15, linewidth=0.8)
+        ax1.plot(ep_times, ep_cash, color=color_trace, alpha=0.15, linewidth=0.8)
+        ax2.plot(ep_times, ep_inv, color=color_trace, alpha=0.15, linewidth=0.8)
+        ax3.plot(ep_times, ep_profit, color=color_trace, alpha=0.15, linewidth=0.8)
 
-    def pad_to(arr, length):
-        out = np.full(length, np.nan)
-        out[:len(arr)] = arr
-        return out
+    # Interpolate onto common time grid for means
+    all_ep_times = buy_times + sell_times
+    if all_ep_times:
+        max_time = max(et[-1] for et in all_ep_times)
+        common_t = np.linspace(0, max_time, 500)
 
-    all_lists = buy_cash + sell_cash
-    if all_lists:
-        max_len = max(len(a) for a in all_lists)
-        steps = np.arange(max_len)
+        def interp_mean(times_list, values_list):
+            interped = [np.interp(common_t, ts, vs) for ts, vs in zip(times_list, values_list)]
+            return np.mean(interped, axis=0)
 
         if buy_cash:
-            buy_cash_mat = np.array([pad_to(a, max_len) for a in buy_cash])
-            buy_inv_mat = np.array([pad_to(a, max_len) for a in buy_inv])
-            buy_profit_mat = np.array([pad_to(a, max_len) for a in buy_profit])
-            ax1.plot(steps, np.nanmean(buy_cash_mat, axis=0), color="blue", linewidth=2.5, zorder=5, label="Mean (Buy)")
-            ax2.plot(steps, np.nanmean(buy_inv_mat, axis=0), color="blue", linewidth=2.5, zorder=5, label="Mean (Buy)")
-            ax3.plot(steps, np.nanmean(buy_profit_mat, axis=0), color="blue", linewidth=2.5, zorder=5, label="Mean (Buy)")
+            ax1.plot(common_t, interp_mean(buy_times, buy_cash), color="blue", linewidth=2.5, zorder=5, label="Mean (Buy)")
+            ax2.plot(common_t, interp_mean(buy_times, buy_inv), color="blue", linewidth=2.5, zorder=5, label="Mean (Buy)")
+            ax3.plot(common_t, interp_mean(buy_times, buy_profit), color="blue", linewidth=2.5, zorder=5, label="Mean (Buy)")
 
         if sell_cash:
-            sell_cash_mat = np.array([pad_to(a, max_len) for a in sell_cash])
-            sell_inv_mat = np.array([pad_to(a, max_len) for a in sell_inv])
-            sell_profit_mat = np.array([pad_to(a, max_len) for a in sell_profit])
-            ax1.plot(steps, np.nanmean(sell_cash_mat, axis=0), color="red", linewidth=2.5, zorder=5, label="Mean (Sell)")
-            ax2.plot(steps, np.nanmean(sell_inv_mat, axis=0), color="red", linewidth=2.5, zorder=5, label="Mean (Sell)")
-            ax3.plot(steps, np.nanmean(sell_profit_mat, axis=0), color="red", linewidth=2.5, zorder=5, label="Mean (Sell)")
+            ax1.plot(common_t, interp_mean(sell_times, sell_cash), color="red", linewidth=2.5, zorder=5, label="Mean (Sell)")
+            ax2.plot(common_t, interp_mean(sell_times, sell_inv), color="red", linewidth=2.5, zorder=5, label="Mean (Sell)")
+            ax3.plot(common_t, interp_mean(sell_times, sell_profit), color="red", linewidth=2.5, zorder=5, label="Mean (Sell)")
 
     # --- TWAP start/end vertical lines ---
-    t_arr = np.array(t)
-    twap_start_indices = []
-    twap_end_indices = []
-    for i in range(n_episodes):
-        start_idx = episode_boundaries[i]
-        end_idx = episode_boundaries[i + 1] if i + 1 < len(episode_boundaries) else len(cash_arr)
-        if end_idx <= start_idx:
-            continue
-        ep_times = t_arr[start_idx:end_idx]
-        starts = np.where(ep_times >= twap_time)[0]
-        ends = np.where(ep_times >= twap_off_time)[0]
-        if len(starts) > 0:
-            twap_start_indices.append(starts[0])
-        if len(ends) > 0:
-            twap_end_indices.append(ends[0])
-
     for ax in (ax1, ax2, ax3):
-        if twap_start_indices:
-            avg_start = int(np.mean(twap_start_indices))
-            ax.axvline(avg_start, color="orange", linestyle="--", linewidth=1.5, alpha=0.8, label="TWAP Start" if ax is ax1 else None)
-        if twap_end_indices:
-            avg_end = int(np.mean(twap_end_indices))
-            ax.axvline(avg_end, color="purple", linestyle="--", linewidth=1.5, alpha=0.8, label="TWAP End" if ax is ax1 else None)
+        ax.axvline(twap_time, color="orange", linestyle="--", linewidth=1.5, alpha=0.8, label="TWAP Start" if ax is ax1 else None)
+        ax.axvline(twap_off_time, color="purple", linestyle="--", linewidth=1.5, alpha=0.8, label="TWAP End" if ax is ax1 else None)
 
     # --- Styling ---
     ax1.set_title(f"Cash (episodes 1-{episode+1})")
@@ -959,7 +936,7 @@ for episode in range(17):
     ax3.legend()
 
     for ax in (ax1, ax2, ax3):
-        ax.set_xlabel("Time steps (per episode)")
+        ax.set_xlabel("Time (seconds)")
         ax.grid(True, linestyle="--", alpha=0.4)
 
     plt.tight_layout()
