@@ -11,8 +11,8 @@ import random
 # log_dir = '/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/outputs/'
 # model_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/model'
 # log_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/logs/'
-log_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/self_imitation/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/self_imitation/model'
+log_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/self_imitation/onesided/buy/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/self_imitation/onesided/buy/model'
 
 start_trading_lag = 100
 twap_off_time = 400
@@ -22,9 +22,9 @@ twap_starting_inventory = 500
 layer_widths=100
 n_layers=3
 
-label = f'test_LSTM_TWAP'
+label = f'test_LSTM_TWAP_buy'
 
-checkpoint_params = ("20260305_093310_train_LSTM_TWAP", 12)
+checkpoint_params = ("20260308_145008_train_LSTM_TWAP_buy", 12)
 
 # with open("/Users/alirazajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
 with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
@@ -337,7 +337,7 @@ for episode in range(17):
     TWAP_agent_obsv = []
     total_executed = 0
     final_cash = 0
-    twap_side = np.random.choice(["buy", "sell"])
+    twap_side = "buy"#np.random.choice(["buy", "sell"])
     kwargs["GymTradingAgent"][1]["Inventory"] = {"INTC": 500}
     kwargs["GymTradingAgent"][1]["cash"] = 1000000
     kwargs["GymTradingAgent"][1]["side"] = twap_side
