@@ -11,8 +11,8 @@ import random
 # log_dir = '/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/outputs/'
 # model_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/model'
 # log_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/logs/'
-log_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/self_imitation/onesided/buy/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/self_imitation/onesided/buy/model'
+log_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/self_imitation/onesided/sell/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/self_imitation/onesided/sell/model'
 
 start_trading_lag = 100
 twap_off_time = 400
@@ -22,9 +22,9 @@ twap_starting_inventory = 500
 layer_widths=100
 n_layers=3
 
-label = f'test_LSTM_TWAP_buy'
+label = f'test_LSTM_TWAP_sell'
 
-checkpoint_params = ("20260308_145008_train_LSTM_TWAP_buy", 12)
+checkpoint_params = ("20260308_152519_train_LSTM_TWAP_sell", 12)
 
 # with open("/Users/alirazajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
 with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
