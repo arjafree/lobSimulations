@@ -473,8 +473,8 @@ for episode in range(17):
                 i_eps+=1
                 logger.debug(f"\nSimstate: {Simstate}\nObservations: {observations}\nTermination: {termination}\nTruncation: {truncation}")
                 if len(t) > 1 and t[-1] < t[-2]:
-                    # Episode has reset - mark boundary
-                    episode_boundaries.append(len(cashs[agent.id]))
+                    # Episode has reset - mark boundary (index of new episode's first data point)
+                    episode_boundaries.append(len(cashs[agent.id]) - 1)
                 # Calculate current PnL (cash + inventory value)
                 current_pnl = cashs[agent.id][-1] + inventories[agent.id][-1] * agent.mid * (1 - tc*np.sign(inventories[agent.id][-1]))
                 finalcash2.append(current_pnl)
