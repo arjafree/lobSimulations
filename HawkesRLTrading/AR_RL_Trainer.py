@@ -12,21 +12,21 @@ from HawkesRLTrading.src.SimulationEntities.MetaOrderTradingAgents import TWAPGy
 import torch
 import time
 
-log_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/buy/terminalpenalty/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/buy/terminalpenalty/model'
+log_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/sell/terminalpenalty/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/sell/terminalpenalty/model'
 # log_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/training/logs/'
 # model_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/training/model'
 
 start_trading_lag = 100
 twap_off_time = 400
 
-twap_side = "buy"
+twap_side = "sell"
 #the time that the TWAP agent will kick in:
 twap_start_time = 150 + start_trading_lag
 
 twap_end_time = 300 + start_trading_lag
 
-label = 'train_LSTM_TWAP_buy'
+label = 'train_LSTM_TWAP_sell'
 layer_widths=100
 n_layers=3
 eta = 50
