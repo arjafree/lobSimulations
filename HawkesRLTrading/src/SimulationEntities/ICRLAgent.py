@@ -1619,9 +1619,9 @@ class PPOAgent(GymTradingAgent):
             penalty += 100
         if self.last_action != 12:
             penalty -= self.rewardpenalty *10 # custom reward for incentivising actions rather than inaction for learning
-        if self.terminal_invpenalty: 
+        if self.terminal_invpenalty and termination: 
             penalty += self.terminal_invpenalty * (self.countInventory()**2) # terminal inventory penalty (kappa)
-            
+
         if (not self.alt_state) and (self.last_state.cpu().numpy()[0][8] < self.last_state.cpu().numpy()[0][4] + self.last_state.cpu().numpy()[0][6]) and (self.last_state.cpu().numpy()[0][9] < self.last_state.cpu().numpy()[0][5] + self.last_state.cpu().numpy()[0][7]):
             penalty -= self.rewardpenalty *20 # custom reward for double sided quoting
         if self.alt_state:

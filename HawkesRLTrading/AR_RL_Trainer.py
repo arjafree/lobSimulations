@@ -29,6 +29,7 @@ twap_end_time = 300 + start_trading_lag
 label = 'train_LSTM_TWAP_sell'
 layer_widths=100
 n_layers=3
+eta = 50
 
 checkpoint_params = None
 
@@ -134,7 +135,7 @@ kwargs={
                         {"cash": 2500,
                          "strategy": "ICRL",
                          "action_freq": 0.213,
-                         "rewardpenalty": 50,
+                         "rewardpenalty": eta,
                          "Inventory": {"INTC": 0},
                          "log_to_file": True,
                          "cashlimit": 5000000,
@@ -180,7 +181,8 @@ tc = 0.0001
 RLagentInstance = AdversarialPPOAgent( seed=1, log_events=True, log_to_file=True, strategy=j["strategy"], Inventory=j["Inventory"], cash=j["cash"], action_freq=j["action_freq"],
                           wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"], cashlimit=j["cashlimit"],inventorylimit=j['inventorylimit'], batch_size=512,
                           layer_widths=layer_widths, n_layers =n_layers, buffer_capacity = 100000, rewardpenalty = j["rewardpenalty"], epochs = 100, transaction_cost=1e-4, start_trading_lag = j['start_trading_lag'],
-                          gae_lambda=0.5, truncation_enabled=False, action_space_config = 1, alt_state=True, enhance_state=True, include_time=True, optim_type='ADAM',entropy_coef=0, exploration_bonus = 0, hidden_activation='sigmoid', typeNN = "LSTM", lr = 3e-4, chunk_length=64, TWAPPresent=0)
+                          gae_lambda=0.5, truncation_enabled=False, action_space_config = 1, alt_state=True, enhance_state=True, include_time=True, optim_type='ADAM',entropy_coef=0, exploration_bonus = 0, hidden_activation='sigmoid', 
+                          typeNN = "LSTM", lr = 3e-4, chunk_length=64, TWAPPresent=0, terminal_invpenalty=5*eta)
 
 inventories_with_twap_buy = []
 inventories_with_twap_sell = []
