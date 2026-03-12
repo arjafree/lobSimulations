@@ -1482,6 +1482,8 @@ class PPOAgent(GymTradingAgent):
         # NN Type
         self.typeNN = typeNN
         self.chunk_length = chunk_length
+        #Optional kappa, inventory penalty at termination
+        self.terminal_invpenalty = terminal_invpenalty
         # Enable anomaly detection for debugging
         torch.autograd.set_detect_anomaly(True)
 
