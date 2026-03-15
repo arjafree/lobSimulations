@@ -26,7 +26,7 @@ twap_start_time = 150 + start_trading_lag
 
 twap_end_time = 300 + start_trading_lag
 
-label = 'train_LSTM_TWAP_sell'
+label = 'train_LSTM_TWAP_sell_more'
 layer_widths=100
 n_layers=3
 eta = 50
