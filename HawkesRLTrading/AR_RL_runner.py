@@ -165,6 +165,7 @@ total_executeds = []
 all_episode_inventories = []
 all_episode_times = []
 all_episode_sides = []  # Track which side each episode was (buy/sell)
+all_episode_cashs = []
 
 # Data structures for slippage tracking
 sell_slippage_by_episode = []  # Store (episode_num, slippage) for sell episodes
@@ -691,10 +692,13 @@ for episode in range(17):
     episode_times = t[start_idx:end_idx]
     
     # Store for cumulative plotting
+    episode_cash = cashs[RLagentID][start_idx:end_idx]
+
     if len(episode_inventory) > 0:
         all_episode_inventories.append(episode_inventory)
         all_episode_times.append(episode_times)
         all_episode_sides.append(twap_side)  # Store which side this episode was
+        all_episode_cashs.append(episode_cash)
         
         # Plot inventory time series with all episodes so far (updated after each episode)
         plot_inventory_timeseries(
@@ -859,29 +863,18 @@ for episode in range(17):
     plt.close()
 
     # ---- Policy Plot (episode aware, 3 subplots, time on x-axis) ----
-    cash_arr = np.array(cashs[RLagentID])
-    inv_arr = np.array(inventories[RLagentID])
-    t_arr = np.array(t)
-
     buy_times, buy_cash, buy_inv, buy_profit = [], [], [], []
     sell_times, sell_cash, sell_inv, sell_profit = [], [], [], []
 
     fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 10))
 
-    n_episodes = len(episode_boundaries) - 1 if episode_boundaries[-1] == len(cash_arr) else len(episode_boundaries)
-    for i in range(n_episodes):
-        start_idx = episode_boundaries[i]
-        end_idx = episode_boundaries[i + 1] if i + 1 < len(episode_boundaries) else len(cash_arr)
-
-        if end_idx <= start_idx:
-            continue
-
-        ep_times = t_arr[start_idx:end_idx]
-        ep_cash = cash_arr[start_idx:end_idx]
-        ep_inv = inv_arr[start_idx:end_idx]
+    for i in range(len(all_episode_inventories)):
+        ep_times = np.array(all_episode_times[i])
+        ep_cash = np.array(all_episode_cashs[i])
+        ep_inv = np.array(all_episode_inventories[i])
         ep_profit = ep_cash - j["cash"]
 
-        side = all_episode_sides[i] if i < len(all_episode_sides) else "buy"
+        side = all_episode_sides[i]
         if side == "buy":
             buy_times.append(ep_times)
             buy_cash.append(ep_cash)
