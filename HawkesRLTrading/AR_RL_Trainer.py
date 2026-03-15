@@ -31,7 +31,7 @@ layer_widths=100
 n_layers=3
 eta = 50
 
-checkpoint_params = ("20260312_124918_train_LSTM_TWAP_buy", 40)
+checkpoint_params = ("20260312_124918_train_LSTM_TWAP_buy", 56)
 
 def graphInventories(beforetwap, withtwap_buy, withtwap_sell, episode_num):
     plt.figure(figsize=(12, 8))
