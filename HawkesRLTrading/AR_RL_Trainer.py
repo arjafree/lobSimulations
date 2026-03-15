@@ -12,26 +12,26 @@ from HawkesRLTrading.src.SimulationEntities.MetaOrderTradingAgents import TWAPGy
 import torch
 import time
 
-log_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/sell/terminalpenalty/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/sell/terminalpenalty/model'
+log_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/buy/terminalpenalty/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/buy/terminalpenalty/model'
 # log_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/training/logs/'
 # model_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/training/model'
 
 start_trading_lag = 100
 twap_off_time = 400
 
-twap_side = "sell"
+twap_side = "buy"
 #the time that the TWAP agent will kick in:
 twap_start_time = 150 + start_trading_lag
 
 twap_end_time = 300 + start_trading_lag
 
-label = 'train_LSTM_TWAP_sell_more'
+label = 'train_LSTM_TWAP_buy_more'
 layer_widths=100
 n_layers=3
 eta = 50
 
-checkpoint_params = ("20260312_130333_train_LSTM_TWAP_sell", 40)
+checkpoint_params = ("20260312_124918_train_LSTM_TWAP_buy", 40)
 
 def graphInventories(beforetwap, withtwap_buy, withtwap_sell, episode_num):
     plt.figure(figsize=(12, 8))
