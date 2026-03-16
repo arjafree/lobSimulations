@@ -25,7 +25,7 @@ eta = 50
 
 label = f'test_LSTM_TWAP_buy_termpenalty'
 
-checkpoint_params = ("20260312_124918_train_LSTM_TWAP_buy", 56)
+checkpoint_params = ("20260312_124918_train_LSTM_TWAP_buy", 52)
 
 # with open("/Users/alirazajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
 with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
