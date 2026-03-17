@@ -219,8 +219,6 @@ def plot_inventory_timeseries(all_inventories, all_times, all_sides, twap_start,
     buy_label_added = False
     sell_label_added = False
     for i, (times, inventories, side) in enumerate(zip(all_times, all_inventories, all_sides)):
-        sign_multiplier = -1 if side == 'sell' else 1
-        adjusted_inventory = np.array(inventories) * sign_multiplier
         color = 'tab:red' if side == 'buy' else 'tab:green'
         label = None
         if side == 'buy' and not buy_label_added:
@@ -229,7 +227,7 @@ def plot_inventory_timeseries(all_inventories, all_times, all_sides, twap_start,
         elif side == 'sell' and not sell_label_added:
             label = 'Sell episodes'
             sell_label_added = True
-        plt.plot(times, adjusted_inventory, alpha=0.15, color=color, linewidth=0.8, label=label)
+        plt.plot(times, np.array(inventories), alpha=0.15, color=color, linewidth=0.8, label=label)
 
     # Compute and plot average trajectory per regime and overall
     max_len = max(len(t) for t in all_times)
@@ -239,9 +237,7 @@ def plot_inventory_timeseries(all_inventories, all_times, all_sides, twap_start,
     buy_interp = []
     sell_interp = []
     for times, inventories, side in zip(all_times, all_inventories, all_sides):
-        sign_multiplier = -1 if side == 'sell' else 1
-        adjusted_inventory = np.array(inventories) * sign_multiplier
-        interp_inv = np.interp(common_times, times, adjusted_inventory)
+        interp_inv = np.interp(common_times, times, np.array(inventories))
         if side == 'buy':
             buy_interp.append(interp_inv)
         else:
@@ -259,8 +255,8 @@ def plot_inventory_timeseries(all_inventories, all_times, all_sides, twap_start,
     plt.plot(common_times, avg_inventory, alpha=1.0, color='darkblue', linewidth=2.5, linestyle='--', label=f'Avg Overall (n={len(all_interp)})')
     
     plt.xlabel('Time (seconds)', fontsize=12)
-    plt.ylabel('Inventory (sign-adjusted)', fontsize=12)
-    plt.title(f'RL Agent Inventory Time Series - All {len(all_inventories)} Episodes (Buy & Sell)', fontsize=14)
+    plt.ylabel('Inventory', fontsize=12)
+    plt.title(f'RL Agent Inventory Time Series - All {len(all_inventories)} Episodes', fontsize=14)
     plt.legend(loc='best', fontsize=10)
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
@@ -937,6 +933,19 @@ for episode in range(17):
     plt.tight_layout()
     plt.savefig(log_dir + label + "_policy_byepisode.png")
     plt.close()
+
+    # Verify inventory data matches between the two plots
+    buy_idx, sell_idx = 0, 0
+    for idx in range(len(all_episode_inventories)):
+        if all_episode_sides[idx] == "buy":
+            assert np.array_equal(np.array(all_episode_inventories[idx]), buy_inv[buy_idx]), \
+                f"Inventory data mismatch at episode {idx} (buy {buy_idx})"
+            buy_idx += 1
+        else:
+            assert np.array_equal(np.array(all_episode_inventories[idx]), sell_inv[sell_idx]), \
+                f"Inventory data mismatch at episode {idx} (sell {sell_idx})"
+            sell_idx += 1
+    print(f"[VERIFY] Inventory data matches across both plots ({len(all_episode_inventories)} episodes)")
 
     torch.cuda.empty_cache()
     # torch.mps.empty_cache()
