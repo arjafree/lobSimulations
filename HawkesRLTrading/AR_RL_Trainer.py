@@ -12,26 +12,26 @@ from HawkesRLTrading.src.SimulationEntities.MetaOrderTradingAgents import TWAPGy
 import torch
 import time
 
-log_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/sell/terminalpenalty/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/sell/terminalpenalty/model'
+log_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/buy/terminalpenalty/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/buy/terminalpenalty/model'
 # log_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/training/logs/'
 # model_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/training/model'
 
 start_trading_lag = 100
 twap_off_time = 400
 
-twap_side = "sell"
+twap_side = "buy"
 #the time that the TWAP agent will kick in:
 twap_start_time = 150 + start_trading_lag
 
 twap_end_time = 300 + start_trading_lag
 
-label = 'train_LSTM_TWAP_sell_again'
+label = 'train_LSTM_TWAP_buy_more'
 layer_widths=100
 n_layers=3
 eta = 50
 
-checkpoint_params = None
+checkpoint_params = ("20260312_124918_train_LSTM_TWAP_buy", 52)
 
 def graphInventories(beforetwap, withtwap_buy, withtwap_sell, episode_num):
     plt.figure(figsize=(12, 8))
@@ -435,7 +435,7 @@ for episode in range(80):
                 train_logger.save_logs()
             train_logger.plot_losses(show=False, save=True)
 
-        model_manager.save_models(epoch = episode, u = agent.Actor_Critic_u, d= agent.Actor_Critic_d)
+        model_manager.save_models(epoch = episode, u = RLagentInstance.Actor_Critic_u, d= RLagentInstance.Actor_Critic_d)
     for agent in agents:
         if isinstance(agent, PPOAgent):
             agent.current_time = 0
