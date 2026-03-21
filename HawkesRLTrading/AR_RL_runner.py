@@ -1,7 +1,7 @@
 import sys
 import os
-sys.path.append(os.path.abspath('/home/ajafree/lobSimulations'))
-# sys.path.append(os.path.abspath('/Users/alirazajafree/Documents/GitHub/lobSimulations'))
+# sys.path.append(os.path.abspath('/home/ajafree/lobSimulations'))
+sys.path.append(os.path.abspath('/Users/alirazajafree/Documents/GitHub/lobSimulations1'))
 from HawkesRLTrading.src.Envs.HawkesRLTradingEnv import *
 
 import torch
@@ -9,10 +9,10 @@ import random
 
 # log_dir = '/home/ajafree/untrained_rl_testing/outputs'
 # log_dir = '/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/outputs/'
-# model_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/model'
-# log_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/logs/'
-log_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/self_imitation/onesided/buy/terminalpenalty/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/self_imitation/onesided/buy/terminalpenalty/model'
+model_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/self_imitation/newlogs/model'
+log_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/self_imitation/newlogs/logs/'
+# log_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/self_imitation/onesided/buy/terminalpenalty/logs/'
+# model_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/self_imitation/onesided/buy/terminalpenalty/model'
 
 start_trading_lag = 100
 twap_off_time = 400
@@ -23,12 +23,12 @@ layer_widths=100
 n_layers=3
 eta = 50
 
-label = f'test_LSTM_TWAP_buy_termpenalty'
+label = f'test_LSTM_TWAP'
 
-checkpoint_params = ("20260312_124918_train_LSTM_TWAP_buy", 52)
+checkpoint_params = ("20260305_093310_train_LSTM_TWAP", 12)
 
-# with open("/Users/alirazajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
-with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
+with open("/Users/alirazajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
+# with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
     kernelparams = pickle.load(f)
 kernelparams = preprocessdata(kernelparams)
 
@@ -336,7 +336,7 @@ for episode in range(17):
     TWAP_agent_obsv = []
     total_executed = 0
     final_cash = 0
-    twap_side = "buy" #np.random.choice(["buy", "sell"])
+    twap_side = np.random.choice(["buy", "sell"])
     kwargs["GymTradingAgent"][1]["Inventory"] = {"INTC": 500}
     kwargs["GymTradingAgent"][1]["cash"] = 1000000
     kwargs["GymTradingAgent"][1]["side"] = twap_side
@@ -383,6 +383,9 @@ for episode in range(17):
                 if not RLagentInstance.TWAPPresent:
                     RLagentInstance.TWAPPresent = -1 if twap_side == 'sell' else 1
             else:
+                if Simstate['TimeCode'] > twap_off_time:
+                    print(Simstate['TimeCode'])
+                    breakpoint()
                 RLagentInstance.TWAPPresent = 0
         
         # action:list[Tuple] = []
@@ -798,7 +801,7 @@ for episode in range(17):
     if ((episode) % 4 == 0):
         if ('test' not in label) and ((checkpoint_params is None) or (episode >= 0)):
             for epoch in range(1):
-                d_policy_loss, d_value_loss, d_entropy_loss, u_policy_loss, u_value_loss, u_entropy_loss = agent.train(train_logger, use_CEM = bool((episode+1) % 4))
+                d_policy_loss, d_value_loss, d_entropy_loss, u_policy_loss, u_value_loss, u_entropy_loss = agent.train(train_logger, use_CEM = bool(episode % 8))
                 train_logger.save_logs()
             train_logger.plot_losses(show=False, save=True)
 

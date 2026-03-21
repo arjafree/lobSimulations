@@ -5,17 +5,17 @@ import os
 # os.environ["TORCH_USE_CUDA_DSA"] = "1"  # Device-Side Assertions (even more detail)
 
 sys.path.append(os.path.abspath('/home/ajafree/lobSimulations'))
-# sys.path.append(os.path.abspath('/Users/alirazajafree/Documents/GitHub/lobSimulations'))
+# sys.path.append(os.path.abspath('/Users/alirazajafree/Documents/GitHub/lobSimulations1'))
 from HawkesRLTrading.src.Envs.HawkesRLTradingEnv import *
 from HawkesRLTrading.src.SimulationEntities.MetaOrderTradingAgents import TWAPGymTradingAgent
 
 import torch
 import time
 
-log_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/buy/terminalpenalty/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/buy/terminalpenalty/model'
-# log_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/training/logs/'
-# model_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/with_expo/training/model'
+log_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/buy/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/buy/model'
+# log_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/wout_expo/training/self_imitation/buy/terminalpenalty/logs/'
+# model_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/wout_expo/training/self_imitation/buy/terminalpenalty/model'
 
 start_trading_lag = 100
 twap_off_time = 400
@@ -26,12 +26,12 @@ twap_start_time = 150 + start_trading_lag
 
 twap_end_time = 300 + start_trading_lag
 
-label = 'train_LSTM_TWAP_buy_more'
+label = 'train_selfim_buy'
 layer_widths=100
 n_layers=3
 eta = 50
 
-checkpoint_params = ("20260312_124918_train_LSTM_TWAP_buy", 52)
+checkpoint_params = None #("20260312_124918_train_LSTM_TWAP_buy", 52)
 
 def graphInventories(beforetwap, withtwap_buy, withtwap_sell, episode_num):
     plt.figure(figsize=(12, 8))
@@ -182,7 +182,7 @@ RLagentInstance = AdversarialPPOAgent( seed=1, log_events=True, log_to_file=True
                           wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"], cashlimit=j["cashlimit"],inventorylimit=j['inventorylimit'], batch_size=512,
                           layer_widths=layer_widths, n_layers =n_layers, buffer_capacity = 100000, rewardpenalty = j["rewardpenalty"], epochs = 100, transaction_cost=1e-4, start_trading_lag = j['start_trading_lag'],
                           gae_lambda=0.5, truncation_enabled=False, action_space_config = 1, alt_state=True, enhance_state=True, include_time=True, optim_type='ADAM',entropy_coef=0, exploration_bonus = 0, hidden_activation='sigmoid', 
-                          typeNN = "LSTM", lr = 3e-4, chunk_length=64, TWAPPresent=0, terminal_invpenalty=5*eta)
+                          typeNN = "LSTM", lr = 3e-4, chunk_length=64, TWAPPresent=0)#, terminal_invpenalty=5*eta)
 
 inventories_with_twap_buy = []
 inventories_with_twap_sell = []
@@ -428,7 +428,7 @@ for episode in range(80):
         if ('test' not in label) and ((checkpoint_params is None) or (episode >= 0)):
             for epoch in range(1):
                 start_time = time.time()
-                d_policy_loss, d_value_loss, d_entropy_loss, u_policy_loss, u_value_loss, u_entropy_loss = agent.train(train_logger, use_CEM = bool((episode+1) % 4))
+                d_policy_loss, d_value_loss, d_entropy_loss, u_policy_loss, u_value_loss, u_entropy_loss = agent.train(train_logger, use_CEM = bool((episode) % 8))
                 train_time = time.time() - start_time
                 # store timing on the train_logger (create list if necessary)
                 print(f"Agent.train took {train_time:.4f}s for episode {episode}")
