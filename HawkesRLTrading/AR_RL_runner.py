@@ -7,8 +7,6 @@ from HawkesRLTrading.src.Envs.HawkesRLTradingEnv import *
 import torch
 import random
 
-# log_dir = '/home/ajafree/untrained_rl_testing/outputs'
-# log_dir = '/Users/alirazajafree/researchprojects/uRL_testing_scaledTWAP/outputs/'
 model_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/self_imitation/newlogs/model'
 log_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/self_imitation/newlogs/logs/'
 # log_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/self_imitation/onesided/buy/terminalpenalty/logs/'

@@ -12,8 +12,8 @@ from HawkesRLTrading.src.SimulationEntities.MetaOrderTradingAgents import TWAPGy
 import torch
 import time
 
-log_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/buy/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/buy/model'
+log_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/onesided/buy/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/onesided/buy/model'
 # log_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/wout_expo/training/self_imitation/buy/terminalpenalty/logs/'
 # model_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/wout_expo/training/self_imitation/buy/terminalpenalty/model'
 
