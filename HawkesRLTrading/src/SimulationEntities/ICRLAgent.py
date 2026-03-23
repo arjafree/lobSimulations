@@ -1903,7 +1903,7 @@ class PPOAgent(GymTradingAgent):
             return
 
         if self.typeNN == "LSTM":
-            self._train_lstm(train_logger)
+            self._train_lstm(train_logger, use_CEM)
         else:
             self._train_dense(train_logger, use_CEM)
 
@@ -2044,15 +2044,21 @@ class PPOAgent(GymTradingAgent):
             del u_policy_loss, u_value_loss, u_entropy_loss
             del u_logits, u_values_pred, d_logits, d_values_pred
 
-    def _train_lstm(self, train_logger):
+    def _train_lstm(self, train_logger, use_CEM=False):
         """
         Chunk-based PPO-LSTM training.
         Preserves temporal context by splitting episodes into sequential chunks,
         sampling chunks randomly, and restoring hidden states at chunk boundaries.
+        When use_CEM=True, replaces PPO policy loss with cross-entropy on elite
+        (highest-reward) subsequences for self-imitation learning.
         """
         chunk_length = self.chunk_length
         eIDs = np.unique([tr[0] for tr in self.trajectory_buffer])
         all_chunks = []
+
+        # Get elite segments for CEM self-imitation
+        if use_CEM:
+            elite_segments = self.get_max_contiguous_rewards(K=10)
 
         # ---- Phase A: Compute old log probs sequentially per episode ----
         for eID in eIDs:
@@ -2141,6 +2147,14 @@ class PPOAgent(GymTradingAgent):
                 dones
             )
 
+            # Build CEM mask for this episode
+            if use_CEM and eID in elite_segments and elite_segments[eID] is not None:
+                elite_start, elite_end, _ = elite_segments[eID]
+                cem_mask_ep = torch.zeros(T, device=self.device)
+                cem_mask_ep[elite_start:elite_end+1] = 1.0
+            else:
+                cem_mask_ep = torch.zeros(T, device=self.device)
+
             # Package each chunk with padded data and validity mask
             for chunk_start, chunk_end, saved_hidden in chunk_boundaries:
                 actual_len = chunk_end - chunk_start
@@ -2156,6 +2170,7 @@ class PPOAgent(GymTradingAgent):
                 chunk_ret_d = returns_d[cs:ce]
                 chunk_adv_u = advantages_u[cs:ce]
                 chunk_ret_u = returns_u[cs:ce]
+                chunk_cem = cem_mask_ep[cs:ce]
 
                 mask = torch.ones(chunk_length, device=self.device)
 
@@ -2169,6 +2184,7 @@ class PPOAgent(GymTradingAgent):
                     chunk_ret_d = F.pad(chunk_ret_d, (0, pad_len))
                     chunk_adv_u = F.pad(chunk_adv_u, (0, pad_len))
                     chunk_ret_u = F.pad(chunk_ret_u, (0, pad_len))
+                    chunk_cem = F.pad(chunk_cem, (0, pad_len))
                     mask[actual_len:] = 0
 
                 all_chunks.append({
@@ -2182,6 +2198,7 @@ class PPOAgent(GymTradingAgent):
                     'advantages_u': chunk_adv_u,
                     'returns_u': chunk_ret_u,
                     'mask': mask,
+                    'cem_mask': chunk_cem,
                     **saved_hidden,  # d_actor_h/c, d_critic_h/c, u_actor_h/c, u_critic_h/c
                 })
 
@@ -2204,6 +2221,7 @@ class PPOAgent(GymTradingAgent):
             batch_adv_u = torch.stack([all_chunks[i]['advantages_u'] for i in chunk_idxs])
             batch_ret_u = torch.stack([all_chunks[i]['returns_u'] for i in chunk_idxs])
             batch_mask = torch.stack([all_chunks[i]['mask'] for i in chunk_idxs])
+            batch_cem_mask = torch.stack([all_chunks[i]['cem_mask'] for i in chunk_idxs])
 
             # Stack hidden states along batch dim: (n_layers, 1, hidden_dim) -> (n_layers, B, hidden_dim)
             batch_d_actor_h = torch.cat([all_chunks[i]['d_actor_h'] for i in chunk_idxs], dim=1)
@@ -2227,6 +2245,7 @@ class PPOAgent(GymTradingAgent):
             adv_d_flat = batch_adv_d.reshape(B * chunk_length)
             ret_d_flat = batch_ret_d.reshape(B * chunk_length)
             mask_flat = batch_mask.reshape(B * chunk_length)
+            cem_flat = batch_cem_mask.reshape(B * chunk_length)
 
             valid = mask_flat.bool()
             d_logits_v = d_logits_flat[valid]
@@ -2236,11 +2255,17 @@ class PPOAgent(GymTradingAgent):
             adv_d_v = adv_d_flat[valid]
             ret_d_v = ret_d_flat[valid]
 
-            d_log_probs = F.log_softmax(d_logits_v, dim=1).gather(1, d_actions_v.unsqueeze(1)).squeeze(1)
-            d_ratios = torch.exp(d_log_probs - d_lp_old_v)
-            d_surr1 = d_ratios * adv_d_v
-            d_surr2 = torch.clamp(d_ratios, 1 - self.clip_ratio, 1 + self.clip_ratio) * adv_d_v
-            d_policy_loss = -torch.min(d_surr1, d_surr2).mean()
+            cem_d_valid = valid & cem_flat.bool()
+            if use_CEM and cem_d_valid.any():
+                d_logits_cem = d_logits_flat[cem_d_valid]
+                d_actions_cem = d_actions_flat[cem_d_valid]
+                d_policy_loss = F.cross_entropy(d_logits_cem, d_actions_cem)
+            else:
+                d_log_probs = F.log_softmax(d_logits_v, dim=1).gather(1, d_actions_v.unsqueeze(1)).squeeze(1)
+                d_ratios = torch.exp(d_log_probs - d_lp_old_v)
+                d_surr1 = d_ratios * adv_d_v
+                d_surr2 = torch.clamp(d_ratios, 1 - self.clip_ratio, 1 + self.clip_ratio) * adv_d_v
+                d_policy_loss = -torch.min(d_surr1, d_surr2).mean()
             d_value_loss = F.mse_loss(d_values_v.squeeze(), ret_d_v)
             d_entropy_loss = -(torch.softmax(d_logits_v, dim=1) * F.log_softmax(d_logits_v, dim=1)).sum(dim=1).mean()
 
@@ -2276,11 +2301,17 @@ class PPOAgent(GymTradingAgent):
                 adv_u_v = adv_u_flat[u_mask]
                 ret_u_v = ret_u_flat[u_mask]
 
-                u_log_probs = F.log_softmax(u_logits_v, dim=1).gather(1, u_actions_v.unsqueeze(1)).squeeze(1)
-                u_ratios = torch.exp(u_log_probs - u_lp_old_v)
-                u_surr1 = u_ratios * adv_u_v
-                u_surr2 = torch.clamp(u_ratios, 1 - self.clip_ratio, 1 + self.clip_ratio) * adv_u_v
-                u_policy_loss = -torch.min(u_surr1, u_surr2).mean()
+                cem_u_valid = u_mask & cem_flat.bool()
+                if use_CEM and cem_u_valid.any():
+                    u_logits_cem = u_logits_flat[cem_u_valid]
+                    u_actions_cem = u_actions_flat[cem_u_valid]
+                    u_policy_loss = F.cross_entropy(u_logits_cem, u_actions_cem)
+                else:
+                    u_log_probs = F.log_softmax(u_logits_v, dim=1).gather(1, u_actions_v.unsqueeze(1)).squeeze(1)
+                    u_ratios = torch.exp(u_log_probs - u_lp_old_v)
+                    u_surr1 = u_ratios * adv_u_v
+                    u_surr2 = torch.clamp(u_ratios, 1 - self.clip_ratio, 1 + self.clip_ratio) * adv_u_v
+                    u_policy_loss = -torch.min(u_surr1, u_surr2).mean()
                 u_value_loss = F.mse_loss(u_values_v.squeeze(), ret_u_v)
                 u_entropy_loss = -(torch.softmax(u_logits_v, dim=1) * F.log_softmax(u_logits_v, dim=1)).sum(dim=1).mean()
 
