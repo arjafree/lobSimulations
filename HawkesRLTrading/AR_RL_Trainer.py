@@ -12,21 +12,21 @@ from HawkesRLTrading.src.SimulationEntities.MetaOrderTradingAgents import TWAPGy
 import torch
 import time
 
-log_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/model'
+log_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/onesided/sell/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/onesided/sell/model'
 # log_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/wout_expo/training/self_imitation/buy/terminalpenalty/logs/'
 # model_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/wout_expo/training/self_imitation/buy/terminalpenalty/model'
 
 start_trading_lag = 100
 twap_off_time = 400
 
-# twap_side = "buy"
+twap_side = "sell"
 #the time that the TWAP agent will kick in:
 twap_start_time = 150 + start_trading_lag
 
 twap_end_time = 300 + start_trading_lag
 
-label = 'train_lstm_cem_on'
+label = 'train_selfim_sell'
 layer_widths=100
 n_layers=3
 eta = 50
@@ -231,7 +231,7 @@ for episode in range(80):
     kwargs["GymTradingAgent"][1]["Inventory"] = {"INTC": 500}
     kwargs["GymTradingAgent"][1]["cash"] = 1000000
 
-    twap_side = np.random.choice(["buy", "sell"])
+    # twap_side = np.random.choice(["buy", "sell"])
     sides.append(twap_side)
     eps_with_buy.append(episode) if twap_side == "buy" else eps_with_sell.append(episode)
     kwargs["GymTradingAgent"][1]["start_trading_lag"] = twap_start_time
