@@ -381,9 +381,6 @@ for episode in range(17):
                 if not RLagentInstance.TWAPPresent:
                     RLagentInstance.TWAPPresent = -1 if twap_side == 'sell' else 1
             else:
-                if Simstate['TimeCode'] > twap_off_time:
-                    print(Simstate['TimeCode'])
-                    breakpoint()
                 RLagentInstance.TWAPPresent = 0
         
         # action:list[Tuple] = []
