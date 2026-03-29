@@ -12,26 +12,26 @@ from HawkesRLTrading.src.SimulationEntities.MetaOrderTradingAgents import TWAPGy
 import torch
 import time
 
-log_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/onesided/sell/terminalpenalty/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/onesided/sell/terminalpenalty/model'
+log_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/onesided/buy/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/wout_expo/training/self_imitation/onesided/buy/model'
 # log_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/wout_expo/training/self_imitation/buy/terminalpenalty/logs/'
 # model_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/wout_expo/training/self_imitation/buy/terminalpenalty/model'
 
 start_trading_lag = 100
 twap_off_time = 400
 
-twap_side = "sell"
+twap_side = "buy"
 #the time that the TWAP agent will kick in:
 twap_start_time = 150 + start_trading_lag
 
 twap_end_time = 300 + start_trading_lag
 
-label = 'train_termpen_sell'
+label = 'train_selfim_buy'
 layer_widths=100
 n_layers=3
 eta = 50
 
-checkpoint_params = None #("20260312_124918_train_LSTM_TWAP_buy", 52)
+checkpoint_params = ("20260323_101607_train_selfim_buy", 24)
 
 def graphInventories(beforetwap, withtwap_buy, withtwap_sell, episode_num):
     plt.figure(figsize=(12, 8))
@@ -90,6 +90,50 @@ def graphInventories(beforetwap, withtwap_buy, withtwap_sell, episode_num):
     plt.savefig(log_dir + f'_all_inventory_distributions_episode_{episode_num}.png', dpi=300, bbox_inches='tight')
     plt.close()
 
+def plot_avg_inventory_trajectories(buy_trajectories, sell_trajectories, episode_num, save_dir, label_prefix, twap_start, twap_end):
+    """Plot avg inventory trajectories colored by training batch (every 4 episodes), separated by buy/sell."""
+    import matplotlib.colors
+    fig, axes = plt.subplots(1, 2, figsize=(20, 8), sharey=True)
+
+    cmap = plt.cm.viridis
+    max_batch = max(episode_num // 4, 1)
+
+    for ax, trajectories, side_label in zip(axes, [buy_trajectories, sell_trajectories], ['Buy TWAP', 'Sell TWAP']):
+        if not trajectories:
+            ax.set_title(f'{side_label} - No episodes')
+            ax.grid(True, alpha=0.3)
+            continue
+
+        ax.axvspan(twap_start, twap_end, alpha=0.1, color='lightcoral', label='TWAP active')
+
+        all_interp = []
+        max_time = max(times[-1] for _, times, _ in trajectories if len(times) > 0)
+        common_times = np.linspace(0, max_time, 500)
+
+        for ep_num, times, invs in trajectories:
+            batch_idx = ep_num // 4
+            color = cmap(batch_idx / max_batch)
+            ax.plot(times, invs, alpha=0.2, color=color, linewidth=0.8)
+            all_interp.append(np.interp(common_times, times, invs))
+
+        if all_interp:
+            avg = np.mean(all_interp, axis=0)
+            ax.plot(common_times, avg, color='black', linewidth=2.5, label=f'Avg (n={len(trajectories)})')
+
+        ax.set_xlabel('Time (seconds)')
+        ax.set_ylabel('Inventory')
+        ax.set_title(f'{side_label} Episodes (n={len(trajectories)})')
+        ax.legend(loc='best')
+        ax.grid(True, alpha=0.3)
+
+    norm = matplotlib.colors.Normalize(vmin=0, vmax=max_batch)
+    sm = matplotlib.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    fig.colorbar(sm, ax=axes, label='Training batch (every 4 episodes)', shrink=0.8)
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_dir, f'{label_prefix}_avg_inv_trajectories_ep{episode_num}.png'), dpi=150)
+    plt.close()
 
 
 # with open("/Users/alirazajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
@@ -182,7 +226,7 @@ RLagentInstance = AdversarialPPOAgent( seed=1, log_events=True, log_to_file=True
                           wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"], cashlimit=j["cashlimit"],inventorylimit=j['inventorylimit'], batch_size=512,
                           layer_widths=layer_widths, n_layers =n_layers, buffer_capacity = 100000, rewardpenalty = j["rewardpenalty"], epochs = 100, transaction_cost=1e-4, start_trading_lag = j['start_trading_lag'],
                           gae_lambda=0.5, truncation_enabled=False, action_space_config = 1, alt_state=True, enhance_state=True, include_time=True, optim_type='ADAM',entropy_coef=0, exploration_bonus = 0, hidden_activation='sigmoid', 
-                          typeNN = "LSTM", lr = 3e-4, chunk_length=64, TWAPPresent=0, terminal_invpenalty=5*eta)
+                          typeNN = "LSTM", lr = 3e-4, chunk_length=64, TWAPPresent=0)#, terminal_invpenalty=5*eta)
 
 inventories_with_twap_buy = []
 inventories_with_twap_sell = []
@@ -217,10 +261,14 @@ total_RL_obsv = []
 
 final_cashs = []
 total_executeds = []
+episode_inv_trajectories_buy = []
+episode_inv_trajectories_sell = []
 for episode in range(80):
     inventory_with_twap_buy = []
     inventory_with_twap_sell = []
     inventory_without_twap = []
+    episode_times_rl = []
+    episode_invs_rl = []
 
     RL_agent_obsv = []
     TWAP_agent_obsv = []
@@ -251,11 +299,10 @@ for episode in range(80):
         for agent in agents:
             if isinstance(agent, PPOAgent):
                 agent.setupNNs(observations)
-        
-    if checkpoint_params is not None:
-        loaded_models = model_manager.load_models(timestamp=checkpoint_params[0], epoch = checkpoint_params[1], d = agent.Actor_Critic_d, u = agent.Actor_Critic_u)
-        agent.Actor_Critic_d = loaded_models['d']
-        agent.Actor_Critic_u = loaded_models['u']
+        if checkpoint_params is not None:
+            loaded_models = model_manager.load_models(timestamp=checkpoint_params[0], epoch = checkpoint_params[1], d = agent.Actor_Critic_d, u = agent.Actor_Critic_u)
+            agent.Actor_Critic_d = loaded_models['d']
+            agent.Actor_Critic_u = loaded_models['u']
     logger.debug(f"\nSimstate: {Simstate}\nObservations: {observations}\nTermination: {termination}")
     episode_start_time = time.time()
     while Simstate["Done"]==False and termination!=True:
@@ -304,6 +351,8 @@ for episode in range(80):
                 agentAction:Tuple[int, int] = agent.get_action(data=env.getobservations(agentID=agent.id), epsilon = 0.5 if i_eps < 100 else 0.1)
                 action = (agent.id, (agentAction[0],1))
                 Simstate, observations, termination, truncation=env.step(action=action) #do not try and use this data before this line in the loop
+                episode_times_rl.append(Simstate['TimeCode'])
+                episode_invs_rl.append(observations["Inventory"])
                 if(twap_end_time > Simstate['TimeCode'] > twap_start_time):
                     if twap_side == "sell":
                         inventory_with_twap_sell.append(observations["Inventory"])
@@ -396,7 +445,10 @@ for episode in range(80):
                 plt.savefig(log_dir + label + '_profit.png')
 
                 np.save(log_dir + "sharpe/" + label + '_profit', np.array([t, finalcash2]))
-                np.save(log_dir+ "sharpe/" + label+"_profit_w_twap_buy", np.array([t_with_twap_buy, profit_with_twap_buy])) if twap_side == "buy" else np.save(log_dir+label+"_profit_w_twap_sell", np.array([t_with_twap_sell, profit_with_twap_sell]))
+                if len(t_with_twap_buy) > 0:
+                    np.save(log_dir + "sharpe/" + label + "_profit_w_twap_buy", np.array([t_with_twap_buy, profit_with_twap_buy]))
+                if len(t_with_twap_sell) > 0:
+                    np.save(log_dir + "sharpe/" + label + "_profit_w_twap_sell", np.array([t_with_twap_sell, profit_with_twap_sell]))
                 np.save(log_dir+"sharpe/" +label+"_profit_wout_twap", np.array([t_without_twap, profit_without_twap]))
 
                 RL_agent_obsv.append(observationsDict[RLagentID])
@@ -406,10 +458,14 @@ for episode in range(80):
     
     total_RL_obsv.append(RL_agent_obsv)
 
-    if(len(inventory_with_twap_buy) > 0):
+    if len(inventory_with_twap_buy) > 0:
         inventories_with_twap_buy.append(inventory_with_twap_buy)
-    else:
+        if len(episode_times_rl) > 0:
+            episode_inv_trajectories_buy.append((episode, episode_times_rl, episode_invs_rl))
+    if len(inventory_with_twap_sell) > 0:
         inventories_with_twap_sell.append(inventory_with_twap_sell)
+        if len(episode_times_rl) > 0:
+            episode_inv_trajectories_sell.append((episode, episode_times_rl, episode_invs_rl))
     inventories_without_twap.append(inventory_without_twap)
 
     final_cashs.append(final_cash)
@@ -436,6 +492,8 @@ for episode in range(80):
             train_logger.plot_losses(show=False, save=True)
 
         model_manager.save_models(epoch = episode, u = RLagentInstance.Actor_Critic_u, d= RLagentInstance.Actor_Critic_d)
+        plot_avg_inventory_trajectories(episode_inv_trajectories_buy, episode_inv_trajectories_sell,
+                                        episode, log_dir, label, twap_start_time, twap_end_time)
     for agent in agents:
         if isinstance(agent, PPOAgent):
             agent.current_time = 0
@@ -497,12 +555,12 @@ for episode in range(80):
     torch.cuda.empty_cache()
     # torch.mps.empty_cache()
 
-np.save(log_dir +"inventorydists/" + label+ "_inventory_without_twap.npy", np.array(inventory_without_twap))
+np.save(log_dir +"inventorydists/" + label+ "_inventory_without_twap.npy", np.array(inventories_without_twap, dtype=object), allow_pickle=True)
 
-if len(inventory_with_twap_sell) > 0:
-    np.save(log_dir +"inventorydists/" + label+ "_inventory_with_twap_sell.npy", np.array(inventory_with_twap_sell))
-if len(inventory_with_twap_buy) > 0:
-    np.save(log_dir +"inventorydists/" + label+ "_inventory_with_twap_buy.npy", np.array(inventory_with_twap_buy))
+if len(inventories_with_twap_sell) > 0:
+    np.save(log_dir +"inventorydists/" + label+ "_inventory_with_twap_sell.npy", np.array(inventories_with_twap_sell, dtype=object), allow_pickle=True)
+if len(inventories_with_twap_buy) > 0:
+    np.save(log_dir +"inventorydists/" + label+ "_inventory_with_twap_buy.npy", np.array(inventories_with_twap_buy, dtype=object), allow_pickle=True)
 
 np.save(log_dir+"slippages/"+label+"total_executed.npy", np.array(total_executeds))
 np.save(log_dir+"slippages/"+label+"final_cash.npy", np.array(final_cashs))
