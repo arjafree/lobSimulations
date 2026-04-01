@@ -334,7 +334,7 @@ for episode in range(17):
     TWAP_agent_obsv = []
     total_executed = 0
     final_cash = 0
-    twap_side = "buy"#np.random.choice(["buy", "sell"])
+    twap_side = np.random.choice(["buy", "sell"])
     kwargs["GymTradingAgent"][1]["Inventory"] = {"INTC": 500}
     kwargs["GymTradingAgent"][1]["cash"] = 1000000
     kwargs["GymTradingAgent"][1]["side"] = twap_side
