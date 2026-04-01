@@ -113,7 +113,7 @@ def plot_avg_inventory_trajectories(buy_trajectories, sell_trajectories, episode
         for ep_num, times, invs in trajectories:
             batch_idx = ep_num // 4
             color = cmap(batch_idx / max_batch)
-            ax.plot(times, invs, alpha=0.2, color=color, linewidth=0.8)
+            ax.plot(times, invs, alpha=0.5, color=color, linewidth=1.5)
             all_interp.append(np.interp(common_times, times, invs))
 
         if all_interp:
