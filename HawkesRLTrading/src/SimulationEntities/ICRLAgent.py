@@ -1401,7 +1401,7 @@ class PPOAgent(GymTradingAgent):
                  buffer_capacity=10000, batch_size=64, epochs=1000, layer_widths = 128, n_layers = 3, clip_ratio=0.2,
                  value_loss_coef=0.5, entropy_coef=10, max_grad_norm=0.5, gae_lambda=0.95, rewardpenalty = 0.1, hidden_activation='leaky_relu',
                  transaction_cost = 0.01, start_trading_lag=0, truncation_enabled=True, action_space_config = 0, include_time = False, alt_state=False, enhance_state=False,
-                 policy_loss_coef = 1, optim_type = 'ADAM',lr=1e-3, exploration_bonus = 0, two_sided_reward = True, ablation_params= {}, typeNN = "dense", chunk_length=64, terminal_invpenalty=0):
+                 policy_loss_coef = 1, optim_type = 'ADAM',lr=1e-3, exploration_bonus = 0, two_sided_reward = True, ablation_params= {}, typeNN = "dense", chunk_length=64, terminal_invpenalty=0, cem_full_episode=False):
         """
         PPO Agent with Generalized Advantage Estimation (GAE)
         Maintains two networks: one for decision (d) and one for utility (u)
@@ -1484,6 +1484,7 @@ class PPOAgent(GymTradingAgent):
         self.chunk_length = chunk_length
         #Optional kappa, inventory penalty at termination
         self.terminal_invpenalty = terminal_invpenalty
+        self.cem_full_episode = cem_full_episode
         # Enable anomaly detection for debugging
         torch.autograd.set_detect_anomaly(True)
 
@@ -2344,11 +2345,13 @@ class PPOAgent(GymTradingAgent):
 
     def get_max_contiguous_rewards(self, K):
         """
-        Find maximum contiguous subarray of rewards for each episode with minimum length K
+        Find best segments for CEM imitation learning.
+
+        Default: best contiguous subarray of rewards per episode (minimum length K).
+        If self.cem_full_episode=True: rank episodes by total reward, pick top 5 full episodes.
 
         :param K: Minimum length of subarray
-        :return: Dictionary mapping episode -> (start_idx, end_idx, max_sum)
-                 where indices are relative to the episode's trajectory
+        :return: Dictionary mapping episode -> (start_idx, end_idx, max_sum) or None
         """
         if not self.trajectory_buffer:
             return {}
@@ -2360,31 +2363,49 @@ class PPOAgent(GymTradingAgent):
                 episodes[ep] = []
             episodes[ep].append(transition)
 
-        results = {}
+        if self.cem_full_episode:
+            # Top-5 full-episode selection
+            episode_totals = {}
+            for ep, transitions in episodes.items():
+                if len(transitions) < K:
+                    continue
+                episode_totals[ep] = sum(t[3] for t in transitions)
 
+            if not episode_totals:
+                return {ep: None for ep in episodes}
+
+            sorted_eps = sorted(episode_totals, key=episode_totals.get, reverse=True)
+            top_eps = set(sorted_eps[:5])
+
+            results = {}
+            for ep, transitions in episodes.items():
+                if ep in top_eps:
+                    results[ep] = (0, len(transitions) - 1, episode_totals[ep])
+                else:
+                    results[ep] = None
+            return results
+
+        # Default: best contiguous subarray per episode
+        results = {}
         for ep, transitions in episodes.items():
             if len(transitions) < K:
-                # Episode too short for minimum length K
                 results[ep] = None
                 continue
 
-            rewards = [t[3] for t in transitions]  # Extract rewards (index 3 in transition tuple)
+            rewards = [t[3] for t in transitions]
 
             max_sum = float('-inf')
             best_start = 0
             best_end = K - 1
 
-            # Check all possible subarrays of length >= K
             for start in range(len(rewards) - K + 1):
-                current_sum = sum(rewards[start:start + K])  # Initial window of size K
+                current_sum = sum(rewards[start:start + K])
 
-                # Check if this K-length window is better
                 if current_sum > max_sum:
                     max_sum = current_sum
                     best_start = start
                     best_end = start + K - 1
 
-                # Extend the window beyond K if possible
                 for end in range(start + K, len(rewards)):
                     current_sum += rewards[end]
                     if current_sum > max_sum:
