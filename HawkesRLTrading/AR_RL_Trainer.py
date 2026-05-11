@@ -287,7 +287,6 @@ for episode in range(80):
     kwargs["GymTradingAgent"][1]["side"] = twap_side
     i = 0
     action_num = 0
-    prev_readData = None
     env=tradingEnv(stop_time=550, wall_time_limit=23400, **kwargs)
     print(f"Start of episode {episode}. TWAP side is {twap_side}")
     print("Initial Observations"+ str(env.getobservations()))
@@ -349,6 +348,10 @@ for episode in range(80):
                 action_num+=1
                 RLagentID = agent.id
                 agentAction:Tuple[int, int] = agent.get_action(data=env.getobservations(agentID=agent.id), epsilon = 0.5 if i_eps < 100 else 0.1)
+                # Snapshot the state the action was actually chosen from (set inside get_action).
+                # Using this instead of prev_readData ensures the stored (s, a) pair is aligned —
+                # critical when other agents (TWAP) act between RL steps and shift env state.
+                state_at_action = agent.last_state.clone() if agent.last_state is not None else None
                 action = (agent.id, (agentAction[0],1))
                 Simstate, observations, termination, truncation=env.step(action=action) #do not try and use this data before this line in the loop
                 episode_times_rl.append(Simstate['TimeCode'])
@@ -367,9 +370,8 @@ for episode in range(80):
                 actionss.update({agent.id: actionss.get(agent.id, []) + [action[1][0]]})
                 t += [Simstate['TimeCode']]
                 current_readData = agent.readData(observations)
-                if prev_readData is not None:
-                    agent.store_transition(episode, prev_readData, agentAction[1], agent.calculaterewards(termination), current_readData, (termination or truncation))
-                prev_readData = current_readData
+                if state_at_action is not None:
+                    agent.store_transition(episode, state_at_action, agentAction[1], agent.calculaterewards(termination), current_readData, (termination or truncation))
                 print(f'Current reward: {agent.calculaterewards(termination):0.4f}')
                 # print(f'Prev avg reward: {np.mean([r[2] for r in agent.experience_replay[-100:]]):0.4f}')
                 i_eps+=1

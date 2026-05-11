@@ -349,7 +349,6 @@ for episode in range(17):
     episode_twap_exec_times = []   # Track execution times for this episode
     i = 0
     action_num = 0
-    prev_readData = None
     env=tradingEnv(stop_time=550, wall_time_limit=23400, **kwargs)
     print("Initial Observations"+ str(env.getobservations()))
     Simstate, observations, termination, truncation =env.step(action=None) 
@@ -434,6 +433,8 @@ for episode in range(17):
                 action_num+=1
                 RLagentID = agent.id
                 agentAction:Tuple[int, int] = agent.get_action(data=env.getobservations(agentID=agent.id), epsilon = 0.5 if i_eps < 100 else 0.1)
+                # Snapshot the state the action was actually chosen from (set inside get_action).
+                state_at_action = agent.last_state.clone() if agent.last_state is not None else None
                 action = (agent.id, (agentAction[0],1))
                 print(f"RL Action: {action}")
                 print(f"Limit Order Book: {observationsDict.get(agent.id, {}).get('LOB0', '')}")
@@ -460,11 +461,9 @@ for episode in range(17):
                 inventories.update({agent.id:inventories.get(agent.id, []) + [observations['Inventory']]})
                 actionss.update({agent.id: actionss.get(agent.id, []) + [action[1][0]]})
                 t += [Simstate['TimeCode']]
-                # agent.appendER((agent.readData(observations_prev), agentAction, agent.calculaterewards(termination), agent.readData(observations_prev), (termination or truncation)))
                 current_readData = agent.readData(observations)
-                if prev_readData is not None:
-                    agent.store_transition(episode, prev_readData, agentAction[1], agent.calculaterewards(termination), current_readData, (termination or truncation))
-                prev_readData = current_readData
+                if state_at_action is not None:
+                    agent.store_transition(episode, state_at_action, agentAction[1], agent.calculaterewards(termination), current_readData, (termination or truncation))
                 print(f'Current reward: {agent.calculaterewards(termination):0.4f}')
                 # print(f'Prev avg reward: {np.mean([r[2] for r in agent.experience_replay[-100:]]):0.4f}')
                 i_eps+=1
