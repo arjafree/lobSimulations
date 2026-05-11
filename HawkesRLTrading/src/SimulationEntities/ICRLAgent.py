@@ -1662,13 +1662,14 @@ class PPOAgent(GymTradingAgent):
                 u = random.randint(0, len(self.allowed_actions) - 1)
                 _u = copy.deepcopy(u)
                 u = self.convert_dict.get(u, u)
-                # Compute dummy logits for logging
-                d_logits, d_value = self.Actor_Critic_d(state)
-                u_logits, u_value = self.Actor_Critic_u(state)
-
-                # Get log probabilities
-                d_log_prob = torch.log_softmax(d_logits, dim=1)[0, d]
-                u_log_prob = torch.log_softmax(u_logits, dim=1)[0, _u]
+                # Compute dummy logits for logging — no_grad: exploration action is random,
+                # we don't need gradients here. Without this the LSTM forward leaks autograd
+                # graph (esp. with set_detect_anomaly=True).
+                with torch.no_grad():
+                    d_logits, d_value = self.Actor_Critic_d(state)
+                    u_logits, u_value = self.Actor_Critic_u(state)
+                    d_log_prob = torch.log_softmax(d_logits, dim=1)[0, d]
+                    u_log_prob = torch.log_softmax(u_logits, dim=1)[0, _u]
 
                 # Validation checks (similar to original implementation)
                 if int(u) in [1, 3, 8, 10]:  # cancels
@@ -1766,12 +1767,12 @@ class PPOAgent(GymTradingAgent):
                 d = random.randint(0, 1)
                 u = random.randint(0, 2)  # because u in {0, 1, 2}
 
-                # Dummy logits for logging
-                d_logits, d_value = self.Actor_Critic_d(state)
-                u_logits, u_value = self.Actor_Critic_u(state)
-
-                d_log_prob = torch.log_softmax(d_logits, dim=1)[0, d]
-                u_log_prob = torch.log_softmax(u_logits, dim=1)[0, u]
+                # Dummy logits for logging — no_grad: action is random, no gradient needed.
+                with torch.no_grad():
+                    d_logits, d_value = self.Actor_Critic_d(state)
+                    u_logits, u_value = self.Actor_Critic_u(state)
+                    d_log_prob = torch.log_softmax(d_logits, dim=1)[0, d]
+                    u_log_prob = torch.log_softmax(u_logits, dim=1)[0, u]
 
                 if d == 0:
                     self.last_action = 12
