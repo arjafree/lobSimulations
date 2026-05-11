@@ -1956,8 +1956,11 @@ class PPOAgent(GymTradingAgent):
             d_logits, d_values_pred = self.Actor_Critic_d(states)
             if use_CEM:
                 idxs =np.random.choice(np.arange(len(cem_states_d)), self.batch_size)
-                d_logits, _ = self.Actor_Critic_d(torch.cat(cem_states_d)[idxs,:])
-                d_policy_loss = F.cross_entropy(d_logits, torch.tensor(cem_d_actions)[idxs].to(self.device))
+                # Separate variable so d_logits (PPO batch) stays available for entropy loss below.
+                # Previously this overwrote d_logits, so entropy regularisation landed on the
+                # elite batch and directly opposed the CE supervised signal there.
+                d_logits_cem, _ = self.Actor_Critic_d(torch.cat(cem_states_d)[idxs,:])
+                d_policy_loss = F.cross_entropy(d_logits_cem, torch.tensor(cem_d_actions)[idxs].to(self.device))
 
             else:
                 d_log_probs = F.log_softmax(d_logits, dim=1).gather(1, d_actions.unsqueeze(1)).squeeze()
@@ -2002,8 +2005,9 @@ class PPOAgent(GymTradingAgent):
                 u_logits, u_values_pred = self.Actor_Critic_u(states_u)
                 if use_CEM:
                     idxs =np.random.choice(np.arange(len(cem_states_u)), self.batch_size)
-                    u_logits, _ = self.Actor_Critic_u(torch.cat(cem_states_u)[idxs,:])
-                    u_policy_loss = F.cross_entropy(u_logits, torch.tensor(cem_u_actions)[idxs].to(self.device))
+                    # Separate variable so u_logits (PPO batch) stays available for entropy loss below.
+                    u_logits_cem, _ = self.Actor_Critic_u(torch.cat(cem_states_u)[idxs,:])
+                    u_policy_loss = F.cross_entropy(u_logits_cem, torch.tensor(cem_u_actions)[idxs].to(self.device))
                 else:
                     u_log_probs = F.log_softmax(u_logits, dim=1).gather(1, u_actions_u.unsqueeze(1)).squeeze()
 
