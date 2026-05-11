@@ -365,6 +365,9 @@ for episode in range(80):
                     inventory_without_twap.append(observations["Inventory"])
                 observationsDict.update({agent.id:observations})
                 logger.debug(f"\n Agent: {agent.id}\n Simstate: {Simstate}\nObservations: {observations}\nTermination: {termination}\nTruncation: {truncation}")
+                if len(t) > 0 and Simstate['TimeCode'] < t[-1]:
+                    # Episode has reset - mark boundary BEFORE appending the new episode's first entry
+                    episode_boundaries.append(len(cashs.get(agent.id, [])))
                 cashs.update({agent.id:cashs.get(agent.id, [])+[observations['Cash']]})
                 inventories.update({agent.id:inventories.get(agent.id, []) + [observations['Inventory']]})
                 actionss.update({agent.id: actionss.get(agent.id, []) + [action[1][0]]})
@@ -376,9 +379,6 @@ for episode in range(80):
                 # print(f'Prev avg reward: {np.mean([r[2] for r in agent.experience_replay[-100:]]):0.4f}')
                 i_eps+=1
                 logger.debug(f"\nSimstate: {Simstate}\nObservations: {observations}\nTermination: {termination}\nTruncation: {truncation}")
-                if len(t) > 1 and t[-1] < t[-2]:
-                    # Episode has reset - mark boundary
-                    episode_boundaries.append(len(cashs[agent.id]))
                 # Calculate current PnL (cash + inventory value)
                 current_pnl = cashs[agent.id][-1] + inventories[agent.id][-1] * agent.mid * (1 - tc*np.sign(inventories[agent.id][-1]))
                 finalcash2.append(current_pnl)
