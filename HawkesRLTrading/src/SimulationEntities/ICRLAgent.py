@@ -1401,7 +1401,7 @@ class PPOAgent(GymTradingAgent):
                  buffer_capacity=10000, batch_size=64, epochs=1000, layer_widths = 128, n_layers = 3, clip_ratio=0.2,
                  value_loss_coef=0.5, entropy_coef=10, max_grad_norm=0.5, gae_lambda=0.95, rewardpenalty = 0.1, hidden_activation='leaky_relu',
                  transaction_cost = 0.01, start_trading_lag=0, truncation_enabled=True, action_space_config = 0, include_time = False, alt_state=False, enhance_state=False,
-                 policy_loss_coef = 1, optim_type = 'ADAM',lr=1e-3, exploration_bonus = 0, two_sided_reward = True, ablation_params= {}, typeNN = "dense", chunk_length=64, terminal_invpenalty=0, cem_full_episode=False):
+                 policy_loss_coef = 1, optim_type = 'ADAM',lr=1e-3, exploration_bonus = 0, two_sided_reward = True, ablation_params= {}, typeNN = "dense", chunk_length=64, terminal_invpenalty=0, cem_full_episode=False, phase_a_refresh_every=25):
         """
         PPO Agent with Generalized Advantage Estimation (GAE)
         Maintains two networks: one for decision (d) and one for utility (u)
@@ -1485,6 +1485,10 @@ class PPOAgent(GymTradingAgent):
         #Optional kappa, inventory penalty at termination
         self.terminal_invpenalty = terminal_invpenalty
         self.cem_full_episode = cem_full_episode
+        # How often (in Phase B PPO epochs) to refresh Phase A (recompute old log probs,
+        # GAE, and saved hidden states with current network weights). The saved hidden
+        # states would otherwise grow stale as PPO updates move the LSTM weights.
+        self.phase_a_refresh_every = phase_a_refresh_every
         # Enable anomaly detection for debugging
         torch.autograd.set_detect_anomaly(True)
 
@@ -2057,23 +2061,23 @@ class PPOAgent(GymTradingAgent):
             del u_policy_loss, u_value_loss, u_entropy_loss
             del u_logits, u_values_pred, d_logits, d_values_pred
 
-    def _train_lstm(self, train_logger, use_CEM=False):
+    def _build_phase_a_chunks(self, use_CEM):
         """
-        Chunk-based PPO-LSTM training.
-        Preserves temporal context by splitting episodes into sequential chunks,
-        sampling chunks randomly, and restoring hidden states at chunk boundaries.
-        When use_CEM=True, replaces PPO policy loss with cross-entropy on elite
-        (highest-reward) subsequences for self-imitation learning.
+        Phase A of chunk-based PPO-LSTM: replay the trajectory buffer through the
+        current network to (re)compute old log probs, values, GAE, and saved
+        per-chunk hidden states. Returns a list of chunk dicts ready for Phase B.
+
+        Called by `_train_lstm` once at the start and every `phase_a_refresh_every`
+        PPO epochs so the "old policy" baseline tracks the slowly-drifting current
+        network instead of being frozen for all 1000 epochs.
         """
         chunk_length = self.chunk_length
         eIDs = np.unique([tr[0] for tr in self.trajectory_buffer])
         all_chunks = []
 
-        # Get elite segments for CEM self-imitation
         if use_CEM:
             elite_segments = self.get_max_contiguous_rewards(K=10)
 
-        # ---- Phase A: Compute old log probs sequentially per episode ----
         for eID in eIDs:
             ep_data = [(tr[1]) for tr in self.trajectory_buffer if tr[0] == eID]
             states = torch.cat([t[0] for t in ep_data]).to(self.device)
@@ -2215,11 +2219,40 @@ class PPOAgent(GymTradingAgent):
                     **saved_hidden,  # d_actor_h/c, d_critic_h/c, u_actor_h/c, u_critic_h/c
                 })
 
-        # ---- Phase B: PPO minibatch updates using chunks ----
+        return all_chunks
+
+    def _train_lstm(self, train_logger, use_CEM=False):
+        """
+        Chunk-based PPO-LSTM training. Splits episodes into sequential chunks,
+        samples chunks randomly, and restores hidden states at chunk boundaries
+        for temporal context. When use_CEM=True, replaces PPO policy loss with
+        cross-entropy on elite (highest-reward) subsequences for self-imitation.
+
+        Phase A (recompute old log probs / GAE / saved hidden states from the
+        current network) is refreshed every self.phase_a_refresh_every Phase B
+        epochs so the old-policy baseline tracks the moving weights instead of
+        being frozen for all `self.epochs` updates.
+        """
+        chunk_length = self.chunk_length
+        refresh_every = max(1, self.phase_a_refresh_every)
+
+        # ---- Phase A: build chunks from current network ----
+        all_chunks = self._build_phase_a_chunks(use_CEM)
+        if not all_chunks:
+            return
         num_chunks = len(all_chunks)
         num_chunks_per_batch = max(1, self.batch_size // chunk_length)
 
-        for _ in range(self.epochs):
+        # ---- Phase B: PPO minibatch updates using chunks ----
+        for epoch in range(self.epochs):
+            # Periodically rebuild Phase A so saved hidden states + old log probs
+            # don't drift too far from the current (PPO-updated) network.
+            if epoch > 0 and epoch % refresh_every == 0:
+                all_chunks = self._build_phase_a_chunks(use_CEM)
+                if not all_chunks:
+                    return
+                num_chunks = len(all_chunks)
+
             chunk_idxs = np.random.choice(num_chunks, min(num_chunks_per_batch, num_chunks), replace=False)
             B = len(chunk_idxs)
 
