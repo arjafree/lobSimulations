@@ -1701,14 +1701,18 @@ class PPOAgent(GymTradingAgent):
                 d = torch.multinomial(d_probs, 1).item()
                 d_log_prob = torch.log(d_probs[d])
 
+                # Always forward u-network here (even when d will turn out to be 0) so its
+                # LSTM hidden state advances on every step. Training's Phase A re-runs the
+                # u-LSTM on every stored state regardless of d, so rollout must do the same
+                # to keep `u_log_probs_old` valid as a PPO importance-sampling baseline.
+                u_logits, u_value = self.Actor_Critic_u(state)
+                u_probs = torch.softmax(u_logits, dim=1).squeeze()
+
                 # If no decision to act (d=0)
                 if d == 0:
                     self.last_action = 12
                     return 12, (d, 0), d_log_prob.item(), 0, d_value.item(), 0
 
-                # Utility network
-                u_logits, u_value = self.Actor_Critic_u(state)
-                u_probs = torch.softmax(u_logits, dim=1).squeeze()
                 u = torch.multinomial(u_probs, 1).item()
                 _u = copy.deepcopy(u)
                 u = self.convert_dict.get(u, u)
@@ -1796,12 +1800,15 @@ class PPOAgent(GymTradingAgent):
                 d = torch.multinomial(d_probs, 1).item()
                 d_log_prob = torch.log(d_probs[d])
 
+                # Always forward u-network so its LSTM hidden state stays in sync with
+                # training Phase A (which sees every state regardless of d).
+                u_logits, u_value = self.Actor_Critic_u(state)
+                u_probs = torch.softmax(u_logits, dim=1).squeeze()
+
                 if d == 0:
                     self.last_action = 12
                     return ((12, 1), (12, 1)), (d, 0), d_log_prob.item(), 0, d_value.item(), 0
 
-                u_logits, u_value = self.Actor_Critic_u(state)
-                u_probs = torch.softmax(u_logits, dim=1).squeeze()
                 u = torch.multinomial(u_probs, 1).item()
                 u_log_prob = torch.log(u_probs[u])
 
