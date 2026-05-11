@@ -486,7 +486,7 @@ for episode in range(80):
         if ('test' not in label) and ((checkpoint_params is None) or (episode >= 0)):
             for epoch in range(1):
                 start_time = time.time()
-                d_policy_loss, d_value_loss, d_entropy_loss, u_policy_loss, u_value_loss, u_entropy_loss = agent.train(train_logger, use_CEM = bool((episode) % 8))
+                d_policy_loss, d_value_loss, d_entropy_loss, u_policy_loss, u_value_loss, u_entropy_loss = agent.train(train_logger, use_CEM = bool((episode) % 8) and (episode >= 10))
                 train_time = time.time() - start_time
                 # store timing on the train_logger (create list if necessary)
                 print(f"Agent.train took {train_time:.4f}s for episode {episode}")
