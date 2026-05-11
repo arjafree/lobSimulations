@@ -504,6 +504,8 @@ for episode in range(80):
             agent.Inventory = {"INTC": 0}
             agent.positions = {'INTC':{}}
             agent.last_state = None  # Triggers LSTM reset on next get_action()
+            agent.profit = 0
+            agent.statelog = [(0, agent.cash, agent.profit, agent.Inventory.copy(), agent.positions.copy(), agent.mid)]
             j['agent_instance'] = agent
             kwargs['GymTradingAgent'][0] = j
 
