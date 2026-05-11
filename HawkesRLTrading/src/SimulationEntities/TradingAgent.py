@@ -236,8 +236,10 @@ class TradingAgent(Entity):
                 rtn=[j for j in self.positions[order.symbol][level] if j.order_id!=order.cancelID]
                 self.positions[order.symbol][level]=rtn
             self.profit=self.cash-self.statelog[0][1]
-            self.updatestatelog()
-            print(f"Statelog: {self.statelog[-1]}")
+            # NOTE: do NOT append to statelog here. statelog is only advanced by
+            # the agent's own calculaterewards calls so that deltaPNL captures
+            # the full PnL change between two RL action steps, not just the
+            # sliver since the most recent fill.
         elif isinstance(message, LimitOrderAcceptedMsg):
                 level=self.exchange.getlevel(price=message.order.price)
                 print(f"Level of limit Order is: {level} ")
@@ -259,7 +261,8 @@ class TradingAgent(Entity):
                 self.cash-=order.price*(consumed)
                 self.Inventory[order.symbol]+=(consumed)
             self.profit=self.cash-self.statelog[0][1]
-            self.updatestatelog()
+            # NOTE: do NOT append to statelog here. See note above; statelog
+            # advances only on the agent's own calculaterewards.
         elif isinstance(message, OrderAutoCancelledMsg):
             order=message.order
             if order.side=="Ask":
