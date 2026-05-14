@@ -263,7 +263,12 @@ class ModelManager:
                 metadata = json.load(f)
 
             loaded_models = {}
-            device = 'cpu' if not torch.cuda.is_available() else 'cuda'
+            if torch.cuda.is_available():
+                device = 'cuda'
+            elif torch.backends.mps.is_available():
+                device = 'mps'
+            else:
+                device = 'cpu'
 
             # Load each model if provided and available in metadata
             for model_name, model in models.items():

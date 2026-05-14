@@ -226,7 +226,7 @@ class ICRLAgent(GymTradingAgent):
                          wake_on_Spread=wake_on_Spread, cashlimit=cashlimit)
 
         self.resetseed(seed)
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu"))
 
         # Hyperparameters
         self.rewardpenalty = 0.1  # inventory penalty
@@ -1431,9 +1431,7 @@ class PPOAgent(GymTradingAgent):
                          truncation_enabled=truncation_enabled)
 
         self.resetseed(seed)
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-        # self.device = torch.device("c/uda:0" if torch.cuda.is_available() else "mps")
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu"))
 
         #allowed actions:
 
@@ -1485,6 +1483,7 @@ class PPOAgent(GymTradingAgent):
         #Optional kappa, inventory penalty at termination
         self.terminal_invpenalty = terminal_invpenalty
         self.cem_full_episode = cem_full_episode
+        self.episode_sides = {}  # ep -> TWAPPresent at storage time, used for side-balanced CEM
         # How often (in Phase B PPO epochs) to refresh Phase A (recompute old log probs,
         # GAE, and saved hidden states with current network weights). The saved hidden
         # states would otherwise grow stale as PPO updates move the LSTM weights.
@@ -1851,6 +1850,7 @@ class PPOAgent(GymTradingAgent):
             int(done)         # Done flag
         )
         self.trajectory_buffer.append((ep, transition))
+        self.episode_sides[ep] = getattr(self, 'TWAPPresent', 0)
         if self.exploration_bonus:
             self.visit_counter.update_visit_count(self.last_state.cpu().numpy()[0][1:5], self.last_action)
 
@@ -1925,6 +1925,7 @@ class PPOAgent(GymTradingAgent):
             eID = self.trajectory_buffer[0][0]
             end_idx = np.max([i for i in range(len(self.trajectory_buffer)) if self.trajectory_buffer[i][0] == eID]) + 1
             self.trajectory_buffer = self.trajectory_buffer[end_idx:]
+            self.episode_sides.pop(eID, None)
             gc.collect()
         return [0]*6
 
@@ -2419,8 +2420,17 @@ class PPOAgent(GymTradingAgent):
             if not episode_totals:
                 return {ep: None for ep in episodes}
 
-            sorted_eps = sorted(episode_totals, key=episode_totals.get, reverse=True)
-            top_eps = set(sorted_eps[:5])
+            buy_eps  = [e for e in episode_totals if self.episode_sides.get(e, 0) > 0]
+            sell_eps = [e for e in episode_totals if self.episode_sides.get(e, 0) < 0]
+            if buy_eps and sell_eps:
+                # Two-sided training: balance elites across regimes
+                top_buys  = sorted(buy_eps,  key=episode_totals.get, reverse=True)[:3]
+                top_sells = sorted(sell_eps, key=episode_totals.get, reverse=True)[:3]
+                top_eps = set(top_buys + top_sells)
+            else:
+                # One-sided (or untagged) training: original global top-5
+                sorted_eps = sorted(episode_totals, key=episode_totals.get, reverse=True)
+                top_eps = set(sorted_eps[:5])
 
             results = {}
             for ep, transitions in episodes.items():
