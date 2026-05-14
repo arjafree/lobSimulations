@@ -119,7 +119,7 @@ RLagentInstance = AdversarialPPOAgent( seed=1, log_events=False, log_to_file=Fal
                           wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"], cashlimit=j["cashlimit"],inventorylimit=j['inventorylimit'], batch_size=512,
                           layer_widths=layer_widths, n_layers =n_layers, buffer_capacity = 100000, rewardpenalty = j["rewardpenalty"], epochs = 100, transaction_cost=1e-4, start_trading_lag = j['start_trading_lag'],
                           gae_lambda=0.5, truncation_enabled=False, action_space_config = 1, alt_state=True, enhance_state=True, include_time=True, optim_type='ADAM',entropy_coef=0, exploration_bonus = 0, hidden_activation='sigmoid',
-                          typeNN = "LSTM", lr = 3e-4, chunk_length=64, TWAPPresent=0, terminal_invpenalty=5*eta)
+                          typeNN = "LSTM", lr = 3e-4, chunk_length=64, TWAPPresent=0, cem_full_episode=True, terminal_invpenalty=5*eta)
 
 j['agent_instance'] = RLagentInstance
 kwargs['GymTradingAgent'] = agents
@@ -128,7 +128,6 @@ model_manager = ModelManager(model_dir = model_dir, label = label)
 
 num_episodes = 8
 stop_time = 50
-twap_side = "sell"
 twap_time = 10
 
 nns_setup = False
@@ -139,7 +138,8 @@ import time as _time
 ep0_setup_time = None
 
 for episode in range(num_episodes):
-    _real_stdout.write(f"\nEPISODE {episode}\n")
+    twap_side = "buy" if episode % 2 == 0 else "sell"
+    _real_stdout.write(f"\nEPISODE {episode} (twap_side={twap_side})\n")
     _real_stdout.flush()
 
     # Reset agent state for new episode (matches AR_RL_Trainer.py lines 497-506)

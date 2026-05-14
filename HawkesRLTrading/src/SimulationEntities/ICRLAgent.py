@@ -1850,7 +1850,10 @@ class PPOAgent(GymTradingAgent):
             int(done)         # Done flag
         )
         self.trajectory_buffer.append((ep, transition))
-        self.episode_sides[ep] = getattr(self, 'TWAPPresent', 0)
+        side = getattr(self, 'TWAPPresent', 0)
+        # Keep any nonzero side once seen — TWAPPresent flips 0→±1→0 across an episode
+        if side != 0 or ep not in self.episode_sides:
+            self.episode_sides[ep] = side
         if self.exploration_bonus:
             self.visit_counter.update_visit_count(self.last_state.cpu().numpy()[0][1:5], self.last_action)
 

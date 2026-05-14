@@ -446,12 +446,12 @@ for episode in range(80):
                 plt.title('Final Profit - All Episodes Overlaid')
                 plt.savefig(log_dir + label + '_profit.png')
 
-                np.save(log_dir + "sharpe/" + label + '_profit', np.array([t, finalcash2]))
+                np.save(log_dir + "sharpe_" + label + '_profit', np.array([t, finalcash2]))
                 if len(t_with_twap_buy) > 0:
-                    np.save(log_dir + "sharpe/" + label + "_profit_w_twap_buy", np.array([t_with_twap_buy, profit_with_twap_buy]))
+                    np.save(log_dir + "sharpe_" + label + "_profit_w_twap_buy", np.array([t_with_twap_buy, profit_with_twap_buy]))
                 if len(t_with_twap_sell) > 0:
-                    np.save(log_dir + "sharpe/" + label + "_profit_w_twap_sell", np.array([t_with_twap_sell, profit_with_twap_sell]))
-                np.save(log_dir+"sharpe/" +label+"_profit_wout_twap", np.array([t_without_twap, profit_without_twap]))
+                    np.save(log_dir + "sharpe_" + label + "_profit_w_twap_sell", np.array([t_with_twap_sell, profit_with_twap_sell]))
+                np.save(log_dir + "sharpe_" + label + "_profit_wout_twap", np.array([t_without_twap, profit_without_twap]))
 
                 RL_agent_obsv.append(observationsDict[RLagentID])
             
@@ -559,13 +559,13 @@ for episode in range(80):
     torch.cuda.empty_cache()
     # torch.mps.empty_cache()
 
-np.save(log_dir +"inventorydists/" + label+ "_inventory_without_twap.npy", np.array(inventories_without_twap, dtype=object), allow_pickle=True)
+np.save(log_dir + "inventorydists_" + label+ "_inventory_without_twap.npy", np.array(inventories_without_twap, dtype=object), allow_pickle=True)
 
 if len(inventories_with_twap_sell) > 0:
-    np.save(log_dir +"inventorydists/" + label+ "_inventory_with_twap_sell.npy", np.array(inventories_with_twap_sell, dtype=object), allow_pickle=True)
+    np.save(log_dir + "inventorydists_" + label+ "_inventory_with_twap_sell.npy", np.array(inventories_with_twap_sell, dtype=object), allow_pickle=True)
 if len(inventories_with_twap_buy) > 0:
-    np.save(log_dir +"inventorydists/" + label+ "_inventory_with_twap_buy.npy", np.array(inventories_with_twap_buy, dtype=object), allow_pickle=True)
+    np.save(log_dir + "inventorydists_" + label+ "_inventory_with_twap_buy.npy", np.array(inventories_with_twap_buy, dtype=object), allow_pickle=True)
 
-np.save(log_dir+"slippages/"+label+"total_executed.npy", np.array(total_executeds))
-np.save(log_dir+"slippages/"+label+"final_cash.npy", np.array(final_cashs))
+np.save(log_dir + "slippages_"+label+"total_executed.npy", np.array(total_executeds))
+np.save(log_dir + "slippages_"+label+"final_cash.npy", np.array(final_cashs))
 np.save(log_dir+label+"RL_observations.npy", np.array(total_RL_obsv))
