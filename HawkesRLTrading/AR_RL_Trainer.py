@@ -12,8 +12,8 @@ from HawkesRLTrading.src.SimulationEntities.MetaOrderTradingAgents import TWAPGy
 import torch
 import time
 
-log_dir = '/home/ajafree/LSTM_fRL/wout_expo/bugfixes/training/buy/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/wout_expo/bugfixes/training/buy/model'
+log_dir = '/home/ajafree/LSTM_fRL/wout_expo/bugfixes/buy/training/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/wout_expo/bugfixes/buy/training/model'
 
 start_trading_lag = 100
 twap_off_time = 400
