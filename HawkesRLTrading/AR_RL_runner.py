@@ -19,7 +19,7 @@ twap_starting_inventory = 500
 # Network architecture parameters - MUST match training
 layer_widths=100
 n_layers=3
-eta = 50
+eta = 5
 
 label = f'test_buy'
 
@@ -69,7 +69,7 @@ kwargs={
                         {"cash": 2500,
                          "strategy": "ICRL",
                          "action_freq": 0.213,
-                         "rewardpenalty": 50,
+                         "rewardpenalty": eta,
                          "Inventory": {"INTC": 0},
                          "log_to_file": True,
                          "cashlimit": 5000000,
