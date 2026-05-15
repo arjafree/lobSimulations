@@ -698,8 +698,7 @@ class ICRLAgent(GymTradingAgent):
 
 
     def calculaterewards(self, termination) -> Any:
-        penalty = 0
-        # penalty = self.rewardpenalty * (self.countInventory()**2)
+        penalty = self.rewardpenalty * (self.countInventory()**2)
         self.profit = self.cash - self.statelog[0][1]
         self.updatestatelog()
         deltaPNL = self.statelog[-1][2] - self.statelog[-2][2]
@@ -1614,8 +1613,7 @@ class PPOAgent(GymTradingAgent):
 
 
     def calculaterewards(self, termination) -> Any:
-        penalty = 0
-        # penalty = self.rewardpenalty * (self.countInventory()**2)
+        penalty = self.rewardpenalty * (self.countInventory()**2)
         self.profit = self.cash - self.statelog[0][1]
         self.updatestatelog()
         deltaPNL = self.statelog[-1][2] - self.statelog[-2][2]
