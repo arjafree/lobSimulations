@@ -1293,14 +1293,16 @@ class ICRLSG(ICRL2):
             self.scheduler_u.step()
 
 class StateActionVisitCounter:
-    def __init__(self, lambda_exploration=1.0):
+    def __init__(self, lambda_exploration=1.0, first_visit_bonus=0.2):
         """
         Efficient state-action visit counter with fast exploration bonus computation.
 
         Args:
             lambda_exploration: Exploration bonus coefficient
+            first_visit_bonus: Bonus returned for a never-before-seen (s,a) pair
         """
         self.lambda_exploration = lambda_exploration
+        self.first_visit_bonus = first_visit_bonus
 
         # Use defaultdict for O(1) access and automatic initialization
         self.visit_counts = defaultdict(int)
@@ -1368,8 +1370,8 @@ class StateActionVisitCounter:
         count = self.visit_counts[key]
 
         if count == 0:
-            # First visit - return large bonus or handle as needed
-            return 0.2 #float('inf')  # or some large value like 1000
+            # First visit - return configurable bonus
+            return self.first_visit_bonus
 
         # Use cached sqrt if available, otherwise compute
         if count in self.sqrt_cache:
@@ -1402,7 +1404,7 @@ class PPOAgent(GymTradingAgent):
                  buffer_capacity=10000, batch_size=64, epochs=1000, layer_widths = 128, n_layers = 3, clip_ratio=0.2,
                  value_loss_coef=0.5, entropy_coef=10, max_grad_norm=0.5, gae_lambda=0.95, rewardpenalty = 0.1, hidden_activation='leaky_relu',
                  transaction_cost = 0.01, start_trading_lag=0, truncation_enabled=True, action_space_config = 0, include_time = False, alt_state=False, enhance_state=False,
-                 policy_loss_coef = 1, optim_type = 'ADAM',lr=1e-3, exploration_bonus = 0, two_sided_reward = True, ablation_params= {}, typeNN = "dense", chunk_length=64, terminal_invpenalty=0, cem_full_episode=False, phase_a_refresh_every=25):
+                 policy_loss_coef = 1, optim_type = 'ADAM',lr=1e-3, exploration_bonus = 0, first_visit_bonus = 0.2, two_sided_reward = True, ablation_params= {}, typeNN = "dense", chunk_length=64, terminal_invpenalty=0, cem_full_episode=False, phase_a_refresh_every=25):
         """
         PPO Agent with Generalized Advantage Estimation (GAE)
         Maintains two networks: one for decision (d) and one for utility (u)
@@ -1473,7 +1475,7 @@ class PPOAgent(GymTradingAgent):
         self.trajectory_buffer = []
         self.buffer_capacity = buffer_capacity
         self.exploration_bonus = bool(exploration_bonus)
-        self.visit_counter = StateActionVisitCounter(lambda_exploration=exploration_bonus)
+        self.visit_counter = StateActionVisitCounter(lambda_exploration=exploration_bonus, first_visit_bonus=first_visit_bonus)
         self.two_sided_reward = two_sided_reward
         # State scaler
         self.mmscaler = MinMaxScaler()
