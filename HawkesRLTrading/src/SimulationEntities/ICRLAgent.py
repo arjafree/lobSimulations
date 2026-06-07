@@ -1324,14 +1324,18 @@ class StateActionVisitCounter:
         Handles floating point precision issues by rounding.
 
         Args:
-            state: (inventory_intc, price_diff, n_a_over_q_a, n_b_over_q_b)
+            state: (inventory_intc, price_diff, n_a_over_q_a, n_b_over_q_b,
+                    twap_side, intensity_bucket, twap_phase)
         """
         # Round to avoid floating point precision issues
         return (
             round(state[0], 0),  # inventory_intc
             round(state[1], 2),  # p_a - p_b
             round(state[2], 3),  # n_a/q_a
-            round(state[3], 3)   # n_b/q_b
+            round(state[3], 3),  # n_b/q_b
+            round(state[4], 0),  # twap_side: TWAPPresent (-1/0/+1)
+            int(state[5]),       # Hawkes net-flow-imbalance bucket (-1/0/+1)
+            int(state[6])        # twap_phase: -1 before / 0 during / +1 after
         )
 
     def update_visit_count(self, state, action):
@@ -1402,7 +1406,7 @@ class PPOAgent(GymTradingAgent):
                  Inventory: Optional[Dict[str, Any]]=None, cash: int=5000, action_freq: float =0.5,
                  wake_on_MO: bool=True, wake_on_Spread: bool=True, cashlimit=1000000, inventorylimit=100,
                  buffer_capacity=10000, batch_size=64, epochs=1000, layer_widths = 128, n_layers = 3, clip_ratio=0.2,
-                 value_loss_coef=0.5, entropy_coef=10, max_grad_norm=0.5, gae_lambda=0.95, rewardpenalty = 0.1, hidden_activation='leaky_relu',
+                 value_loss_coef=0.5, entropy_coef=10, max_grad_norm=0.5, gae_lambda=0.95, gamma=0.99, rewardpenalty = 0.1, hidden_activation='leaky_relu',
                  transaction_cost = 0.01, start_trading_lag=0, truncation_enabled=True, action_space_config = 0, include_time = False, alt_state=False, enhance_state=False,
                  policy_loss_coef = 1, optim_type = 'ADAM',lr=1e-3, exploration_bonus = 0, first_visit_bonus = 0.2, two_sided_reward = True, ablation_params= {}, typeNN = "dense", chunk_length=64, terminal_invpenalty=0, cem_full_episode=False, phase_a_refresh_every=25):
         """
@@ -1466,7 +1470,7 @@ class PPOAgent(GymTradingAgent):
         self.n_layers = n_layers
         self.hidden_activation = hidden_activation
         self.lr = lr
-        self.gamma = 0.99  # discount factor
+        self.gamma = gamma  # discount factor
         self.rewardpenalty = rewardpenalty  # inventory penalty
         self.last_state, self.last_action = None, None
         self.transaction_cost = transaction_cost
@@ -1476,6 +1480,8 @@ class PPOAgent(GymTradingAgent):
         self.buffer_capacity = buffer_capacity
         self.exploration_bonus = bool(exploration_bonus)
         self.visit_counter = StateActionVisitCounter(lambda_exploration=exploration_bonus, first_visit_bonus=first_visit_bonus)
+        self._twap_seen = False          # before/during/after-TWAP state machine (exploration key)
+        self.last_intensity_bucket = 0   # cached Hawkes net-flow-imbalance bucket (exploration key)
         self.two_sided_reward = two_sided_reward
         # State scaler
         self.mmscaler = MinMaxScaler()
@@ -1517,6 +1523,7 @@ class PPOAgent(GymTradingAgent):
         n_a, n_b = np.min(n_as), np.min(n_bs)
         lambdas = data['current_intensity']
         lambdas_norm = lambdas.flatten()/np.sum(lambdas.flatten())
+        self.last_intensity_bucket = self._intensity_bucket(lambdas_norm)
         past_times = data['past_times']
         if self.Inventory['INTC'] ==0: self.init_cash = self.cash
         skew = (n_a - n_b)/(0.5*(q_a + q_b))
@@ -1614,6 +1621,30 @@ class PPOAgent(GymTradingAgent):
         self.Actor_Critic_u.load_state_dict(new_weights['u'])
         return 0
 
+    def _twap_phase(self):
+        # -1 = before TWAP, 0 = during, +1 = after.
+        # before and after both have TWAPPresent == 0, so _twap_seen disambiguates them.
+        if getattr(self, 'TWAPPresent', 0) != 0:
+            self._twap_seen = True
+            return 0
+        return 1 if self._twap_seen else -1
+
+    def _intensity_bucket(self, lambdas_norm, deadzone=0.05):
+        # net background-flow imbalance: ask group (idx 0:6) vs bid group (idx 6:12).
+        # lambdas_norm sums to 1, so imb is in [-1, 1].
+        imb = float(np.sum(lambdas_norm[:6]) - np.sum(lambdas_norm[6:12]))
+        if imb > deadzone:
+            return 1
+        if imb < -deadzone:
+            return -1
+        return 0
+
+    def _exploration_key_state(self):
+        # [inventory, spread, n_a/q_a, n_b/q_b] + [twap_side, intensity bucket, twap phase]
+        base = self.last_state.cpu().numpy()[0][1:5]
+        return [base[0], base[1], base[2], base[3],
+                getattr(self, 'TWAPPresent', 0), self.last_intensity_bucket, self._twap_phase()]
+
 
     def calculaterewards(self, termination) -> Any:
         penalty = 0
@@ -1639,7 +1670,7 @@ class PPOAgent(GymTradingAgent):
                 if (self.last_state.cpu().numpy()[0][3] <= 1) and (self.last_state.cpu().numpy()[0][4] <= 1):
                     penalty -= self.rewardpenalty *20 # custom reward for double sided quoting
             if self.exploration_bonus:
-                penalty -= self.visit_counter.get_exploration_bonus(self.last_state.cpu().numpy()[0][1:5], self.last_action)
+                penalty -= self.visit_counter.get_exploration_bonus(self._exploration_key_state(), self.last_action)
         return deltaPNL + deltaInv - penalty
 
     def get_action(self, data, epsilon=0.1):
@@ -1650,6 +1681,9 @@ class PPOAgent(GymTradingAgent):
         :param epsilon: Exploration probability
         :return: Chosen action and its log probabilities
         """
+        # Reset per-episode TWAP-phase tracker at episode start
+        if self.last_state is None:
+            self._twap_seen = False
         # Reset LSTM hidden state at episode start (when last_state is None)
         if self.typeNN == "LSTM" and self.last_state is None:
             self.Actor_Critic_d.reset_hidden_state(batch_size=1)
@@ -1859,7 +1893,7 @@ class PPOAgent(GymTradingAgent):
         if side != 0 or ep not in self.episode_sides:
             self.episode_sides[ep] = side
         if self.exploration_bonus:
-            self.visit_counter.update_visit_count(self.last_state.cpu().numpy()[0][1:5], self.last_action)
+            self.visit_counter.update_visit_count(self._exploration_key_state(), self.last_action)
 
     def compute_gae(self, rewards, values_d, values_u, dones):
         """
@@ -2556,6 +2590,7 @@ class AdversarialPPOAgent(PPOAgent):
         n_a, n_b = np.min(n_as), np.min(n_bs)
         lambdas = data['current_intensity']
         lambdas_norm = lambdas.flatten()/np.sum(lambdas.flatten())
+        self.last_intensity_bucket = self._intensity_bucket(lambdas_norm)
         past_times = data['past_times']
         if self.Inventory['INTC'] ==0: self.init_cash = self.cash
         skew = (n_a - n_b)/(0.5*(q_a + q_b))
