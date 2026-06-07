@@ -12,8 +12,8 @@ from HawkesRLTrading.src.SimulationEntities.MetaOrderTradingAgents import TWAPGy
 import torch
 import time
 
-log_dir = '/home/ajafree/LSTM_fRL/wout_expo/bugfixes/no_running_invpen/training/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/wout_expo/bugfixes/no_running_invpen/training/model'
+log_dir = '/home/ajafree/LSTM_fRL/wout_expo/no_double_quoting_bonus/gae_lambda/training/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/wout_expo/no_double_quoting_bonus/gae_lambda/training/model'
 
 start_trading_lag = 100
 twap_off_time = 400
@@ -24,7 +24,7 @@ twap_start_time = 150 + start_trading_lag
 
 twap_end_time = 300 + start_trading_lag
 
-label = 'train_no_running_invpen'
+label = 'train_higher_gae'
 layer_widths=100
 n_layers=3
 eta = 5
