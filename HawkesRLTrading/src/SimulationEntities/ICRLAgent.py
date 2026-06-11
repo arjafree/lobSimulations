@@ -1327,12 +1327,17 @@ class StateActionVisitCounter:
             state: (inventory_intc, price_diff, n_a_over_q_a, n_b_over_q_b,
                     twap_side, intensity_bucket, twap_phase)
         """
-        # Round to avoid floating point precision issues
+        # Round to avoid floating point precision issues. The queue ratios
+        # (n_a/q_a, n_b/q_b) are heavy-tailed near-continuous, so bucket them
+        # into 3 bins (edges at 1.0, 2.0): <1 = ahead of the visible queue
+        # (likely to fill), 1-2 = front-ish, >2 = buried. Rounding them instead
+        # shatters the count table (~71% of pairs globally unique), pinning the
+        # exploration bonus at the first-visit floor.
         return (
             round(state[0], 0),  # inventory_intc
             round(state[1], 2),  # p_a - p_b
-            round(state[2], 3),  # n_a/q_a
-            round(state[3], 3),  # n_b/q_b
+            int(np.digitize(state[2], [1.0, 2.0])),  # n_a/q_a bucket (0/1/2)
+            int(np.digitize(state[3], [1.0, 2.0])),  # n_b/q_b bucket (0/1/2)
             round(state[4], 0),  # twap_side: TWAPPresent (-1/0/+1)
             int(state[5]),       # Hawkes net-flow-imbalance bucket (-1/0/+1)
             int(state[6])        # twap_phase: -1 before / 0 during / +1 after
