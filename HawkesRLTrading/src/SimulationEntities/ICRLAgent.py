@@ -1668,14 +1668,18 @@ class PPOAgent(GymTradingAgent):
         if self.terminal_invpenalty and termination: 
             penalty += self.terminal_invpenalty * (self.countInventory()**2) # terminal inventory penalty (kappa)
 
-        if (not self.alt_state) and (self.last_state.cpu().numpy()[0][8] < self.last_state.cpu().numpy()[0][4] + self.last_state.cpu().numpy()[0][6]) and (self.last_state.cpu().numpy()[0][9] < self.last_state.cpu().numpy()[0][5] + self.last_state.cpu().numpy()[0][7]):
-            penalty -= self.rewardpenalty *20 # custom reward for double sided quoting
-        if self.alt_state:
-            if self.two_sided_reward:
-                if (self.last_state.cpu().numpy()[0][3] <= 1) and (self.last_state.cpu().numpy()[0][4] <= 1):
-                    penalty -= self.rewardpenalty *20 # custom reward for double sided quoting
-            if self.exploration_bonus:
-                penalty -= self.visit_counter.get_exploration_bonus(self._exploration_key_state(), self.last_action)
+        # last_state can be None when an episode opens with an inventory breach: get_action
+        # returns the forced market order early without ever calling readData/setting last_state.
+        # All the state-dependent shaping terms below would crash on None, so skip them.
+        if self.last_state is not None:
+            if (not self.alt_state) and (self.last_state.cpu().numpy()[0][8] < self.last_state.cpu().numpy()[0][4] + self.last_state.cpu().numpy()[0][6]) and (self.last_state.cpu().numpy()[0][9] < self.last_state.cpu().numpy()[0][5] + self.last_state.cpu().numpy()[0][7]):
+                penalty -= self.rewardpenalty *20 # custom reward for double sided quoting
+            if self.alt_state:
+                if self.two_sided_reward:
+                    if (self.last_state.cpu().numpy()[0][3] <= 1) and (self.last_state.cpu().numpy()[0][4] <= 1):
+                        penalty -= self.rewardpenalty *20 # custom reward for double sided quoting
+                if self.exploration_bonus:
+                    penalty -= self.visit_counter.get_exploration_bonus(self._exploration_key_state(), self.last_action)
         return deltaPNL + deltaInv - penalty
 
     def get_action(self, data, epsilon=0.1):

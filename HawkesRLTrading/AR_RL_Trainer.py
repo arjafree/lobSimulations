@@ -502,6 +502,7 @@ for episode in range(80):
             agent.Inventory = {"INTC": 0}
             agent.positions = {'INTC':{}}
             agent.last_state = None  # Triggers LSTM reset on next get_action()
+            agent.breach = False  # Clear stale breach flag; otherwise a prior episode that ended over the inventory limit forces an early-return MO on the new episode's first action (with last_state=None)
             agent.profit = 0
             agent.statelog = [(0, agent.cash, agent.profit, agent.Inventory.copy(), agent.positions.copy(), agent.mid)]
             j['agent_instance'] = agent
