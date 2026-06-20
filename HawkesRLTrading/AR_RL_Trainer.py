@@ -12,8 +12,8 @@ from HawkesRLTrading.src.SimulationEntities.MetaOrderTradingAgents import TWAPGy
 import torch
 import time
 
-log_dir = '/home/ajafree/LSTM_fRL/wout_expo/no_double_quoting_bonus/both/training/sell/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/wout_expo/no_double_quoting_bonus/both/training/sell/model'
+log_dir = '/home/ajafree/LSTM_fRL/wout_expo/no_double_quoting_bonus/exploration/training/sell/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/wout_expo/no_double_quoting_bonus/exploration/training/sell/model'
 
 start_trading_lag = 100
 twap_off_time = 400
@@ -24,12 +24,12 @@ twap_start_time = 150 + start_trading_lag
 
 twap_end_time = 300 + start_trading_lag
 
-label = 'train_explore_both_sell'
+label = 'train_explore_only_sell_resume32'
 layer_widths=100
 n_layers=3
 eta = 5
 
-checkpoint_params = None
+checkpoint_params = ("20260612_214525_train_explore_only_sell", 32)
 
 def graphInventories(beforetwap, withtwap_buy, withtwap_sell, episode_num):
     plt.figure(figsize=(12, 8))
@@ -223,7 +223,7 @@ tc = 0.0001
 RLagentInstance = AdversarialPPOAgent( seed=1, log_events=True, log_to_file=True, strategy=j["strategy"], Inventory=j["Inventory"], cash=j["cash"], action_freq=j["action_freq"],
                           wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"], cashlimit=j["cashlimit"],inventorylimit=j['inventorylimit'], batch_size=512,
                           layer_widths=layer_widths, n_layers =n_layers, buffer_capacity = 100000, rewardpenalty = j["rewardpenalty"], epochs = 100, transaction_cost=1e-4, start_trading_lag = j['start_trading_lag'],
-                          gae_lambda=0.95, gamma=0.999, truncation_enabled=False, action_space_config = 1, alt_state=True, enhance_state=True, include_time=True, optim_type='ADAM',entropy_coef=0, exploration_bonus = 0.1, hidden_activation='sigmoid',
+                          gae_lambda=0.5, gamma=0.99, truncation_enabled=False, action_space_config = 1, alt_state=True, enhance_state=True, include_time=True, optim_type='ADAM',entropy_coef=0, exploration_bonus = 0.1, hidden_activation='sigmoid',
                           typeNN = "LSTM", lr = 3e-4, chunk_length=64, TWAPPresent=0, cem_full_episode=True, terminal_invpenalty=5*eta, two_sided_reward=False)
 
 inventories_with_twap_buy = []
