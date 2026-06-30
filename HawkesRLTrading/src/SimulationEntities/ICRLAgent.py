@@ -1664,7 +1664,7 @@ class PPOAgent(GymTradingAgent):
         if self.istruncated:
             penalty += 100
         if self.last_action != 12:
-            penalty -= self.rewardpenalty *10 # custom reward for incentivising actions rather than inaction for learning
+            penalty -= 0.5 # small fixed bonus for acting vs no-op; kept tiny so it doesn't drown out the PnL/inventory signal (was rewardpenalty*10 = 50 with eta=5)
         if self.terminal_invpenalty and termination: 
             penalty += self.terminal_invpenalty * (self.countInventory()**2) # terminal inventory penalty (kappa)
 
