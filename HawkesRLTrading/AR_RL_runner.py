@@ -9,13 +9,13 @@ import random
 
 # model_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/self_imitation/newlogs/model'
 # log_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/self_imitation/newlogs/logs/'
-log_dir = '/home/ajafree/LSTM_fRL/wout_expo/new_value_function/explo_gae/eval/twap/buy/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/wout_expo/new_value_function/explo_gae/eval/twap/buy/model'
+log_dir = '/home/ajafree/LSTM_fRL/wout_expo/new_value_function/explo_gae/eval/twap/sell/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/wout_expo/new_value_function/explo_gae/eval/twap/sell/model'
 
 # Eval-run toggles: whether a TWAP meta-order agent trades alongside the RL
 # agent, and which side the RL agent (and TWAP, if present) trades.
 TWAP_PRESENT = True
-twap_side = "buy"
+twap_side = "sell"
 
 start_trading_lag = 100
 twap_off_time = 400
@@ -26,9 +26,9 @@ layer_widths=100
 n_layers=3
 eta = 5
 
-label = f'test_explo_gae_buy_twap'
+label = f'test_explo_gae_sell_twap'
 
-checkpoint_params = ("20260704_120739_train_new_vf_explo_gae_buy", 76)
+checkpoint_params = ("20260630_214031_train_new_vf_explo_gae_sell", 76)
 
 # with open("/Users/alirazajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
 with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
