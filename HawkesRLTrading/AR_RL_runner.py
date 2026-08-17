@@ -9,8 +9,13 @@ import random
 
 # model_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/self_imitation/newlogs/model'
 # log_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/self_imitation/newlogs/logs/'
-log_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/self_imitation/onesided/buy/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/wout_expo/testing/self_imitation/onesided/buy/model'
+log_dir = '/home/ajafree/LSTM_fRL/wout_expo/new_value_function/explo_gae/eval/solo/buy/logs/'
+model_dir = '/home/ajafree/LSTM_fRL/wout_expo/new_value_function/explo_gae/eval/solo/buy/model'
+
+# Eval-run toggles: whether a TWAP meta-order agent trades alongside the RL
+# agent, and which side the RL agent (and TWAP, if present) trades.
+TWAP_PRESENT = False
+twap_side = "buy"
 
 start_trading_lag = 100
 twap_off_time = 400
@@ -21,9 +26,9 @@ layer_widths=100
 n_layers=3
 eta = 5
 
-label = f'test_buy'
+label = f'test_explo_gae_buy_solo'
 
-checkpoint_params = ("20260329_112914_train_selfim_buy", 12)
+checkpoint_params = ("20260704_120739_train_new_vf_explo_gae_buy", 76)
 
 # with open("/Users/alirazajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
 with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
@@ -63,9 +68,7 @@ Pi_Q0= {'Ask_L1': [0.,
         'Bid_L2': [0.,
                    [(400, 1.)]]}
 
-kwargs={
-    "TradingAgent": [],
-    "GymTradingAgent": [
+gym_trading_agents = [
                         {"cash": 2500,
                          "strategy": "ICRL",
                          "action_freq": 0.213,
@@ -77,7 +80,9 @@ kwargs={
                          'start_trading_lag': start_trading_lag,
                          "wake_on_MO": True,
                          "wake_on_Spread": True}
-                         ,
+                         ]
+if TWAP_PRESENT:
+    gym_trading_agents.append(
                          {"cash":1000000,
                           "cashlimit": 100000000000,
                           "strategy": "TWAP",
@@ -91,8 +96,11 @@ kwargs={
                           'start_trading_lag': start_trading_lag,
                           "wake_on_MO": False,
                           "wake_on_Spread": False,
-                          "off_time": twap_off_time}
-                          ],
+                          "off_time": twap_off_time})
+
+kwargs={
+    "TradingAgent": [],
+    "GymTradingAgent": gym_trading_agents,
     "Exchange": {"symbol": "INTC",
                  "ticksize":0.01,
                  "LOBlevels": 2,
@@ -334,15 +342,15 @@ for episode in range(17):
     TWAP_agent_obsv = []
     total_executed = 0
     final_cash = 0
-    twap_side = "buy"#np.random.choice(["buy", "sell"])
-    kwargs["GymTradingAgent"][1]["Inventory"] = {"INTC": 500}
-    kwargs["GymTradingAgent"][1]["cash"] = 1000000
-    kwargs["GymTradingAgent"][1]["side"] = twap_side
     starting_midprice = 0
     new_midprice = True
 
     twap_time = 250
-    kwargs["GymTradingAgent"][1]["start_trading_lag"] = twap_time
+    if TWAP_PRESENT:
+        kwargs["GymTradingAgent"][1]["Inventory"] = {"INTC": 500}
+        kwargs["GymTradingAgent"][1]["cash"] = 1000000
+        kwargs["GymTradingAgent"][1]["side"] = twap_side
+        kwargs["GymTradingAgent"][1]["start_trading_lag"] = twap_time
 
     twap_agent_executions_by_episode[episode] = []
     episode_twap_exec_prices = []  # Track execution prices for this episode
@@ -375,7 +383,7 @@ for episode in range(17):
         agents:List[GymTradingAgent] = [env.getAgent(ID=agentid) for agentid in AgentsIDs]
         
         # Update TWAPPresent based on time window (matches trainer logic)
-        if isinstance(RLagentInstance, AdversarialPPOAgent):
+        if TWAP_PRESENT and isinstance(RLagentInstance, AdversarialPPOAgent):
             if twap_off_time >= Simstate['TimeCode'] >= twap_time:
                 if not RLagentInstance.TWAPPresent:
                     RLagentInstance.TWAPPresent = -1 if twap_side == 'sell' else 1
@@ -569,21 +577,22 @@ for episode in range(17):
     total_RL_obsv.append(RL_agent_obsv)
     total_TWAP_obsv.append(TWAP_agent_obsv)
 
-    # Get TWAP agent's final cash (not RL agent's cash)
-    twap_agent = env.getAgent(ID=TWAPagentid)
+    if TWAP_PRESENT:
+        # Get TWAP agent's final cash (not RL agent's cash)
+        twap_agent = env.getAgent(ID=TWAPagentid)
 
-    total_executed = abs(500 - twap_agent.Inventory["INTC"])
-    
-    if(twap_side == "sell"):
-        cash_earned = twap_agent.cash - 1000000
-        benchmark_earned = starting_midprice * total_executed
-        slip = (benchmark_earned - cash_earned)*10000/benchmark_earned
-        sell_slippage_by_episode.append((episode, slip))
-    else:
-        cash_spent = 1000000 - twap_agent.cash 
-        benchmark_spent = starting_midprice * total_executed
-        slip = (cash_spent - benchmark_spent)*10000/benchmark_spent
-        buy_slippage_by_episode.append((episode, slip))
+        total_executed = abs(500 - twap_agent.Inventory["INTC"])
+
+        if(twap_side == "sell"):
+            cash_earned = twap_agent.cash - 1000000
+            benchmark_earned = starting_midprice * total_executed
+            slip = (benchmark_earned - cash_earned)*10000/benchmark_earned
+            sell_slippage_by_episode.append((episode, slip))
+        else:
+            cash_spent = 1000000 - twap_agent.cash
+            benchmark_spent = starting_midprice * total_executed
+            slip = (cash_spent - benchmark_spent)*10000/benchmark_spent
+            buy_slippage_by_episode.append((episode, slip))
 
     inventory_and_cash = ()
     final_cashs.append(final_cash)
