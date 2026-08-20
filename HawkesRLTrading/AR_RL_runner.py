@@ -9,13 +9,20 @@ import random
 
 # model_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/self_imitation/newlogs/model'
 # log_dir = '/Users/alirazajafree/researchprojects/LSTM_fRL/without_expo/testing/self_imitation/newlogs/logs/'
-log_dir = '/home/ajafree/LSTM_fRL/wout_expo/new_value_function/explo_gae/eval/twap/sell/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/wout_expo/new_value_function/explo_gae/eval/twap/sell/model'
+# Run config. Every value below can be overridden by an environment variable so
+# that a single commit can serve several concurrently-queued eval jobs: each
+# run's runner.sh exports its own settings. Without this, the config is whatever
+# ~/lobSimulations happens to be checked out to when a job *starts*, so only one
+# config could safely be queued at a time.
+_RUN_DIR = os.environ.get('EVAL_RUN_DIR',
+                          '/home/ajafree/LSTM_fRL/wout_expo/new_value_function/explo_gae/eval/twap/sell')
+log_dir = _RUN_DIR.rstrip('/') + '/logs/'
+model_dir = _RUN_DIR.rstrip('/') + '/model'
 
 # Eval-run toggles: whether a TWAP meta-order agent trades alongside the RL
 # agent, and which side the RL agent (and TWAP, if present) trades.
-TWAP_PRESENT = True
-twap_side = "sell"
+TWAP_PRESENT = os.environ.get('EVAL_TWAP_PRESENT', '1') == '1'
+twap_side = os.environ.get('EVAL_TWAP_SIDE', 'sell')
 
 start_trading_lag = 100
 twap_off_time = 400
@@ -26,9 +33,10 @@ layer_widths=100
 n_layers=3
 eta = 5
 
-label = f'test_explo_gae_sell_twap'
+label = os.environ.get('EVAL_LABEL', 'test_explo_gae_sell_twap')
 
-checkpoint_params = ("20260630_214031_train_new_vf_explo_gae_sell", 76)
+checkpoint_params = (os.environ.get('EVAL_CKPT_TS', '20260630_214031_train_new_vf_explo_gae_sell'),
+                     int(os.environ.get('EVAL_CKPT_EPOCH', '76')))
 
 # with open("/Users/alirazajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
 with open("/home/ajafree/researchprojects/otherdata/Symmetric_INTC.OQ_ParamsInferredWCutoffEyeMu_sparseInfer_2019-01-02_2019-12-31_CLSLogLin_10", 'rb') as f: # INTC.OQ_ParamsInferredWCutoff_2019-01-02_2019-03-31_poisson
