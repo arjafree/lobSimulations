@@ -84,7 +84,7 @@ gym_trading_agents = [
                          "Inventory": {"INTC": 0},
                          "log_to_file": True,
                          "cashlimit": 5000000,
-                         "inventorylimit": 25,
+                         "inventorylimit": int(os.environ.get("EVAL_INV_LIMIT", "25")),
                          'start_trading_lag': start_trading_lag,
                          "wake_on_MO": True,
                          "wake_on_Spread": True}
