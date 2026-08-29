@@ -29,6 +29,11 @@ Env vars:
     DP_SEED_BASE  offset for array jobs (default 0)
     DP_STOP       sim stop time in seconds (default 550, matching the trainer)
     DP_OUT        output directory
+    DP_NULL_KERNELS  "1" zeroes the Hawkes excitation mask, reducing the process
+                  to pure Poisson at the (exactly symmetric) baselines. Phase A4
+                  bisection step 1: if drift survives this, the asymmetry is in
+                  the exchange/matching layer and the Hawkes code is exonerated;
+                  if it vanishes, the asymmetry is in the excitation path.
 """
 import os
 import sys
@@ -62,9 +67,18 @@ else:
 OUT = os.environ.get("DP_OUT", os.path.join(REPO, "HawkesRLTrading", "drift_probe_out"))
 os.makedirs(OUT, exist_ok=True)
 
+NULL_KERNELS = os.environ.get("DP_NULL_KERNELS", "0") == "1"
+
 with open(PARAM_FILE, "rb") as f:
     kernelparams = pickle.load(f)
 kernelparams = preprocessdata(kernelparams)
+
+if NULL_KERNELS:
+    # kernelparams = [[mask, alpha, beta, gamma], baselines]; the excitation
+    # enters only as mask*alpha (Arrival_Models.py:324-327 and :356), so zeroing
+    # the mask makes every kernel identically zero and leaves a Poisson process
+    # at the baselines.
+    kernelparams[0][0] = np.zeros_like(kernelparams[0][0])
 
 cols = ["lo_deep_Ask", "co_deep_Ask", "lo_top_Ask", "co_top_Ask", "mo_Ask", "lo_inspread_Ask",
         "lo_inspread_Bid", "mo_Bid", "co_top_Bid", "lo_top_Bid", "co_deep_Bid", "lo_deep_Bid"]
@@ -119,8 +133,17 @@ def main():
                              agent.cash, agent.Inventory['INTC']])
                 Simstate, obs, term, trunc = env.step(action=(aid, a))
 
+    # Per-dimension event counts from the arrival model. cols[0:6] are the Ask
+    # dimensions and cols[6:12] the Bid dimensions, and cols[6:12] reversed is
+    # the mirror of cols[0:6] -- so a symmetric generator must produce
+    # counts[i] ~ counts[11-i] for every i.
+    am = env.kernel.exchange.Arrival_model
+    counts = np.array(am.n, dtype=float).reshape(-1)
+
     arr = np.array(rows, dtype=float)
-    np.save(os.path.join(OUT, f"path_seed{SEED}.npy"), arr)
+    np.savez(os.path.join(OUT, f"path_seed{SEED}.npz"),
+             path=arr, counts=counts, cols=np.array(cols),
+             null_kernels=np.array([int(NULL_KERNELS)]))
 
     mid = (arr[:, 1] + arr[:, 2]) / 2.0
 
@@ -133,7 +156,10 @@ def main():
     traded = abs(arr[-1, 4] - 500.0)
     non_noop = sum(1 for a in actions if a != 12)
 
-    print(f"seed={SEED} n={len(arr)} t=[{arr[0,0]:.0f},{arr[-1,0]:.0f}] "
+    pairs = " ".join(f"{cols[i].replace('_Ask','')}:{counts[i]:.0f}/{counts[11-i]:.0f}"
+                     for i in range(6))
+
+    print(f"seed={SEED} nullk={int(NULL_KERNELS)} n={len(arr)} t=[{arr[0,0]:.0f},{arr[-1,0]:.0f}] "
           f"traded={traded:.0f} non_noop_actions={non_noop} "
           f"drift_0_100={drift_bps(0,100):+.2f} "
           f"drift_100_250={drift_bps(100,250):+.2f} "
@@ -141,6 +167,8 @@ def main():
           f"drift_400_550={drift_bps(400,STOP-1):+.2f} "
           f"drift_total={drift_bps(0,STOP-1):+.2f} "
           f"[{time.time()-t0:.0f}s]", flush=True)
+    print(f"seed={SEED} counts(Ask/Bid) {pairs} totAsk={counts[:6].sum():.0f} "
+          f"totBid={counts[6:].sum():.0f}", flush=True)
     if traded != 0 or non_noop != 0:
         print(f"WARNING seed={SEED}: neutered TWAP was not inert "
               f"(traded={traded}, non-noop actions={non_noop})", flush=True)
