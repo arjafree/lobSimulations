@@ -343,11 +343,7 @@ class HawkesArrival(ArrivalModel):
                 pointcount+=1
                 self.current_intensity = decays.copy()
                 """Accepted so assign candidate point to a process by a ratio of intensities"""
-                k=0
-                total=decays[k]
-                while D*lamb_bar >= total:
-                    k+=1
-                    total+=decays[k]
+                k=sample_dimension(decays, self.lamb)
                 """dimension is cols[k]"""   
                 """Update values of lambda for next simulation loop and append point to Ts"""
                 
@@ -507,6 +503,37 @@ class HawkesArrival(ArrivalModel):
     
     def seed(self):
         return super().seed()
+
+def sample_dimension(decays, lamb):
+    """Draw which of the 12 dimensions fired, proportional to `decays`.
+
+    Uses a FRESH uniform over the realised total intensity `lamb`, rather than
+    reusing the thinning variate `D*lamb_bar` from the acceptance test.
+
+    Reusing the thinning variate is the standard Ogata trick and is valid only
+    while `lamb_bar` is a genuine upper bound on the intensity. It is not one
+    here: `lamb_bar` is the intensity at the last accepted event plus a
+    one-event bump, which would bound a purely self-exciting process (whose
+    intensity decays monotonically between events) but not this one -- 36 of
+    the 144 kernel entries are inhibitory, so intensity RISES between events as
+    inhibition decays away.
+
+    When the bound is breached (`lamb > lamb_bar`) the point is accepted with
+    probability 1 and `D*lamb_bar` is drawn from U[0, lamb_bar], truncated
+    strictly below sum(decays). The walk starts at index 0, so the mass above
+    `lamb_bar` is unreachable and every dimension below it is over-sampled by
+    lamb/lamb_bar. Since `cols` is Ask-first (0-5 Ask, 6-11 Bid), the
+    unreachable tail is always Bid, which produced a systematic Ask excess and
+    a downward midprice drift. See PLAN_drift_study.md.
+    """
+    d = np.asarray(decays, dtype=float).reshape(-1)
+    V = np.random.uniform(0, 1) * lamb
+    k = 0
+    total = d[0]
+    while k < len(d) - 1 and V >= total:
+        k += 1
+        total += d[k]
+    return k
 
 def powerLawCutoff(time, alpha, beta, gamma):
     # alpha = a*beta*(gamma - 1)
