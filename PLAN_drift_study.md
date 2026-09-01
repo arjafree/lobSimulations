@@ -588,3 +588,84 @@ separate change so the two effects can be measured apart.
    within CI in both arms (currently −4.61 bps ON / +0.61 OFF).
 3. Then chase the smaller exchange-side `lo_deep` asymmetry separately.
 4. Only then restart Phases B/C/D.
+
+---
+
+# FIX VALIDATED (2026-09-01): steps 1-4 complete
+
+Commit `6e94941`. `sample_dimension()` draws the fired dimension from a fresh
+uniform over the realised intensity instead of reusing the thinning variate.
+
+## Step 1 — blast radius
+
+`src/fit/` contains **no** thinning code: `ConditionalLeastSquaresLogLin`, `MLE`
+and `PlainHawkes` fit from data and never simulate. **The fitted parameters are
+not contaminated** — the bug is confined to simulation, so the fix does not
+invalidate the calibration.
+
+The pattern occurred in three places:
+
+| file | status |
+|---|---|
+| `HawkesRLTrading/src/Stochastic_Processes/Arrival_Models.py:346-350` | fixed |
+| `src/simulation/Simulate.py:478-482` | fixed (identical bug, live path) |
+| `src/backup/hawkes/simulate_optimized.py:158-162` | left alone, archival |
+
+## Step 2 — regression test
+
+`HawkesRLTrading/tests/test_sample_dimension.py` (the repo had no tests). Keeps
+a `legacy_assign` copy of the old rule so the bias is pinned, not just described.
+Two of its four assertions fail against pre-fix behaviour.
+
+## Step 3 — generator in isolation, kernels ON (n=48 each)
+
+Events/seed 24688.2 -> 24667.2 (-0.08%, p=0.80): the fix reallocates types
+without changing the arrival rate, as intended.
+
+| pair | PRE diff | PRE % | PRE p | POST diff | POST % | POST 95% CI | POST p |
+|---|---|---|---|---|---|---|---|
+| `lo_deep`     | +45.44 | +6.38% | 4.1e-09 | +3.52 | +0.46% | [−13.42, +20.46] | 0.69 |
+| `co_deep`     | +67.35 | +4.79% | 8e-09   | +21.54 | +1.49% | [−0.47, +43.56] | 0.061 |
+| `lo_top`      | +98.88 | +2.03% | 0.0025  | +34.71 | +0.71% | [−32.90, +102.31] | 0.32 |
+| `co_top`      | +14.29 | +0.31% | 0.52    | +6.54 | +0.14% | [−43.11, +56.20] | 0.80 |
+| `mo`          | −4.54 | −1.55% | 0.29    | −6.40 | −2.22% | [−13.80, +1.01] | 0.097 |
+| `lo_inspread` | −4.98 | −1.42% | 0.23    | −1.25 | −0.36% | [−9.68, +7.18] | 0.77 |
+| **TOTAL**     | **+216.44** | **+1.77%** | **7.1e-06** | **+58.67** | **+0.48%** | [−54.09, +171.43] | **0.31** |
+
+The **reduction** is itself significant, so this is not just loss of power:
+`lo_deep` −41.92 (p=0.0002), `co_deep` −45.81 (p=0.0026), TOTAL −157.77 (p=0.031).
+
+**Control** (kernels OFF, where the bound is rarely violated and the fix should
+be inert): events/seed 9919.4 -> 9922.2 (p=0.89), max per-dimension rate change
+0.99%, all six pairs symmetric before and after. This rules out a second error
+cancelling the first.
+
+## Step 4 — full-simulation midprice drift, agent-free (bps over 550s, n=48)
+
+| arm | drift | 95% CI | p vs 0 |
+|---|---|---|---|
+| PRE-FIX  kernels ON  | **−4.48** | [−7.21, −1.74] | **0.0024** |
+| PRE-FIX  kernels OFF | +0.61 | [−1.10, +2.33] | 0.49 |
+| POST-FIX kernels ON  | **+0.53** | [−2.03, +3.09] | **0.69** |
+| POST-FIX kernels OFF | −0.21 | [−1.77, +1.35] | 0.79 |
+
+- PRE-FIX  ON−OFF = −5.09 [−8.32, −1.87], Welch p=0.0027, MWU p=0.0022
+- POST-FIX ON−OFF = +0.74 [−2.26, +3.74], Welch p=0.63, MWU p=0.44
+- fix effect on the ON arm = **+5.01 bps [+1.27, +8.76], Welch p=0.0102**
+
+**The drift is gone.** All four pass criteria met.
+
+## Residuals
+
+- `co_deep` +1.49% (p=0.061) is the largest remaining generator asymmetry —
+  not significant, but it is the one to watch. Plausibly the exchange-side
+  effect (step 5) leaking in, or a second smaller defect.
+- Event *timing* is still biased by the invalid bound (step 6); untouched here.
+- `Exchange.py:473` still uses an unseeded stdlib `random.randrange`.
+
+## Consequence for the paper
+
+Every trained checkpoint predates this fix and was trained against a simulator
+with a −4.5 bps systematic downward drift. The buy/sell frontrunning asymmetry
+in particular cannot be trusted until models are retrained. Table 8 numbers
+will change, so `table8_ci.py` can be built now but the LaTeX edit should wait.
