@@ -724,3 +724,54 @@ window — so those two arms serve as a null control: they should be unchanged.
 
 Pass criterion: `co_deep` Ask-Bid excess drops toward zero in the kernels-ON
 generator arm, and the drift stays within CI of zero.
+
+---
+
+# co_deep resolved (2026-09-03): the purge fix is a no-op here, and co_deep is not established
+
+## The purge fix changes nothing at T=550
+
+| pair | original | +sampling fix | +sampling+purge fix | % | 95% CI | p |
+|---|---|---|---|---|---|---|
+| `lo_deep`     | +45.44 | +3.52 | +3.62 | +0.47% | [−13.32, +20.57] | 0.68 |
+| `co_deep`     | +67.35 | +21.54 | **+21.67** | +1.50% | [−0.30, +43.64] | 0.059 |
+| `lo_top`      | +98.88 | +34.71 | +34.67 | +0.71% | [−32.92, +102.26] | 0.32 |
+| `co_top`      | +14.29 | +6.54 | +6.38 | +0.14% | [−43.31, +56.06] | 0.80 |
+| `mo`          | −4.54 | −6.40 | −6.35 | −2.21% | [−13.73, +1.03] | 0.098 |
+| `lo_inspread` | −4.98 | −1.25 | −1.21 | −0.35% | [−9.64, +7.23] | 0.78 |
+| **TOTAL**     | +216.44 | +58.67 | +58.77 | +0.48% | [−54.04, +171.59] | 0.31 |
+
+co_deep reduction from the purge fix: **−0.12, Welch p=0.994**. Drift unchanged
+(+0.53 -> +0.58 bps, p=0.977); ON−OFF = +0.79 [−2.16, +3.74], p=0.60.
+Null control (kernels OFF) bit-identical as predicted, p=1.00.
+
+**Why the purge fix is inert at this horizon:** the purge only starts firing once
+the history spans TAU=500s, and episodes are 550s. It is therefore active for
+only the last ~50s, giving the stale offset almost no time to accumulate. The
+bug is real and worth having fixed — it makes the effective excitation window
+shrink over a run, a calibration error in any longer simulation — but it does
+**not** explain `co_deep` and does not affect 550s results.
+
+## co_deep is not established as a real asymmetry
+
+- **Multiple comparisons:** six mirror pairs are tested. Holm and BH both reject
+  co_deep (crit 0.0083 vs raw p=0.059). P(min of 6 p-values < 0.059 under perfect
+  symmetry) = **0.31** — seeing one pair look this marginal is expected by chance.
+- **Omnibus:** Hotelling T² on the joint 6-vector of mirror differences,
+  T²=6.21, F(6,42)=0.925, **p=0.487**. The generator is jointly symmetric.
+- **Sign test:** only **26/48 seeds positive** (binomial p=0.665, Wilcoxon
+  p=0.113). A systematic Ask excess would show a consistent sign; this does not.
+- **Not outlier-driven:** skew +0.02, kurtosis −0.84, Shapiro p=0.31, mean +21.7
+  vs 10%-trimmed +22.8. Clean, normal, symmetric — genuinely underpowered rather
+  than contaminated.
+- **Power:** n=101 for 80%, n=136 for 90% (sd=77.7). At n=48 the study cannot
+  resolve an effect this size either way.
+
+Array 7332435 runs 150 further seeds (49-198) to pool to n=198 and settle it.
+
+## Bottom line
+
+Two real bugs found and fixed (`6e94941` sampling, `4294506` purge). The drift is
+gone and the generator is jointly symmetric on every test available. `co_deep` is
+the largest of six residuals and is consistent with noise; it is **not** a reason
+to hold retraining.
