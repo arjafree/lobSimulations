@@ -669,3 +669,58 @@ Every trained checkpoint predates this fix and was trained against a simulator
 with a −4.5 bps systematic downward drift. The buy/sell frontrunning asymmetry
 in particular cannot be trusted until models are retrained. Table 8 numbers
 will change, so `table8_ci.py` can be built now but the LaTeX edit should wait.
+
+---
+
+# co_deep investigation (2026-09-02): a second bug — stale `self.left` after purge
+
+Chasing the `co_deep` +1.49% (p=0.061) residual left by the sampling fix.
+
+## Ruled out by reading
+
+In the isolated generator the only possible asymmetry sources are baselines
+(verified mirror-exact), kernels (verified mirror-exact), the dimension sampling
+(fixed in `6e94941`), and the spread multiplier on dims 5/6 — which is applied
+symmetrically to the `lo_inspread` mirror pair, with the spread pinned at 0.02
+so the `<2 tick` cutoff at line 333 never fires asymmetrically. `self.baselines`
+is re-copied from `kernelparams[1]` at line 263 on every call, so the spread
+multiplier at 273-274 does not compound across calls.
+
+## Found: `Arrival_Models.py:374-375`
+
+```python
+if self.timeseries[-1][0] - self.timeseries[0][0] > self.TAU:
+    self.timeseries = self.timeseries[self.left:]   # re-bases the list
+    # self.left NOT reset -- the bug
+```
+
+The slice re-bases the list: what was at index `self.left` becomes index 0. But
+`self.left` keeps its old value, so the next window advance starts `self.left`
+points too far in and **silently drops the kernel contributions of points that
+are still inside TAU**. The effective excitation window shrinks with every purge.
+
+Demonstrated deterministically (TAU=500, one point per second): the step after
+the first purge uses **399 points instead of 499**, dropping 100 in-window points
+spanning t=102..201.
+
+**Why it was invisible until now:** the purge only fires once the history spans
+more than TAU=500s. The T=120 diagnostic runs show `purges=0` — the bug is inert
+there. It is active in every T=550 probe, which is exactly where the `co_deep`
+residual was measured.
+
+`src/simulation/Simulate.py` never truncates its history (it only advances `left`
+over a hardcoded 10s window) and does not share this bug.
+
+Fixed in `4294506`; `self.left = 0` after the slice. Two regression tests added,
+one of which pins the legacy behaviour.
+
+## Status
+
+Whether this explains `co_deep` is an empirical question, not settled by finding
+the bug. Arrays 7330866-9 (`p2_*`, 48 seeds x 4 arms, T=550) test it. Note the
+purge bug is provably inert in the kernels-nulled arms — with `kernelparams[0][0]`
+zeroed every kernel contribution is zero regardless of which points are in the
+window — so those two arms serve as a null control: they should be unchanged.
+
+Pass criterion: `co_deep` Ask-Bid excess drops toward zero in the kernels-ON
+generator arm, and the drift stays within CI of zero.
