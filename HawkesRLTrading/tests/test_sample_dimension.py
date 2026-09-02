@@ -99,6 +99,49 @@ def test_never_overruns_on_float_error():
         assert 0 <= k <= 11
 
 
+
+
+# ---------------------------------------------------------------------------
+# Regression test for the stale `self.left` purge bug (Arrival_Models.py:374).
+# ---------------------------------------------------------------------------
+
+def _window_after_purge(reset_left):
+    """Replay the purge/advance logic; returns the kernel window on the step
+    AFTER a purge fires. `reset_left=True` is the fixed behaviour."""
+    TAU = 500
+    ts = [(float(i), 0) for i in range(601)]
+    left = 0
+    s = 600.0
+    while left < len(ts):
+        if s - ts[left][0] >= TAU:
+            left += 1
+        else:
+            break
+    if ts[-1][0] - ts[0][0] > TAU:
+        ts = ts[left:]
+        if reset_left:
+            left = 0
+    s = 601.0
+    while left < len(ts):
+        if s - ts[left][0] >= TAU:
+            left += 1
+        else:
+            break
+    return ts[left:], [p for p in ts if s - p[0] < TAU]
+
+
+def test_purge_resets_left_so_no_in_window_points_are_dropped():
+    got, want = _window_after_purge(reset_left=True)
+    assert got == want, f"fixed logic dropped {len(want)-len(got)} in-window points"
+
+
+def test_stale_left_bug_is_pinned():
+    """Without the reset the window silently loses points that are still valid."""
+    got, want = _window_after_purge(reset_left=False)
+    assert len(got) < len(want), "expected the legacy logic to drop points"
+    assert len(want) - len(got) == 100
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_"):

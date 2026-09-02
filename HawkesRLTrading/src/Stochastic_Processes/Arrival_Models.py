@@ -373,6 +373,12 @@ class HawkesArrival(ArrivalModel):
                 self.timeseries.append((self.s, k)) #(time, event)
                 if self.timeseries[-1][0] - self.timeseries[0][0] > self.TAU: # purge too big timeseries
                     self.timeseries = self.timeseries[self.left:] # retain only past 500 seconds
+                    # The slice re-bases the list: what was at index self.left is now
+                    # index 0. self.left must be reset to match, or the next window
+                    # advance starts self.left points too far in and silently drops
+                    # the kernel contributions of points that are still inside TAU.
+                    # The effective window then shrinks with every purge.
+                    self.left = 0
                 self.pointcount+=pointcount
                 return pointcount
         return pointcount
