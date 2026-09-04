@@ -775,3 +775,53 @@ Two real bugs found and fixed (`6e94941` sampling, `4294506` purge). The drift i
 gone and the generator is jointly symmetric on every test available. `co_deep` is
 the largest of six residuals and is consistent with noise; it is **not** a reason
 to hold retraining.
+
+---
+
+# co_deep settled at n=198 (2026-09-04): not real. A `mo` signal appears instead.
+
+Pooling arrays 7332435 (150 new seeds) with the 48 existing = **n=198**, all on
+the fully fixed simulator, kernels ON.
+
+| pair | Ask−Bid | % | 95% CI | p | seeds positive |
+|---|---|---|---|---|---|
+| `lo_deep`     | +2.85 | +0.38% | [−4.57, +10.28] | 0.452 | 101/198 |
+| `co_deep`     | **+4.83** | **+0.33%** | [−5.94, +15.61] | **0.380** | **98/198** |
+| `lo_top`      | +15.51 | +0.32% | [−17.00, +48.02] | 0.351 | 105/198 |
+| `co_top`      | +1.87 | +0.04% | [−21.40, +25.14] | 0.875 | 105/198 |
+| `mo`          | −5.35 | −1.86% | [−9.52, −1.19] | 0.013 | 80/198 |
+| `lo_inspread` | −2.02 | −0.59% | [−6.14, +2.10] | 0.338 | 97/198 |
+
+**`co_deep` is resolved as noise.** It fell from +21.67 (n=48, p=0.059) to +4.83
+(n=198, p=0.380) — an effect that shrinks by 4x as power quadruples is a null.
+98/198 seeds positive is a coin flip. The n=48 marginal p-value was the largest
+of six residuals, exactly as the multiplicity analysis predicted.
+
+## The `mo` residual — honest status: unresolved, probably not real
+
+It is the only pair that firmed up with more data (p=0.288 -> 0.097 -> 0.049 as
+n grew), which is what a real effect does. Against it:
+
+- **Fails multiplicity correction.** Holm critical value for the smallest of six
+  p-values is 0.0083; `mo` is at 0.0125 pooled. Does not survive.
+- **Omnibus is null:** Hotelling T² F(6,192)=1.552, **p=0.163**. The joint
+  6-vector of mirror differences is not distinguishable from zero.
+- **Unchanged by both fixes** (−4.54 buggy, −6.40 sampling-fixed, −6.35
+  purge-fixed): whatever it is, it is not what those bugs caused.
+- Sign test excluding 5 ties: 80/193, p=0.021 — same marginal territory.
+- `mo` is the **smallest-count dimension** (282 vs `lo_top`'s 4926), so it is the
+  most susceptible to small absolute biases showing up as large percentages.
+
+It is also present but not significant in the kernels-OFF arm (−1.50%, p=0.167,
+19/48), which is weak evidence it does not originate in the excitation path.
+
+**Verdict: not established, and not a blocker.** It is −1.86% on the rarest
+event type, with a null omnibus. It is worth one more look after the MM probe
+settles the end-to-end question, but it does not justify holding retraining.
+
+## Method note
+
+Reporting `mo` at all is a multiplicity artifact risk in the other direction:
+with six pairs re-tested at every code version, something will eventually sit
+near p=0.05. The omnibus test is the guard against that, and it says nothing
+is there.
