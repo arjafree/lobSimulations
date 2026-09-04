@@ -9,6 +9,7 @@ from HawkesRLTrading.src.SimulationEntities.MetaOrderTradingAgents import TWAPGy
 from HawkesRLTrading.src.SimulationEntities.ImpulseControlAgent import ImpulseControlAgent, ImpulseControlAgentPoisson
 from HawkesRLTrading.src.SimulationEntities.ICRLAgent import ICRLAgent, ICRL2, ICRLSG, PPOAgent, AdversarialPPOAgent
 from HawkesRLTrading.src.SimulationEntities.ProbabilisticAgent import ProbabilisticAgent
+from HawkesRLTrading.src.SimulationEntities.PeggedMMAgent import PeggedMMAgent
 from HawkesRLTrading.src.Stochastic_Processes.Arrival_Models import ArrivalModel, HawkesArrival
 from HawkesRLTrading.src.SimulationEntities.Exchange import Exchange
 from HawkesRLTrading.src.Kernel import Kernel
@@ -100,6 +101,11 @@ class tradingEnv(gym.Env):
                     new_agent = ProbabilisticAgent(seed=1, log_events=True, log_to_file=True, strategy=j["strategy"], Inventory=j["Inventory"], cash=j["cash"], action_freq=j["action_freq"],
                           wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"], cashlimit=j["cashlimit"],inventorylimit=j['inventorylimit'], 
                           rewardpenalty = 1e-4, transaction_cost=tc, start_trading_lag = j['start_trading_lag'])
+                elif j['strategy'] == 'PeggedMM':
+                    new_agent = PeggedMMAgent(seed=self.seed, log_events=True, log_to_file=log_to_file, strategy=j["strategy"], Inventory=j["Inventory"], cash=j["cash"], action_freq=j["action_freq"],
+                          wake_on_MO=j.get("wake_on_MO", False), wake_on_Spread=j.get("wake_on_Spread", False), cashlimit=j["cashlimit"], inventorylimit=j.get('inventorylimit', 10000),
+                          order_size=j.get('order_size', 100), max_quotes_per_side=j.get('max_quotes_per_side', 1),
+                          start_trading_lag=j.get('start_trading_lag', 0), off_time=j.get('off_time', None))
                 else:
                     raise Exception("Requested agent not recognised")
                 self.agents.append(new_agent)
