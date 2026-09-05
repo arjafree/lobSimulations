@@ -825,3 +825,62 @@ Reporting `mo` at all is a multiplicity artifact risk in the other direction:
 with six pairs re-tested at every code version, something will eventually sit
 near p=0.05. The omnibus test is the guard against that, and it says nothing
 is there.
+
+---
+
+# PeggedMM probe, round 1 (2026-09-05): the control failed — the probe perturbs the market
+
+Three arms, n=48, 550s, `order_size=100`. The third arm runs the **pre-fix
+simulator** (clone at `002bbf3`, verified to contain the legacy walk and no
+`sample_dimension`) with identical agent and probe files, so only the simulator
+differs. It exists to answer: can this probe detect a drift that is known to be
+there?
+
+| arm | MtM PnL | 95% CI | p vs 0 |
+|---|---|---|---|
+| BUGGY code, kernels ON  | +38.8 | [+33.6, +43.9] | 2.9e-19 |
+| FIXED code, kernels ON  | +32.9 | [+27.7, +38.0] | 1.3e-16 |
+| FIXED code, kernels OFF | +58.0 | [+53.9, +62.1] | 7.1e-31 |
+
+**The control fails.** The buggy arm made money (+38.8), essentially as much as
+the fixed arm; fixed − buggy = −5.9 [−13.2, +1.3], Welch p=0.11. 1/48 buggy seeds
+lost money vs 4/48 fixed. **A null result from this probe would have been
+meaningless**, which is exactly why the arm was run.
+
+## Why: the MM damps the drift it is meant to measure
+
+| arm | drift with MM present | agent-free drift |
+|---|---|---|
+| BUGGY ON  | **−0.63** [−1.56, +0.31] | **−4.48** |
+| FIXED ON  | +0.84 [−0.22, +1.91] | +0.58 |
+| FIXED OFF | −0.27 [−1.39, +0.85] | −0.21 |
+
+In the buggy arm the drift collapses from −4.48 to −0.63 once the MM is quoting:
+one-sample t against −4.48 gives **p=1.9e-10**. At `order_size=100` against an
+initial queue of 400 the agent is **25% of the touch**, so its two-sided quoting
+absorbs the order flow that would otherwise move the mid. The fixed arms are
+unaffected because there is no drift there to damp.
+
+Spread PnL (~+33 to +58, hugely significant in every arm) also swamps the
+inventory PnL (~−10), so MtM PnL is the wrong endpoint at this size.
+
+## The signal that did survive
+
+**Inventory skew is the right endpoint.** A symmetric MM in a drifting market
+accumulates on the losing side:
+
+| arm | d_inv | 95% CI |
+|---|---|---|
+| BUGGY ON  | **+294.6** | [−8.0, +597.1] |
+| FIXED ON  | −217.9 | [−483.5, +47.7] |
+| FIXED OFF | −49.6 | [−176.0, +76.9] |
+
+buggy vs fixed **Welch p=0.0144**, and in the predicted direction: long in the
+falling (buggy) market. This survives even with the damping working against it.
+
+## Round 2
+
+Arrays 7336071-3: `order_size=10` (2.5% of the touch instead of 25%), n=150 per
+arm. Validity check before reading anything else: the buggy arm's measured drift
+must return to ≈−4.5, confirming the agent is no longer perturbing. Primary
+endpoint is inventory skew, not PnL.
