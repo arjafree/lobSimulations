@@ -884,3 +884,69 @@ Arrays 7336071-3: `order_size=10` (2.5% of the touch instead of 25%), n=150 per
 arm. Validity check before reading anything else: the buggy arm's measured drift
 must return to ≈−4.5, confirming the agent is no longer perturbing. Primary
 endpoint is inventory skew, not PnL.
+
+---
+
+# PeggedMM probe, round 2 (2026-09-07): control passes, fix confirmed end-to-end
+
+`order_size=10` (2.5% of the touch, down from 25%), n=150 per arm.
+
+## Gate 1 — residual perturbation, partially failed
+
+| arm | drift with MM | 95% CI | agent-free | p vs agent-free |
+|---|---|---|---|---|
+| BUGGY ON  | **−2.41** | [−3.32, −1.50] | **−4.48** | **<0.001** |
+| FIXED ON  | +0.32 | [−0.55, +1.20] | +0.58 | 0.567 |
+| FIXED OFF | +0.43 | [−0.37, +1.23] | −0.21 | 0.120 |
+
+The agent still damps the drift, from −4.48 to −2.41 — about 46% suppression,
+down from 86% at size 100. **The gate is not cleanly passed.** The bias is
+conservative: damping makes the bug *harder* to detect, so a positive detection
+still counts, but any effect size read off this probe is an underestimate.
+
+## Endpoint — inventory skew. The control now works.
+
+| arm | d_inv | 95% CI | p vs 0 |
+|---|---|---|---|
+| BUGGY ON  | **+35.1** | [+12.9, +57.2] | **0.0023** |
+| FIXED ON  | −15.7 | [−36.7, +5.3] | 0.146 |
+| FIXED OFF | −4.5 | [−17.9, +8.8] | 0.507 |
+
+buggy − fixed = **+50.7 [+20.2, +81.3], Welch p=0.0013, MWU p=0.0006.**
+
+The probe detects the known bug, so its reading on the fixed simulator is
+meaningful: **no inventory skew on fixed code, clear skew on buggy code.**
+
+## Secondary — MtM PnL
+
+| arm | MtM | 95% CI | losing seeds |
+|---|---|---|---|
+| BUGGY ON  | +3.96 | [+2.96, +4.95] | 26/150 |
+| FIXED ON  | +5.71 | [+4.96, +6.47] | 14/150 |
+| FIXED OFF | +9.45 | [+8.93, +9.96] | 1/150 |
+
+fixed − buggy = +1.76 [+0.51, +3.00], Welch **p=0.0061**. The bug costs the
+symmetric MM money, which is what the original hypothesis predicted. At size 100
+this comparison was null (p=0.11) purely because the agent damped the drift.
+
+## Mechanism — confirmed per seed, not just in aggregate
+
+corr(drift, d_inv): BUGGY −0.593 (p=1e-15), FIXED ON −0.312 (p=1e-4),
+FIXED OFF −0.363 (p=5e-6), **pooled −0.455 (p=2.5e-24, n=450)**.
+Slope **−10.0 shares of inventory per bps of drift**.
+
+Falling prices leave the symmetric MM long, exactly as it must. The relationship
+holds within every arm, so it is the drift driving the inventory and not an
+artifact of comparing arms.
+
+## Verdict
+
+The end-to-end check passes. On the fixed simulator an exactly symmetric market
+maker shows no inventory skew and no directional edge; on the pre-fix simulator
+the same agent skews long and loses relative to it. This confirms the fix through
+the whole stack — generator, exchange, matching, agent bookkeeping — without
+relying on any theory of where the asymmetry originated.
+
+**Caveat to carry forward:** the probe underestimates, because the agent still
+damps the drift ~46% at size 10. A cleaner run would use size 1-2, at the cost
+of needing more seeds for the same power.
