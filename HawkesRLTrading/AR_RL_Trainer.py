@@ -19,6 +19,15 @@ start_trading_lag = 100
 twap_off_time = 400
 
 twap_side = "sell"
+
+# TWAP_SIDE_MODE: "sell" | "buy" | "random" (per TWAP-present episode).
+# TWAP_ALTERNATE: "1" makes odd episodes TWAP-absent (off_time=0 and
+#   TWAPPresent pinned to 0 for the whole episode), so the agent has to be a
+#   viable market maker standalone rather than only a front-runner.
+# Both default to today's behaviour so no existing run changes silently.
+TWAP_SIDE_MODE = os.environ.get("TWAP_SIDE_MODE", "sell")
+TWAP_ALTERNATE = os.environ.get("TWAP_ALTERNATE", "0") == "1"
+
 #the time that the TWAP agent will kick in:
 twap_start_time = 150 + start_trading_lag
 
@@ -251,6 +260,7 @@ TWAP_obsv = []
 RL_obsv = []
 
 sides = []
+twap_presents = []
 
 eps_with_buy = []
 eps_with_sell = []
@@ -277,9 +287,20 @@ for episode in range(80):
     kwargs["GymTradingAgent"][1]["Inventory"] = {"INTC": 500}
     kwargs["GymTradingAgent"][1]["cash"] = 1000000
 
-    twap_side = "sell"  # sell-only run
-    sides.append(twap_side)
-    eps_with_buy.append(episode) if twap_side == "buy" else eps_with_sell.append(episode)
+    # Is the TWAP meta-order present at all this episode?
+    twap_present = (not TWAP_ALTERNATE) or (episode % 2 == 0)
+    if TWAP_SIDE_MODE == "random":
+        twap_side = str(np.random.choice(["buy", "sell"]))
+    else:
+        twap_side = TWAP_SIDE_MODE
+    twap_presents.append(twap_present)
+    sides.append(twap_side if twap_present else "none")
+    if twap_present:
+        eps_with_buy.append(episode) if twap_side == "buy" else eps_with_sell.append(episode)
+    # off_time=0 neuters the TWAP: it still wakes on its 1s clock (so the
+    # sampling cadence and starting_midprice capture are unchanged) but returns
+    # (12,0) every time and never trades.
+    kwargs["GymTradingAgent"][1]["off_time"] = twap_off_time if twap_present else 0
     kwargs["GymTradingAgent"][1]["start_trading_lag"] = twap_start_time
     #randomise buy or sell
     kwargs["GymTradingAgent"][1]["side"] = twap_side
@@ -309,7 +330,7 @@ for episode in range(80):
         print(f"Agents with IDs {AgentsIDs} have an action available")
         agents:List[GymTradingAgent] = [env.getAgent(ID=agentid) for agentid in AgentsIDs]
         # action:list[Tuple] = []
-        if(twap_end_time >= Simstate['TimeCode'] >= twap_start_time):
+        if twap_present and (twap_end_time >= Simstate['TimeCode'] >= twap_start_time):
             if not RLagentInstance.TWAPPresent:
                 RLagentInstance.TWAPPresent = -1 if twap_side == 'sell' else 1
         else:
@@ -338,8 +359,12 @@ for episode in range(80):
                 inventories.update({agent.id:inventories.get(agent.id, []) + [observations['Inventory']]})
                 actionss.update({agent.id: actionss.get(agent.id, []) + [action[1][0]]})
 
-                total_executed = abs(500 - agent.Inventory["INTC"])
-                final_cash = agent.cash
+                # On a TWAP-absent episode the meta-order never trades, so
+                # total_executed is 0 and any slippage derived from it would
+                # divide by zero. Record NaN so downstream analysis skips the
+                # episode instead of silently producing inf/garbage.
+                total_executed = abs(500 - agent.Inventory["INTC"]) if twap_present else np.nan
+                final_cash = agent.cash if twap_present else np.nan
                    
             else:
                 print(f"Twap present: {RLagentInstance.TWAPPresent}")
@@ -354,7 +379,12 @@ for episode in range(80):
                 Simstate, observations, termination, truncation=env.step(action=action) #do not try and use this data before this line in the loop
                 episode_times_rl.append(Simstate['TimeCode'])
                 episode_invs_rl.append(observations["Inventory"])
-                if(twap_end_time > Simstate['TimeCode'] > twap_start_time):
+                # Key on ACTUAL TWAP presence, not just the clock window: on a
+                # TWAP-absent episode the [twap_start, twap_end] window is
+                # ordinary market-making time and must not be filed as
+                # "with TWAP", which would contaminate the very comparison this
+                # design exists to make.
+                if twap_present and (twap_end_time > Simstate['TimeCode'] > twap_start_time):
                     if twap_side == "sell":
                         inventory_with_twap_sell.append(observations["Inventory"])
                     else:
@@ -381,7 +411,8 @@ for episode in range(80):
                 current_pnl = cashs[agent.id][-1] + inventories[agent.id][-1] * agent.mid * (1 - tc*np.sign(inventories[agent.id][-1]))
                 finalcash2.append(current_pnl)
 
-                if(twap_end_time >= Simstate['TimeCode'] >= twap_start_time):
+                # Same presence-vs-clock fix as the inventory buckets above.
+                if twap_present and (twap_end_time >= Simstate['TimeCode'] >= twap_start_time):
                     if twap_side == "buy":
                         profit_with_twap_buy.append(current_pnl)
                         t_with_twap_buy += [Simstate['TimeCode']]
@@ -565,6 +596,8 @@ if len(inventories_with_twap_sell) > 0:
 if len(inventories_with_twap_buy) > 0:
     np.save(log_dir + "inventorydists_" + label+ "_inventory_with_twap_buy.npy", np.array(inventories_with_twap_buy, dtype=object), allow_pickle=True)
 
-np.save(log_dir + "slippages_"+label+"total_executed.npy", np.array(total_executeds))
+np.save(log_dir + "slippages_"+label+"twap_present.npy", np.array(twap_presents))
+np.save(log_dir + "slippages_"+label+"sides.npy", np.array(sides))
+np.save(log_dir + "slippages_"+label+"total_executed.npy", np.array(total_executeds, dtype=float))
 np.save(log_dir + "slippages_"+label+"final_cash.npy", np.array(final_cashs))
-np.save(log_dir+label+"RL_observations.npy", np.array(total_RL_obsv))
+np.save(log_dir+label+"RL_observations.npy", np.array(total_RL_obsv, dtype=object), allow_pickle=True)
