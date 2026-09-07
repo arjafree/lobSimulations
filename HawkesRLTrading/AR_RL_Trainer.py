@@ -26,13 +26,20 @@ twap_off_time = 400
 
 twap_side = "sell"
 
-# TWAP_SIDE_MODE: "sell" | "buy" | "random" (per TWAP-present episode).
-# TWAP_ALTERNATE: "1" makes odd episodes TWAP-absent (off_time=0 and
-#   TWAPPresent pinned to 0 for the whole episode), so the agent has to be a
+# TWAP_SIDE_MODE: "sell" | "buy" | "alternate" | "random".
+#   "alternate" flips buy/sell across TWAP-PRESENT episodes only -- counting all
+#   episodes would let the absent ones consume side-slots and skew the balance.
+# TWAP_ON / TWAP_OFF: the presence cycle. TWAP_ON episodes with the meta-order
+#   active, then TWAP_OFF episodes with it neutered (off_time=0, TWAPPresent
+#   pinned to 0 throughout), repeating. Absent episodes force the agent to be a
 #   viable market maker standalone rather than only a front-runner.
-# Both default to today's behaviour so no existing run changes silently.
+#     1/0 -> present every episode (today's behaviour, the default)
+#     1/1 -> alternating
+#     2/1 -> two on, one off (keeps time-against-TWAP at 2/3 rather than 1/2)
 TWAP_SIDE_MODE = os.environ.get("TWAP_SIDE_MODE", "sell")
-TWAP_ALTERNATE = os.environ.get("TWAP_ALTERNATE", "0") == "1"
+TWAP_ON = int(os.environ.get("TWAP_ON", 1))
+TWAP_OFF = int(os.environ.get("TWAP_OFF", 0))
+assert TWAP_ON >= 1 and TWAP_OFF >= 0, "TWAP_ON must be >=1 and TWAP_OFF >=0"
 
 # SEED_MODE: "fixed" reproduces today's behaviour exactly (tradingEnv's default
 #   seed=1 on every episode). "vary" gives each episode its own seed, so the
@@ -279,6 +286,7 @@ RL_obsv = []
 sides = []
 twap_presents = []
 episode_seeds = []
+n_twap_present = 0
 
 eps_with_buy = []
 eps_with_sell = []
@@ -306,11 +314,17 @@ for episode in range(N_EPISODES):
     kwargs["GymTradingAgent"][1]["cash"] = 1000000
 
     # Is the TWAP meta-order present at all this episode?
-    twap_present = (not TWAP_ALTERNATE) or (episode % 2 == 0)
-    if TWAP_SIDE_MODE == "random":
+    twap_present = (episode % (TWAP_ON + TWAP_OFF)) < TWAP_ON
+    if TWAP_SIDE_MODE == "alternate":
+        # Indexed by how many TWAP-present episodes have already run, so the
+        # buy/sell split stays exact regardless of the presence cycle.
+        twap_side = "buy" if (n_twap_present % 2 == 0) else "sell"
+    elif TWAP_SIDE_MODE == "random":
         twap_side = str(np.random.choice(["buy", "sell"]))
     else:
         twap_side = TWAP_SIDE_MODE
+    if twap_present:
+        n_twap_present += 1
     twap_presents.append(twap_present)
     sides.append(twap_side if twap_present else "none")
     if twap_present:

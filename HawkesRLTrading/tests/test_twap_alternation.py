@@ -80,11 +80,62 @@ def test_present_episode_buckets_on_the_window():
     assert not _with_twap(True, TWAP_END + 1)
 
 
-def test_alternation_schedule():
-    """TWAP_ALTERNATE on -> even episodes present, odd absent. Off -> all present."""
-    present = lambda alt, ep: (not alt) or (ep % 2 == 0)
-    assert [present(True, e) for e in range(6)] == [True, False, True, False, True, False]
-    assert all(present(False, e) for e in range(6)), "default must preserve today's behaviour"
+# --- presence cycle and side alternation -------------------------------------
+
+def _present(on, off, ep):
+    """The presence rule as it now stands in AR_RL_Trainer."""
+    return (ep % (on + off)) < on
+
+
+def test_presence_cycle():
+    assert [_present(1, 0, e) for e in range(6)] == [True] * 6, \
+        "1/0 must preserve today's behaviour: present every episode"
+    assert [_present(1, 1, e) for e in range(6)] == [True, False] * 3
+    assert [_present(2, 1, e) for e in range(9)] == \
+        [True, True, False, True, True, False, True, True, False]
+
+
+def test_two_on_one_off_keeps_two_thirds_exposure():
+    n = 160
+    present = sum(_present(2, 1, e) for e in range(n))
+    assert present == 107, present
+    assert abs(present / n - 2 / 3) < 0.01
+
+
+def _sides(on, off, n):
+    """Side alternation must index on TWAP-PRESENT episodes, not all episodes."""
+    out, k = [], 0
+    for e in range(n):
+        p = _present(on, off, e)
+        out.append(("buy" if k % 2 == 0 else "sell") if p else "none")
+        if p:
+            k += 1
+    return out
+
+
+def test_alternate_side_splits_evenly_under_a_presence_cycle():
+    s = _sides(2, 1, 9)
+    assert s == ["buy", "sell", "none", "buy", "sell", "none", "buy", "sell", "none"], s
+    for on, off, n in ((1, 0, 120), (2, 1, 160), (1, 1, 80)):
+        got = _sides(on, off, n)
+        b, sl = got.count("buy"), got.count("sell")
+        assert abs(b - sl) <= 1, f"on={on} off={off}: {b} buy vs {sl} sell"
+
+
+def test_side_counter_must_index_on_present_episodes_only():
+    """Indexing side off the raw episode number is only safe for some cycles.
+
+    At 1-on-1-off every present episode is even, so a naive `episode % 2` would
+    make the entire run buy-side -- silently producing a single-sided model from
+    a config that asked for both. (At 2-on-1-off the parities happen to balance,
+    which is exactly why this has to be tested at 1/1 and not assumed.)
+    """
+    naive = [("buy" if e % 2 == 0 else "sell") if _present(1, 1, e) else "none"
+             for e in range(80)]
+    assert naive.count("sell") == 0, "expected the naive counter to be fully single-sided"
+
+    fixed = _sides(1, 1, 80)
+    assert abs(fixed.count("buy") - fixed.count("sell")) <= 1, fixed[:10]
 
 
 if __name__ == "__main__":
