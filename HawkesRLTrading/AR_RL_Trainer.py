@@ -12,8 +12,14 @@ from HawkesRLTrading.src.SimulationEntities.MetaOrderTradingAgents import TWAPGy
 import torch
 import time
 
-log_dir = '/home/ajafree/LSTM_fRL/wout_expo/new_value_function/gae_lambda/training/sell/logs/'
-model_dir = '/home/ajafree/LSTM_fRL/wout_expo/new_value_function/gae_lambda/training/sell/model'
+# Run identity is env-overridable so a submission script fully determines its
+# own config. Without this the config is whatever ~/lobSimulations happens to be
+# checked out to when the job STARTS (not when it is queued), which means only
+# one run can safely be queued at a time -- a queued job can dequeue after a
+# later pull and silently run the wrong config. Defaults reproduce today's run.
+_DEFAULT_RUN = '/home/ajafree/LSTM_fRL/wout_expo/new_value_function/gae_lambda/training/sell'
+log_dir = os.environ.get('RUN_LOG_DIR', _DEFAULT_RUN + '/logs/')
+model_dir = os.environ.get('RUN_MODEL_DIR', _DEFAULT_RUN + '/model')
 
 start_trading_lag = 100
 twap_off_time = 400
@@ -35,12 +41,16 @@ TWAP_ALTERNATE = os.environ.get("TWAP_ALTERNATE", "0") == "1"
 SEED_MODE = os.environ.get("SEED_MODE", "fixed")
 SEED_BASE = int(os.environ.get("SEED_BASE", 1000))
 
+# Number of training episodes; env-overridable so a short smoke run can
+# validate a new config before committing a multi-day job to it.
+N_EPISODES = int(os.environ.get("N_EPISODES", 80))
+
 #the time that the TWAP agent will kick in:
 twap_start_time = 150 + start_trading_lag
 
 twap_end_time = 300 + start_trading_lag
 
-label = 'train_new_vf_gae_lambda_sell'
+label = os.environ.get('RUN_LABEL', 'train_new_vf_gae_lambda_sell')
 layer_widths=100
 n_layers=3
 eta = 5
@@ -279,7 +289,7 @@ final_cashs = []
 total_executeds = []
 episode_inv_trajectories_buy = []
 episode_inv_trajectories_sell = []
-for episode in range(80):
+for episode in range(N_EPISODES):
     inventory_with_twap_buy = []
     inventory_with_twap_sell = []
     inventory_without_twap = []
