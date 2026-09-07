@@ -8,8 +8,14 @@ Two defects broke this before Phase B:
    and then mutated it in place as the agent traded, so a caller reusing its
    kwargs carried one episode's closing inventory into the next.
 
-Either one alone makes a fixed seed non-reproducible, so this test is an
-integration test on purpose: it runs the real simulator twice.
+Of the two, (2) is the load-bearing one: with the Inventory copy in place this
+test passes even with the stdlib RNG left unseeded, in this configuration. The
+stdlib seeding is kept because an unseeded global RNG in the simulation path is
+a reproducibility hazard regardless -- a longer run, or one that exercises the
+cancel path with more than one eligible order, may well depend on it -- but it
+was not what broke reproducibility here.
+
+This is an integration test on purpose: it runs the real simulator twice.
 
 Needs the fitted-parameter pickle; skips cleanly if it is not present.
 """
