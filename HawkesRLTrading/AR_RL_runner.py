@@ -24,6 +24,12 @@ model_dir = _RUN_DIR.rstrip('/') + '/model'
 TWAP_PRESENT = os.environ.get('EVAL_TWAP_PRESENT', '1') == '1'
 twap_side = os.environ.get('EVAL_TWAP_SIDE', 'sell')
 
+# Evaluation must be able to run on the SAME seed list as its matched
+# TWAP-alone baseline, which turns the slippage comparison into a paired test.
+# Defaults reproduce today's behaviour (tradingEnv's default seed=1).
+SEED_MODE = os.environ.get("SEED_MODE", "fixed")
+SEED_BASE = int(os.environ.get("SEED_BASE", 1000))
+
 start_trading_lag = 100
 twap_off_time = 400
 twap_starting_inventory = 500
@@ -345,6 +351,7 @@ def plot_twap_execution_prices(episode_num, all_prices, all_times, all_start_pri
     plt.close()
     print(f"Saved TWAP execution price plot to {save_path}")
 
+episode_seeds = []
 for episode in range(17):
     RL_agent_obsv = []
     TWAP_agent_obsv = []
@@ -365,7 +372,10 @@ for episode in range(17):
     episode_twap_exec_times = []   # Track execution times for this episode
     i = 0
     action_num = 0
-    env=tradingEnv(stop_time=550, wall_time_limit=23400, **kwargs)
+    episode_seed = (SEED_BASE + episode) if SEED_MODE == "vary" else 1
+    episode_seeds.append(episode_seed)
+    print(f"Episode {episode}: seed {episode_seed}, TWAP present {TWAP_PRESENT}, side {twap_side}")
+    env=tradingEnv(stop_time=550, wall_time_limit=23400, seed=episode_seed, **kwargs)
     print("Initial Observations"+ str(env.getobservations()))
     Simstate, observations, termination, truncation =env.step(action=None) 
     AgentsIDs=[k for k,v in Simstate["Infos"].items() if v==True]
@@ -567,6 +577,7 @@ for episode in range(17):
                     plt.close()
 
                 # Save data every step
+                np.save(log_dir + label + '_episode_seeds', np.array(episode_seeds))
                 np.save(log_dir + label + '_profit', np.array([t, finalcash2]))
                 # Save profits by phase with their respective time arrays
                 np.save(log_dir+label+"_profit_before_twap", np.array([t_before_twap, profit_before_twap]))

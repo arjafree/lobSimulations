@@ -28,6 +28,13 @@ twap_side = "sell"
 TWAP_SIDE_MODE = os.environ.get("TWAP_SIDE_MODE", "sell")
 TWAP_ALTERNATE = os.environ.get("TWAP_ALTERNATE", "0") == "1"
 
+# SEED_MODE: "fixed" reproduces today's behaviour exactly (tradingEnv's default
+#   seed=1 on every episode). "vary" gives each episode its own seed, so the
+#   agent cannot overfit one realisation of the background order flow.
+# The seed list is logged and saved so any run can be replayed exactly.
+SEED_MODE = os.environ.get("SEED_MODE", "fixed")
+SEED_BASE = int(os.environ.get("SEED_BASE", 1000))
+
 #the time that the TWAP agent will kick in:
 twap_start_time = 150 + start_trading_lag
 
@@ -261,6 +268,7 @@ RL_obsv = []
 
 sides = []
 twap_presents = []
+episode_seeds = []
 
 eps_with_buy = []
 eps_with_sell = []
@@ -306,8 +314,11 @@ for episode in range(80):
     kwargs["GymTradingAgent"][1]["side"] = twap_side
     i = 0
     action_num = 0
-    env=tradingEnv(stop_time=550, wall_time_limit=23400, **kwargs)
-    print(f"Start of episode {episode}. TWAP side is {twap_side}")
+    episode_seed = (SEED_BASE + episode) if SEED_MODE == "vary" else 1
+    episode_seeds.append(episode_seed)
+    env=tradingEnv(stop_time=550, wall_time_limit=23400, seed=episode_seed, **kwargs)
+    print(f"Start of episode {episode}. TWAP present: {twap_present}, side: "
+          f"{twap_side if twap_present else 'none'}, seed: {episode_seed}")
     print("Initial Observations"+ str(env.getobservations()))
     Simstate, observations, termination, truncation =env.step(action=None) 
     AgentsIDs=[k for k,v in Simstate["Infos"].items() if v==True]
@@ -596,6 +607,7 @@ if len(inventories_with_twap_sell) > 0:
 if len(inventories_with_twap_buy) > 0:
     np.save(log_dir + "inventorydists_" + label+ "_inventory_with_twap_buy.npy", np.array(inventories_with_twap_buy, dtype=object), allow_pickle=True)
 
+np.save(log_dir + "slippages_"+label+"episode_seeds.npy", np.array(episode_seeds))
 np.save(log_dir + "slippages_"+label+"twap_present.npy", np.array(twap_presents))
 np.save(log_dir + "slippages_"+label+"sides.npy", np.array(sides))
 np.save(log_dir + "slippages_"+label+"total_executed.npy", np.array(total_executeds, dtype=float))

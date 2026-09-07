@@ -47,7 +47,11 @@ class TradingAgent(Entity):
         super().__init__(type="TradingAgent", seed=seed, log_events=log_events, log_to_file=log_to_file)
         self.strategy=strategy #string that describes what strategy the agent has
         assert Inventory is not None, f"Agent needs inventory for initialisation"
-        self.Inventory=Inventory #Dictionary of how many shares the agent is holding
+        # Defensive copy: Inventory is mutated in place as the agent trades
+        # (see receivemessage), so storing the caller's dict by reference leaks
+        # one episode's final inventory into the next whenever the caller reuses
+        # its kwargs -- which defeats seeding and makes runs irreproducible.
+        self.Inventory=dict(Inventory) #Dictionary of how many shares the agent is holding
         self.action_freq=action_freq
         #What trades is this agent notified to wakeup to
         self.wake_on_MO=wake_on_MO #Does this agent get notified to make a trade whenever a trade happens

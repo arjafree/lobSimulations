@@ -1,6 +1,7 @@
 import gymnasium as gym
 import numpy as np
 import copy
+import random as _pyrandom
 from typing import Any, Optional
 import logging
 import matplotlib.pyplot as plt
@@ -130,6 +131,12 @@ class tradingEnv(gym.Env):
         self.kernel=Kernel(agents=self.agents, exchange=exchange, seed=seed, kernel_name=kernel_name, stop_time=stop_time, wall_time_limit=wall_time_limit, log_to_file=log_to_file, Arrival_model=Arrival_model)
         self.kernel.initialize_kernel()
         np.random.seed(self.seed)
+        # Exchange.py:473 picks which resting order to cancel with the stdlib
+        # `random`, which was never seeded -- an unseeded leak that made runs
+        # irreproducible even at a fixed `seed`. Seeding it here closes that.
+        # NOTE: this changes the realised path of existing fixed-seed runs and
+        # must be called out in the paper's reproducibility note.
+        _pyrandom.seed(self.seed)
 
     def step(self, action: Optional[Any]):
         """
