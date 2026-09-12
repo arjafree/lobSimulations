@@ -84,6 +84,24 @@ ACTION_BONUS = float(os.environ.get("ACTION_BONUS", 0.5))
 RUNNING_INVPENALTY = float(os.environ.get("RUNNING_INVPENALTY", 0.0))
 ENTROPY_COEF = float(os.environ.get("ENTROPY_COEF", 0.0))
 
+# --- Action space. 1 (the default, and every run to date) gives the agent FOUR
+# actions: lo_top_Ask, co_top_Ask, co_top_Bid, lo_top_Bid -- post or cancel at
+# the touch, on either side. There is no market order and no in-spread order in
+# that set, so the policy cannot initiate a position at all; it can only choose
+# which side to expose and then wait to be filled by someone else's aggression.
+# That is a structural obstacle to criterion 1: front-running means taking a
+# position AHEAD of the meta-order, but during a buying TWAP the aggression in
+# the book is buying, so a resting ask gets lifted and the agent ends up SHORT
+# into a rising market -- run over rather than in front. 0 opens the full
+# 12-action space including mo_Ask/mo_Bid and the in-spread orders.
+ACTION_SPACE_CONFIG = int(os.environ.get("ACTION_SPACE_CONFIG", 1))
+
+# Market-order gating symmetry. Legacy (false, the default and every run to
+# date) permits SELLING via market order only on inv in [1, limit-3] but BUYING
+# on inv in [2-limit, +inf) -- long-biased. Dormant while ACTION_SPACE_CONFIG=1,
+# which never emits a market order, but it must be on for any config-0 run.
+SYMMETRIC_MO_GATING = os.environ.get("SYMMETRIC_MO_GATING", "false").strip().lower() in ("1", "true", "yes")
+
 #the time that the TWAP agent will kick in:
 twap_start_time = 150 + start_trading_lag
 
@@ -288,9 +306,10 @@ tc = 0.0001
 RLagentInstance = AdversarialPPOAgent( seed=1, log_events=True, log_to_file=True, strategy=j["strategy"], Inventory=j["Inventory"], cash=j["cash"], action_freq=j["action_freq"],
                           wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"], cashlimit=j["cashlimit"],inventorylimit=j['inventorylimit'], batch_size=512,
                           layer_widths=layer_widths, n_layers =n_layers, buffer_capacity = 100000, rewardpenalty = j["rewardpenalty"], epochs = 100, transaction_cost=1e-4, start_trading_lag = j['start_trading_lag'],
-                          gae_lambda=GAE_LAMBDA, gamma=0.999, truncation_enabled=False, action_space_config = 1, alt_state=True, enhance_state=True, include_time=True, optim_type='ADAM',entropy_coef=ENTROPY_COEF, exploration_bonus = EXPLORATION_BONUS, hidden_activation='sigmoid',
+                          gae_lambda=GAE_LAMBDA, gamma=0.999, truncation_enabled=False, action_space_config = ACTION_SPACE_CONFIG, alt_state=True, enhance_state=True, include_time=True, optim_type='ADAM',entropy_coef=ENTROPY_COEF, exploration_bonus = EXPLORATION_BONUS, hidden_activation='sigmoid',
                           typeNN = "LSTM", lr = 3e-4, chunk_length=64, TWAPPresent=0, cem_full_episode=True, terminal_invpenalty=5*eta, two_sided_reward=False,
-                          action_bonus=ACTION_BONUS, running_invpenalty=RUNNING_INVPENALTY)
+                          action_bonus=ACTION_BONUS, running_invpenalty=RUNNING_INVPENALTY,
+                          symmetric_mo_gating=SYMMETRIC_MO_GATING)
 
 # Config banner. The six 2026-09-07 runs could not be told apart from their .o
 # files because nothing recorded which arm they were on; this makes every job
@@ -310,6 +329,8 @@ print(f"  expApprox          = {EXP_APPROX}", flush=True)
 print(f"  action_bonus       = {ACTION_BONUS}", flush=True)
 print(f"  running_invpenalty = {RUNNING_INVPENALTY}", flush=True)
 print(f"  entropy_coef       = {ENTROPY_COEF}", flush=True)
+print(f"  action_space_config= {ACTION_SPACE_CONFIG}", flush=True)
+print(f"  symmetric_mo_gating= {SYMMETRIC_MO_GATING}", flush=True)
 print(f"  eta/rewardpenalty  = {eta}/{j['rewardpenalty']}", flush=True)
 print(f"  inventorylimit     = {j['inventorylimit']}", flush=True)
 print("=" * 72, flush=True)
@@ -372,6 +393,8 @@ def _save_episode_metrics():
                    "action_bonus": ACTION_BONUS,
                    "running_invpenalty": RUNNING_INVPENALTY,
                    "entropy_coef": ENTROPY_COEF,
+                   "action_space_config": ACTION_SPACE_CONFIG,
+                   "symmetric_mo_gating": SYMMETRIC_MO_GATING,
                    "twap_on": TWAP_ON, "twap_off": TWAP_OFF,
                    "twap_side_mode": TWAP_SIDE_MODE,
                    "seed_mode": SEED_MODE, "seed_base": SEED_BASE,

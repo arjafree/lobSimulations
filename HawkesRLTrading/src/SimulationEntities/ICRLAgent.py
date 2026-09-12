@@ -1413,7 +1413,7 @@ class PPOAgent(GymTradingAgent):
                  buffer_capacity=10000, batch_size=64, epochs=1000, layer_widths = 128, n_layers = 3, clip_ratio=0.2,
                  value_loss_coef=0.5, entropy_coef=10, max_grad_norm=0.5, gae_lambda=0.95, gamma=0.99, rewardpenalty = 0.1, hidden_activation='leaky_relu',
                  transaction_cost = 0.01, start_trading_lag=0, truncation_enabled=True, action_space_config = 0, include_time = False, alt_state=False, enhance_state=False,
-                 policy_loss_coef = 1, optim_type = 'ADAM',lr=1e-3, exploration_bonus = 0, first_visit_bonus = 0.2, two_sided_reward = True, ablation_params= {}, typeNN = "dense", chunk_length=64, terminal_invpenalty=0, cem_full_episode=False, phase_a_refresh_every=25, action_bonus=0.5, running_invpenalty=0.0):
+                 policy_loss_coef = 1, optim_type = 'ADAM',lr=1e-3, exploration_bonus = 0, first_visit_bonus = 0.2, two_sided_reward = True, ablation_params= {}, typeNN = "dense", chunk_length=64, terminal_invpenalty=0, cem_full_episode=False, phase_a_refresh_every=25, action_bonus=0.5, running_invpenalty=0.0, symmetric_mo_gating=False):
         """
         PPO Agent with Generalized Advantage Estimation (GAE)
         Maintains two networks: one for decision (d) and one for utility (u)
@@ -1504,6 +1504,21 @@ class PPOAgent(GymTradingAgent):
         # With nothing opposing it, inventory drifts to a per-run direction that
         # does not depend on the TWAP side at all.
         self.running_invpenalty = running_invpenalty
+        # Market-order gating. The legacy gates (symmetric_mo_gating=False, the
+        # default, which every run to date is on) are:
+        #   mo_Ask (SELL) blocked when inv < 1  OR  inv >= inventorylimit - 2
+        #   mo_Bid (BUY)  blocked when inv <= 2 - inventorylimit
+        # At inventorylimit=25 that permits SELLING only on inv in [1, 22] but
+        # BUYING on inv in [-22, +inf). The `inv >= limit - 2` clause blocks
+        # selling while very long, which is backwards for a position limit, and
+        # its mirror -- block buying while very long -- is simply absent, so the
+        # aggressive action set is long-biased. This is DORMANT in every run to
+        # date because action_space_config=1 never emits u=4 or u=7, but it
+        # would corrupt any action_space_config=0 run.
+        # True makes the two gates mirror images. The separate "no shorting via
+        # market order" rule (inv < 1) is a modelling choice, not a bug, and is
+        # left in place in both modes.
+        self.symmetric_mo_gating = symmetric_mo_gating
         # State scaler
         self.mmscaler = MinMaxScaler()
         self.ablation_params = ablation_params
@@ -1660,6 +1675,30 @@ class PPOAgent(GymTradingAgent):
             return -1
         return 0
 
+    def _mo_ask_blocked(self, exploration=False):
+        """Should a SELL market order be suppressed at the current inventory?
+
+        Legacy (symmetric_mo_gating=False) reproduces the historical gates
+        exactly, including the exploration branch's missing position-limit
+        clause. See __init__ for why the legacy form is long-biased."""
+        inv = self.countInventory()
+        if inv < 1:                      # no shorting via market order
+            return True
+        if self.symmetric_mo_gating:     # selling reduces a long: the long limit must not block it
+            return inv <= 2 - self.inventorylimit
+        if exploration:
+            return False                 # legacy exploration branch had no limit clause
+        return inv >= self.inventorylimit - 2
+
+    def _mo_bid_blocked(self, exploration=False):
+        """Should a BUY market order be suppressed at the current inventory?"""
+        inv = self.countInventory()
+        if self.symmetric_mo_gating:     # mirror of the sell gate: stop at the long limit
+            return inv >= self.inventorylimit - 2
+        if exploration:
+            return False                 # legacy exploration branch had no bid clause at all
+        return inv <= 2 - self.inventorylimit
+
     def _exploration_key_state(self):
         # [inventory, spread, n_a/q_a, n_b/q_b] + [twap_side, intensity bucket, twap phase]
         base = self.last_state.cpu().numpy()[0][1:5]
@@ -1754,7 +1793,11 @@ class PPOAgent(GymTradingAgent):
                         self.last_action = 12
                         return 12, (d, 0), d_log_prob.item(), 0, d_value.item(), 0
 
-                if (int(u) == 4) and (self.countInventory() < 1):  # ask mo -> since it hits the bid
+                if (int(u) == 4) and self._mo_ask_blocked(exploration=True):  # ask mo -> since it hits the bid
+                    self.last_action = 12
+                    return 12, (d, 0), d_log_prob.item(), 0, d_value.item(), 0
+
+                if (int(u) == 7) and self._mo_bid_blocked(exploration=True):  # bid mo
                     self.last_action = 12
                     return 12, (d, 0), d_log_prob.item(), 0, d_value.item(), 0
 
@@ -1807,11 +1850,11 @@ class PPOAgent(GymTradingAgent):
                         self.last_action = 12
                         return 12, (d, 0), d_log_prob.item(), 0, d_value.item(), 0
 
-                if (int(u) == 4) and ((self.countInventory() < 1) or (self.countInventory() >= self.inventorylimit - 2)):  # ask mo -> hits the bid
+                if (int(u) == 4) and self._mo_ask_blocked():  # ask mo -> hits the bid
                     self.last_action = 12
                     return 12, (d, 0), d_log_prob.item(), 0, d_value.item(), 0
 
-                if (int(u)==7) and (self.countInventory() <= 2 - self.inventorylimit): # bid mo
+                if (int(u)==7) and self._mo_bid_blocked(): # bid mo
                     self.last_action = 12
                     return 12, (d, 0), d_log_prob.item(), 0, d_value.item(), 0
 
