@@ -559,6 +559,33 @@ What is real:
   a bias into a variance injector. `CEM_ELITE_FLOOR` (default 0 = unchanged)
   requires elites to clear the buffer mean by N SDs.
 
+* **The elite count must be held constant across arms** — a confound I
+  introduced with the fix above and then removed. Top-3 per pool gives 9 elites
+  in a three-regime run, 6 in a two-regime one, 5 in a single-regime one. The
+  buffer holds ~40 episodes, so the elite *fraction* — how hard CEM pulls —
+  would have been 22.5/15/12.5% purely as a function of how many regimes the arm
+  has. `CEM_N_ELITES` (default 6) now fixes the total and splits it across
+  populated pools, water-filling smallest-first so a thin pool passes its
+  shortfall on rather than shrinking the total.
+* **Cross-regime imitation is pooled even though selection is balanced.** All
+  three pools' elites go into one cross-entropy batch and the network separates
+  regimes only through the `TWAPPresent` feature. Absent episodes carry
+  `TWAPPresent == 0`, the *same* value as the pre- and post-window portions of
+  present episodes, so absent-regime elites also shape present-episode
+  out-of-window behaviour. That is probably what we want — standalone
+  market-making wherever the meta-order is not working — but it means the absent
+  pool has roughly twice the leverage its episode count suggests. Noted as
+  intentional rather than incidental.
+* **Elites are re-imitated for ~5 consecutive sessions.** The buffer retains ~40
+  episodes and CEM fires every 8, so the same elite set is the target across
+  roughly five successive updates — and on a CEM session the PPO policy loss is
+  **replaced**, not augmented. Half of all policy updates therefore carry no
+  policy-gradient signal and point at a handful of trajectories held fixed for
+  five sessions. Under a PnL-dominated reward without an elite floor, that is
+  five consecutive updates chasing one noise realisation. `CEM_ELITE_FLOOR` is
+  the mitigation and **the PnL-scaled arms need it set** — it is not on by
+  default.
+
 `USE_CEM` (default true) also exists now; `ps_nc` is the CEM-off arm.
 
 *On the metrics.* SHIFT subtracts a baseline that contains the signal, so it is
@@ -576,7 +603,16 @@ positions, profit and `statelog` every episode.
 **Exchange defects found while chasing a residual that turned out not to exist.**
 Recorded because they are real, not because they explain anything.
 
-* **`Exchange.py:588` — a genuine non-mirror defect.** The ask branch of
+* **`Exchange.py:588` — a genuine non-mirror defect. Whether its branch ever
+  fires is being MEASURED, not inferred.** The reviewer first argued the branch
+  must be dead because a list there would crash and production saw zero errors,
+  then **retracted that inference**: `askprice` and `ticksize` are `np.float64`,
+  so a list propagates as a 1-element array through nearly every downstream use
+  without raising. `:554`'s `del self.bids[self.bidprice]` is a genuine crash
+  surface (`unhashable type: 'list'`), but it sits on the crossed-book path,
+  which may itself be rare — so zero errors does **not** establish the branch
+  never ran. A 12-seed instrumented run at T=550 is counting all four depletion
+  branches directly. Treat the dead-path claim as open until that lands. The ask branch of
   `regeneratequeuedepletion` assigns `self.askprice = self.askprices["Ask_L1"]`
   (scalar); the bid branch assigns `self.bidprice = [self.bidprices["Bid_L1"]]`
   — a **list**. It is in the cancel-depletion path. Most operations on it
