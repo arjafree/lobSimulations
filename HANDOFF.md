@@ -286,8 +286,32 @@ rather than overridden, because it draws from the stdlib RNG the exchange also
 uses — calling and discarding would desynchronise the background flow and make
 the control a different market.
 
-First ever measurement, episode 0 of the smoke run: **1.96 bps** (buy side).
-The TWAP completes its order (149–154 of 150 shares executed).
+**The control is running and validating.** Every RL-side metric in `ctl_fast`
+reads exactly **0.00 ± 0.00** across 38 episodes — inventory level, response,
+PnL — which is the sanity check that `RL_DISABLED` does what it claims. First
+criterion-3 denominator ever measured:
+
+| control arm | n/side | buy slippage | sell slippage | TWAP executed |
+|---|---|---|---|---|
+| `ctl_fast` (expApprox) | 13 | **+12.31** ±12.86 | **−1.90** ±9.85 | 158.9 |
+| `ctl_normal` | 3 | +1.06 ±2.50 | +3.48 ±4.42 | 161.3 |
+
+Two things to note. The **unpaired** CIs are wide — per-episode slippage
+variance is large, and resolving a few bps unpaired would need hundreds of
+episodes per side. That is not the intended comparison: episodes pair one-to-one
+with the treatment runs by seed and side, so criterion 3 is a **paired**
+difference, which removes the seed-driven market path that dominates this
+variance. `criteria_report.py --control` does that pairing.
+
+Second, and unplanned: **the control is itself a clean test for exchange-side
+asymmetry.** With no RL agent at all, the TWAP's buy and sell slippage should
+match. If they do not once n is adequate, that is a side asymmetry with the
+Hawkes excitation ON and no agent involved — a better-powered probe than the
+kernels-nulled event-count route, and it comes free with a run already going.
+At n=13 the fast arm's +12.31 vs −1.90 is well inside noise; worth re-reading
+at n≈100.
+
+The TWAP completes its order in both arms (149–161 of 150 shares).
 
 ---
 
