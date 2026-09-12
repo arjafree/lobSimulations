@@ -770,6 +770,19 @@ for episode in range(N_EPISODES):
         "inv_level_post_window": float(np.mean(inventory_post_twap)) if len(inventory_post_twap) else None,
         "n_post_window": int(len(inventory_post_twap)),
         "inv_terminal": float(inventory_without_twap[-1]) if len(inventory_without_twap) else None,
+        # Fraction of steps sitting AT the inventory limit. Those are forced
+        # liquidations: get_action returns (mo, (None, None)) before setting
+        # last_state, so store_transition early-returns on `d is None` and the
+        # transition never reaches the buffer -- while calculaterewards has
+        # already run as its argument and advanced statelog. The liquidation's
+        # cost is therefore deleted from the learning signal rather than merely
+        # delayed. Measured on buy_base this grows 0.015 -> 0.089 over training
+        # while its inventory level diverges, so it is worth tracking live.
+        "frac_at_inventory_limit": (
+            float(np.mean(np.abs(np.array(
+                inventory_pre_twap + _inw + inventory_post_twap, dtype=float))
+                >= j["inventorylimit"]))
+            if (len(inventory_pre_twap) + len(_inw) + len(inventory_post_twap)) else None),
         # Criterion 2: terminal PnL. On a TWAP-absent episode this is the clean
         # standalone-market-maker readout.
         "terminal_pnl": float(_term_pnl) if _term_pnl is not None else None,
