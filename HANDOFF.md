@@ -502,11 +502,44 @@ positions, profit and `statelog` every episode.
    reward verbatim. Measured across all six production runs: **0 ties in
    1,162,460 consecutive steps** (0 in each of 198688/198732/173876/206358/
    172971/211835). Fragility, not an active bug. No action.
-3. **Breach steps are dropped from training.** `store_transition` early-returns
-   when `d is None`, and the forced-market-order branch returns `(None, None)`,
-   so every inventory-limit liquidation step is missing from the buffer — and
-   those are exactly the steps carrying the largest inventory decisions. Detail
-   still incoming; **unquantified**.
+3. **Breach steps are deleted from the learning signal — and this is the
+   strongest mechanistic candidate for `buy_base`'s runaway.** `get_action`'s
+   breach branch returns `(mo, (None, None))` **before setting `last_state`**,
+   so `state_at_action` is the stale previous state — non-`None`, so the trainer
+   calls `store_transition`, which early-returns on `d is None`. But
+   `calculaterewards` has already run *as that call's argument* and advanced
+   `statelog`. The breach step's PnL is therefore computed, printed and thrown
+   away while the statelog pointer moves past it: **the forced liquidation's
+   cost is credited to no stored transition at all**, rather than merely
+   delayed. The only surviving in-episode pressure against the limit is
+   `terminal_invpenalty` at the final step, so **the agent is never punished
+   during an episode for hitting ±25**.
+
+   Measured, fraction of steps at `|inv| >= 25`:
+
+   | run | first 20 eps | last 20 eps | trend/ep | by 10-episode block |
+   |---|---|---|---|---|
+   | `buy_base` | 0.0150 | **0.0892** | **+0.0012** | .018 .012 .002 .032 .068 .018 .083 .095 |
+   | `sell_base` | 0.0040 | 0.0000 | −0.0002 | .001 .007 .047 .000 .000 .003 .000 .000 |
+
+   A ~6× growth over training in exactly the run the previous handoff called
+   "the one genuine anomaly" (level −20.42, diverging at −0.17/ep against a
+   limit of 25), and flat in the run that did not diverge. That is the predicted
+   signature of a feedback loop: more limit touches → more deleted liquidation
+   costs → less pressure against the limit. Note excursions are **not** one step
+   each as a code-only bound suggests — 562 excursions of length > 1 in
+   `buy_base` — because resting orders fill between RL steps, so the dropped
+   fraction is close to the raw at-limit fraction.
+
+   `frac_at_inventory_limit` is now recorded per episode.
+
+   **DECISION NEEDED.** Fixing this touches reward attribution, and "the reward
+   measures PnL change since the last statelog update, whichever event caused
+   it" is on the supervisor-confirmed by-design list. Options: (a) leave it;
+   (b) skip `calculaterewards` on dropped steps so the liquidation PnL accrues
+   to the next stored transition; (c) store the breach transition with the
+   policy's intended action, which is the convention already used for the other
+   `get_action` overrides. Not changed unilaterally.
 
 **A correction to the review itself.** It states CEM is on "for 3 of every 4
 training sessions". It is on for **half**: `episode % 8 != 0` holds for 7 of
