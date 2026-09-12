@@ -1413,7 +1413,7 @@ class PPOAgent(GymTradingAgent):
                  buffer_capacity=10000, batch_size=64, epochs=1000, layer_widths = 128, n_layers = 3, clip_ratio=0.2,
                  value_loss_coef=0.5, entropy_coef=10, max_grad_norm=0.5, gae_lambda=0.95, gamma=0.99, rewardpenalty = 0.1, hidden_activation='leaky_relu',
                  transaction_cost = 0.01, start_trading_lag=0, truncation_enabled=True, action_space_config = 0, include_time = False, alt_state=False, enhance_state=False,
-                 policy_loss_coef = 1, optim_type = 'ADAM',lr=1e-3, exploration_bonus = 0, first_visit_bonus = 0.2, two_sided_reward = True, ablation_params= {}, typeNN = "dense", chunk_length=64, terminal_invpenalty=0, cem_full_episode=False, phase_a_refresh_every=25, action_bonus=0.5, running_invpenalty=0.0, symmetric_mo_gating=False, cem_elite_floor=0.0):
+                 policy_loss_coef = 1, optim_type = 'ADAM',lr=1e-3, exploration_bonus = 0, first_visit_bonus = 0.2, two_sided_reward = True, ablation_params= {}, typeNN = "dense", chunk_length=64, terminal_invpenalty=0, cem_full_episode=False, phase_a_refresh_every=25, action_bonus=0.5, running_invpenalty=0.0, symmetric_mo_gating=False, cem_elite_floor=0.0, cem_n_elites=6):
         """
         PPO Agent with Generalized Advantage Estimation (GAE)
         Maintains two networks: one for decision (d) and one for utility (u)
@@ -1520,6 +1520,7 @@ class PPOAgent(GymTradingAgent):
         # left in place in both modes.
         self.symmetric_mo_gating = symmetric_mo_gating
         self.cem_elite_floor = cem_elite_floor  # see get_max_contiguous_rewards
+        self.cem_n_elites = cem_n_elites        # total elites, held constant across arms
         # State scaler
         self.mmscaler = MinMaxScaler()
         self.ablation_params = ablation_params
@@ -2545,16 +2546,37 @@ class PPOAgent(GymTradingAgent):
             none_eps = [e for e in episode_totals if self.episode_sides.get(e, 0) == 0]
             pools = [p for p in (buy_eps, sell_eps, none_eps) if p]
             if len(pools) > 1:
-                # Multi-regime training: balance elites across regimes so no
-                # regime is starved, and so a regime with systematically higher
-                # total reward cannot monopolise the elite set.
+                # Balance elites across regimes so none is starved, and so a
+                # regime with systematically higher totals cannot monopolise the
+                # set -- absent episodes have no meta-order to trade against, so
+                # their totals are not comparable with present ones.
+                #
+                # The TOTAL is held fixed rather than the per-pool count. Taking
+                # top-3 of each pool would give 9 elites in a three-regime run,
+                # 6 in a two-regime one and 5 in a single-regime one, so the
+                # elite count -- and with it the elite FRACTION of the ~40
+                # episodes the buffer holds, i.e. the strength of the
+                # intervention -- would vary with the arm being tested and
+                # confound it. A looser elite fraction pulls the imitation
+                # target toward the buffer mean, so CEM would do systematically
+                # less in exactly the multi-regime arms.
+                # Water-fill: smallest pool first, so a pool that cannot fill
+                # its equal share passes the shortfall on to the larger pools
+                # instead of silently shrinking the total. An even split alone
+                # would give 5 elites, not 6, whenever one regime is thin --
+                # which is exactly the early-buffer situation.
                 top_eps = set()
-                for pool in pools:
-                    top_eps.update(sorted(pool, key=episode_totals.get, reverse=True)[:3])
+                remaining = self.cem_n_elites
+                ordered = sorted(pools, key=len)
+                for i, pool in enumerate(ordered):
+                    share = -(-remaining // (len(ordered) - i))   # ceil division
+                    k = min(share, len(pool))
+                    top_eps.update(sorted(pool, key=episode_totals.get, reverse=True)[:k])
+                    remaining -= k
             else:
-                # Single-regime (or untagged) training: original global top-5
+                # Single regime (or untagged): global top-N.
                 sorted_eps = sorted(episode_totals, key=episode_totals.get, reverse=True)
-                top_eps = set(sorted_eps[:5])
+                top_eps = set(sorted_eps[:self.cem_n_elites])
 
             if self.cem_elite_floor:
                 # `sorted(...)[:3]` returns three episodes regardless of quality.

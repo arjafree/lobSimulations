@@ -25,11 +25,12 @@ K = 10
 class _Stub(PPOAgent):
     """Only the elite-selection branch is exercised."""
 
-    def __init__(self, buffer, sides, full_episode=True, floor=0.0):
+    def __init__(self, buffer, sides, full_episode=True, floor=0.0, n_elites=6):
         self.trajectory_buffer = buffer
         self.episode_sides = sides
         self.cem_full_episode = full_episode
         self.cem_elite_floor = floor
+        self.cem_n_elites = n_elites
 
 
 def _episode(ep, total, n=K + 5):
@@ -47,9 +48,9 @@ def _build(spec):
     return buf, sides
 
 
-def _elites(spec, floor=0.0):
+def _elites(spec, floor=0.0, n_elites=6):
     buf, sides = _build(spec)
-    res = _Stub(buf, sides, floor=floor).get_max_contiguous_rewards(K=K)
+    res = _Stub(buf, sides, floor=floor, n_elites=n_elites).get_max_contiguous_rewards(K=K)
     return {ep for ep, v in res.items() if v is not None}
 
 
@@ -68,9 +69,47 @@ def test_each_regime_gets_its_own_elites():
         spec[20 + i] = (-1, 50.0 + i)     # sell, middling
         spec[30 + i] = (0, 1.0 + i)       # absent, low totals
     e = _elites(spec)
-    assert len({x for x in e if 10 <= x < 20}) == 3, e
-    assert len({x for x in e if 20 <= x < 30}) == 3, e
-    assert len({x for x in e if 30 <= x < 40}) == 3, e
+    assert len({x for x in e if 10 <= x < 20}) == 2, e
+    assert len({x for x in e if 20 <= x < 30}) == 2, e
+    assert len({x for x in e if 30 <= x < 40}) == 2, e
+
+
+def test_total_elite_count_is_constant_across_regime_counts():
+    """Per-pool counts would give 9 elites in a three-regime arm, 6 in a
+    two-regime one and 5 in a single-regime one -- so the elite FRACTION of the
+    ~40 buffered episodes, i.e. how hard CEM pulls, would vary with the arm
+    under test and confound it."""
+    three = {}
+    for i in range(8):
+        three[10 + i] = (1, 100.0 + i)
+        three[20 + i] = (-1, 50.0 + i)
+        three[30 + i] = (0, 1.0 + i)
+    two = {k: v for k, v in three.items() if v[0] != 0}
+    one = {k: v for k, v in three.items() if v[0] == 1}
+    assert len(_elites(three)) == 6, _elites(three)
+    assert len(_elites(two)) == 6, _elites(two)
+    assert len(_elites(one)) == 6, _elites(one)
+
+
+def test_elite_total_is_tunable():
+    spec = {}
+    for i in range(5):
+        spec[10 + i] = (1, 100.0 + i)
+        spec[20 + i] = (-1, 50.0 + i)
+        spec[30 + i] = (0, 1.0 + i)
+    assert len(_elites(spec, n_elites=3)) == 3
+    assert len(_elites(spec, n_elites=9)) == 9
+
+
+def test_remainder_goes_to_the_largest_pools():
+    """With a total not divisible by the pool count, a small pool must not
+    silently shrink the total below the target."""
+    spec = {10 + i: (1, 100.0 + i) for i in range(5)}
+    spec.update({20 + i: (-1, 50.0 + i) for i in range(5)})
+    spec[30] = (0, 1.0)                       # absent pool has ONE episode
+    e = _elites(spec, n_elites=6)
+    assert len(e) == 6, e
+    assert 30 in e, "the single absent episode must still be an elite"
 
 
 def test_a_high_scoring_regime_cannot_monopolise_the_elite_set():
@@ -82,14 +121,14 @@ def test_a_high_scoring_regime_cannot_monopolise_the_elite_set():
     assert any(x >= 10 for x in e), "absent regime starved by a higher-scoring one"
 
 
-def test_single_regime_falls_back_to_global_top_five():
-    spec = {i: (1, float(i)) for i in range(8)}
-    assert _elites(spec) == {7, 6, 5, 4, 3}
+def test_single_regime_falls_back_to_global_top_n():
+    spec = {i: (1, float(i)) for i in range(9)}
+    assert _elites(spec) == {8, 7, 6, 5, 4, 3}
 
 
-def test_untagged_buffer_falls_back_to_global_top_five():
-    spec = {i: (0, float(i)) for i in range(8)}
-    assert _elites(spec) == {7, 6, 5, 4, 3}
+def test_untagged_buffer_falls_back_to_global_top_n():
+    spec = {i: (0, float(i)) for i in range(9)}
+    assert _elites(spec) == {8, 7, 6, 5, 4, 3}
 
 
 def test_short_episodes_are_ignored():
@@ -130,10 +169,13 @@ def test_ranking_is_by_total_episode_reward():
     terminal_invpenalty=25 a single unit of terminal inventory costs -25
     against an episode PnL of +-0.2, so elites become 'ended closest to flat'
     unless the terminal penalty is scaled down with the action bonus."""
-    spec = {0: (1, 3.0), 1: (1, 1.0), 2: (1, 2.0), 3: (1, -5.0),
-            4: (-1, 1.0), 5: (-1, 2.0)}
+    # enough episodes that the elite set is a strict subset, or "excluded"
+    # is vacuous
+    spec = {i: (1, float(i)) for i in range(6)}          # buy totals 0..5
+    spec.update({10 + i: (-1, float(i)) for i in range(6)})  # sell totals 0..5
     e = _elites(spec)
-    assert {0, 2, 1} <= e and 3 not in e, e
+    assert {5, 4, 15, 14} <= e, e            # the best of each side
+    assert 0 not in e and 10 not in e, e     # the worst of each side
 
 
 if __name__ == "__main__":

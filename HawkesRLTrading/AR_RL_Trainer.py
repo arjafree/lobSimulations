@@ -130,6 +130,12 @@ USE_CEM = os.environ.get("USE_CEM", "true").strip().lower() in ("1", "true", "ye
 # Matters once the reward is PnL-dominated: episode totals are then near
 # zero-mean noise, so the top 3 of ~40 buffered episodes is mostly luck.
 CEM_ELITE_FLOOR = float(os.environ.get("CEM_ELITE_FLOOR", 0.0))
+# CEM_N_ELITES: total elite episodes per CEM session, held CONSTANT across arms.
+# Per-pool counts would make the elite count -- and so the elite fraction of the
+# ~40 episodes the buffer holds, i.e. the strength of the intervention -- depend
+# on how many TWAP regimes an arm has (3 regimes -> 9, 2 -> 6, 1 -> 5), which
+# would confound the very thing under test.
+CEM_N_ELITES = int(os.environ.get("CEM_N_ELITES", 6))
 
 # --- The remaining two shaping terms, for the same reason as ACTION_BONUS.
 # Scale reference, all in dollars per EPISODE (2,483 steps, 677 of them inside
@@ -362,7 +368,7 @@ RLagentInstance = AdversarialPPOAgent( seed=1, log_events=True, log_to_file=True
                           gae_lambda=GAE_LAMBDA, gamma=0.999, truncation_enabled=False, action_space_config = ACTION_SPACE_CONFIG, alt_state=True, enhance_state=True, include_time=True, optim_type='ADAM',entropy_coef=ENTROPY_COEF, exploration_bonus = EXPLORATION_BONUS, hidden_activation='sigmoid',
                           typeNN = "LSTM", lr = 3e-4, chunk_length=64, TWAPPresent=0, cem_full_episode=True, terminal_invpenalty=TERMINAL_INVPENALTY, first_visit_bonus=FIRST_VISIT_BONUS, two_sided_reward=False,
                           action_bonus=ACTION_BONUS, running_invpenalty=RUNNING_INVPENALTY,
-                          symmetric_mo_gating=SYMMETRIC_MO_GATING, cem_elite_floor=CEM_ELITE_FLOOR)
+                          symmetric_mo_gating=SYMMETRIC_MO_GATING, cem_elite_floor=CEM_ELITE_FLOOR, cem_n_elites=CEM_N_ELITES)
 
 # Config banner. The six 2026-09-07 runs could not be told apart from their .o
 # files because nothing recorded which arm they were on; this makes every job
@@ -396,6 +402,7 @@ print(f"  eta (INERT except via terminal_invpenalty) = {eta}", flush=True)
 print(f"  rewardpenalty (INERT) = {j['rewardpenalty']}", flush=True)
 print(f"  use_CEM            = {USE_CEM}", flush=True)
 print(f"  cem_elite_floor    = {CEM_ELITE_FLOOR}", flush=True)
+print(f"  cem_n_elites       = {CEM_N_ELITES}", flush=True)
 print(f"  inventorylimit     = {j['inventorylimit']}", flush=True)
 print("=" * 72, flush=True)
 
@@ -462,6 +469,7 @@ def _save_episode_metrics():
                    "rl_disabled": RL_DISABLED,
                    "use_cem": USE_CEM,
                    "cem_elite_floor": CEM_ELITE_FLOOR,
+                   "cem_n_elites": CEM_N_ELITES,
                    "terminal_invpenalty": TERMINAL_INVPENALTY,
                    "first_visit_bonus": FIRST_VISIT_BONUS,
                    "twap_on": TWAP_ON, "twap_off": TWAP_OFF,
