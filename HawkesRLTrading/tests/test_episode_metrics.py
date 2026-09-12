@@ -107,9 +107,40 @@ def test_start_midprices_is_no_longer_a_dead_list():
         "the arrival midprice is never saved, so slippage cannot be recomputed post-hoc"
 
 
+def test_pre_and_post_window_are_bucketed_separately():
+    """`inventory_without_twap` pools (100,250] with [400,550]. The pre stretch
+    is exactly where front-running happens, so subtracting the pooled baseline
+    subtracts the signal: a policy that builds its position before t=250 and
+    holds it through the window scores a paired shift of ~0 BY CONSTRUCTION.
+    The pre window must therefore be recorded on its own."""
+    src = open(TRAINER).read()
+    assert "inventory_pre_twap.append" in src and "inventory_post_twap.append" in src
+    assert '"inv_level_pre_window"' in src, "the correct criterion-1 baseline is not saved"
+    assert '"inv_level_post_window"' in src
+    # split must key on the window boundaries, not on twap_present
+    assert "if Simstate['TimeCode'] <= twap_start_time:" in src
+    assert "elif Simstate['TimeCode'] >= twap_end_time:" in src
+    # and both must be reset per episode, or they accumulate across the run
+    i = src.index("inventory_without_twap = []")
+    assert "inventory_pre_twap = []" in src[i:i + 200]
+    assert "inventory_post_twap = []" in src[i:i + 200]
+
+
+def test_pre_post_windows_are_disjoint_and_cover_the_complement():
+    """The three windows are equal 150s thirds of (100,550]. Mis-stating a
+    boundary would silently put TWAP-window samples in the baseline."""
+    src = open(TRAINER).read()
+    assert "start_trading_lag = 100" in src
+    assert "twap_start_time = 150 + start_trading_lag" in src
+    assert "twap_end_time = 300 + start_trading_lag" in src
+    assert "twap_off_time = 400" in src
+    start, end, stop = 250, 400, 550
+    assert end - start == start - 100 == stop - end == 150
+
+
 def test_live_metrics_cover_all_three_criteria():
     src = open(TRAINER).read()
-    for key in ("inv_level_in_window",   # criterion 1
+    for key in ("inv_level_in_window", "inv_level_pre_window",   # criterion 1
                 "terminal_pnl",          # criterion 2
                 "twap_slippage_bps",     # criterion 3
                 "twap_present", "side", "seed"):

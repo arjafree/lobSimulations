@@ -3,7 +3,17 @@
 
 Reads every episode_metrics_<label>.json under the given roots and reports:
 
-  Criterion 1 -- front-running. The headline number is the SIDE CONTRAST:
+  Criterion 1 -- front-running. Two things are reported, and the baseline
+    matters as much as the contrast:
+
+    * Response vs the PRE-TWAP window. `inventory_without_twap` pools the
+      pre-TWAP stretch (100,250] with the post-TWAP stretch [400,550], and the
+      pre stretch is exactly where front-running happens -- so a policy that
+      builds its position before the meta-order starts and holds it through the
+      window scores a paired shift of ~0 against that pooled baseline, BY
+      CONSTRUCTION. The correct baseline is the pre window alone.
+
+    * The SIDE CONTRAST:
 
       mean(inventory level in window | TWAP buying)
     - mean(inventory level in window | TWAP selling)
@@ -122,14 +132,33 @@ def report(d, last=None, control=None):
     elif mb is not None or ms is not None:
         print("     >>> SIDE CONTRAST  n/a  (single-side run: cannot separate")
         print("         front-running from a per-run directional inventory bias)")
-    sh_b = [e["inv_level_in_window"] - e["inv_level_out_window"]
-            for e in buy if e["inv_level_in_window"] is not None
-            and e["inv_level_out_window"] is not None]
-    sh_s = [e["inv_level_in_window"] - e["inv_level_out_window"]
-            for e in sell if e["inv_level_in_window"] is not None
-            and e["inv_level_out_window"] is not None]
-    print("     shift | buy  %s      sell %s"
-          % (_fmt(_mean(sh_b), None), _fmt(_mean(sh_s), None)))
+    # Response against the PRE-TWAP baseline. The pooled out-of-window baseline
+    # mixes (100,250] with [400,550], and the pre stretch is exactly where
+    # front-running happens -- subtracting it subtracts the signal, so a policy
+    # that builds before t=250 and holds scores ~0 by construction.
+    def _resp(grp, key):
+        return [e["inv_level_in_window"] - e[key]
+                for e in grp if e.get("inv_level_in_window") is not None
+                and e.get(key) is not None]
+    rb, rs = _resp(buy, "inv_level_pre_window"), _resp(sell, "inv_level_pre_window")
+    if rb or rs:
+        print("     response vs PRE window (the front-running measure):")
+        print("       buy  %s   want > 0      sell %s   want < 0"
+              % (_fmt(_mean(rb), _stderr(rb)), _fmt(_mean(rs), _stderr(rs))))
+        if rb and rs:
+            c, se = _mean(rb) - _mean(rs), None
+            if _stderr(rb) is not None and _stderr(rs) is not None:
+                se = math.sqrt(_stderr(rb) ** 2 + _stderr(rs) ** 2)
+            v = "PASS" if (c > 0 and se is not None and c > 1.96 * se) else "fail"
+            print("       >>> RESPONSE CONTRAST %s   %s" % (_fmt(c, se), v))
+    else:
+        print("     response vs PRE window: n/a (run predates inv_level_pre_window;")
+        print("       recover it post-hoc from inventorydists_* -- out[:len(inw)] is")
+        print("       the pre stretch, validate with len(out) ~ 2*len(inw))")
+    print("     shift vs POOLED out-window (legacy, broken by construction):")
+    print("       buy  %s      sell %s"
+          % (_fmt(_mean(_resp(buy, "inv_level_out_window")), None),
+             _fmt(_mean(_resp(sell, "inv_level_out_window")), None)))
 
     # --- criterion 2
     pa = [e["terminal_pnl"] for e in absent]

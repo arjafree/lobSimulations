@@ -470,6 +470,8 @@ for episode in range(N_EPISODES):
     inventory_with_twap_buy = []
     inventory_with_twap_sell = []
     inventory_without_twap = []
+    inventory_pre_twap = []
+    inventory_post_twap = []
     episode_times_rl = []
     episode_invs_rl = []
 
@@ -601,6 +603,18 @@ for episode in range(N_EPISODES):
                         inventory_with_twap_buy.append(observations["Inventory"])
                 else:
                     inventory_without_twap.append(observations["Inventory"])
+                # Split the out-of-window samples by WHICH side of the window
+                # they fall on. `inventory_without_twap` pools (100,250] with
+                # [400,550], and the pre-TWAP stretch is exactly where
+                # front-running happens -- a policy that builds its position
+                # before t=250 and holds it through the window scores a paired
+                # shift of ~0 against that pooled baseline, by construction.
+                # The correct baseline for "did the agent position itself AHEAD
+                # of the meta-order" is the PRE window alone.
+                if Simstate['TimeCode'] <= twap_start_time:
+                    inventory_pre_twap.append(observations["Inventory"])
+                elif Simstate['TimeCode'] >= twap_end_time:
+                    inventory_post_twap.append(observations["Inventory"])
                 observationsDict.update({agent.id:observations})
                 logger.debug(f"\n Agent: {agent.id}\n Simstate: {Simstate}\nObservations: {observations}\nTermination: {termination}\nTruncation: {truncation}")
                 if len(t) > 0 and Simstate['TimeCode'] < t[-1]:
@@ -730,6 +744,12 @@ for episode in range(N_EPISODES):
         "n_in_window": int(len(_inw)) if twap_present else 0,
         "inv_level_out_window": float(np.mean(inventory_without_twap)) if len(inventory_without_twap) else None,
         "n_out_window": int(len(inventory_without_twap)),
+        # PRE window (100, 250] -- the correct baseline for criterion 1. The
+        # front-running response is inv_level_in_window - inv_level_pre_window.
+        "inv_level_pre_window": float(np.mean(inventory_pre_twap)) if len(inventory_pre_twap) else None,
+        "n_pre_window": int(len(inventory_pre_twap)),
+        "inv_level_post_window": float(np.mean(inventory_post_twap)) if len(inventory_post_twap) else None,
+        "n_post_window": int(len(inventory_post_twap)),
         "inv_terminal": float(inventory_without_twap[-1]) if len(inventory_without_twap) else None,
         # Criterion 2: terminal PnL. On a TWAP-absent episode this is the clean
         # standalone-market-maker readout.

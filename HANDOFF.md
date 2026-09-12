@@ -20,35 +20,72 @@ An RL agent that satisfies **all three**:
 
 ---
 
-# 1. THE HEADLINE FINDING: no run has ever front-run, and "level" was measuring
-     a confound
+# 1. THE HEADLINE FINDING: no run has ever front-run, and both metrics used
+     so far were mis-baselined
 
 The previous handoff's primary metric was mean inventory **level** inside the
 TWAP window, chosen over the paired **shift** because the two disagreed. Both
 readings were wrong, for the same reason.
 
-## 1a. Inventory level is ~90% a per-run directional bias
+## 1a. The baseline everyone has been subtracting contains the signal
 
-On the two finished drift-fixed runs, per episode, correlating the in-window
-level against the out-of-window level:
+`AR_RL_Trainer.py` pooled everything outside the TWAP window into
+`inventory_without_twap`. On a TWAP-present episode that is
+**(100,250] ∪ [400,550]** — and the pre-TWAP stretch is exactly where
+front-running happens. A policy that builds its position before t=250 and holds
+it through the window scores a paired shift of ~0 **by construction**. So the
+"shift" metric the previous handoff set aside was not merely noisy, it was
+broken; and "level" was never baselined at all.
 
-| run | corr(in-window, out-of-window) | variance of level explained by the bias |
-|---|---|---|
-| `buy_base` (n=80) | **0.936** | **87.1%** |
-| `sell_base` (n=80) | **0.961** | **92.3%** |
+The three windows are equal 150 s thirds, the out-of-window samples are appended
+in time order, and kernel time is monotone (asserted at `Kernel.py:290`), so the
+split is recoverable post hoc from the saved arrays: `pre = out[:len(inw)]`,
+validated by `len(out)/len(inw) ≈ 2`. Measured on the finished runs that ratio
+has median 2.02 and lies in [1.7,2.3] for **100%** of episodes, so the split is
+sound. Recomputing criterion 1 against the **pre window only**:
 
-The agent sits at roughly the same inventory whether or not the meta-order is
-there. The *response* to the TWAP is the residual, and it has the **wrong sign
-in both runs**:
+| run | TWAP side | LEVEL | SHIFT (pooled baseline) | **response vs PRE** | wanted |
+|---|---|---|---|---|---|
+| `buy_base` | buy | −12.58 | −1.73 | **−4.01** [−5.58, −2.45] | positive |
+| `sell_base` | sell | +3.58 | +0.78 | **+1.10** [−0.12, +2.32] | negative |
 
-| run | TWAP side | response (in − out) | wanted |
-|---|---|---|---|
-| `buy_base` | buy | **−1.73** [95% CI ±1.05] | positive |
-| `sell_base` | sell | **+0.78** [±0.75] | negative |
+`buy_base` is **wrong-signed and significant**, and worse than the pooled shift
+suggested (−4.01 vs −1.73). `sell_base` is wrong-signed but **not significant**,
+and its last-20-episode value is −0.16, i.e. a null. Neither run front-runs; the
+buy run is actively run over.
 
-So `sell_base`'s "correct" level of −3.21, which the previous handoff recorded
-as a success reproducing old `gae_lambda` sell, was the bias. Its actual
-response to the meta-order points the wrong way.
+`inv_level_pre_window` is now recorded per episode, so this no longer has to be
+inferred.
+
+### Correction to my own first pass
+
+I originally reported `corr(in-window level, out-of-window level)` = 0.936/0.961
+as showing "87–92% of the level metric is a per-run directional bias". **That
+inference was wrong**, and an independent reviewer caught it. Correlation is
+computed on deviations from the run mean, so a per-run *constant* bias
+contributes zero variance and is invisible to it. What the correlation actually
+licenses is different and still useful: 88–92% of the *episode-to-episode
+fluctuation* in the level is shared with the out-of-window level, i.e. a common
+episode-level factor (training drift, the seed's market path, carried LSTM and
+inventory state). So per-episode level carries almost no independent signal and
+**n=80 episodes is closer to n≈10 effective** — which is its own reason to
+distrust single-run readings.
+
+The actual evidence that the level is dominated by a side-independent standing
+position is simpler and does not need the correlation at all: the in-window and
+out-of-window **means** are nearly equal (buy_base −12.58 vs −10.86; sell_base
++3.58 vs +2.80), and §1b below.
+
+### Alignment hazard for anyone recomputing this
+
+`inventories_without_twap.append(...)` runs once per episode unconditionally,
+but `inventories_with_twap_buy/sell.append(...)` fire only when non-empty. On
+the **alternating and on/off runs, index i of the buy array is not episode i**.
+Map through `slippages_<label>sides.npy` and `slippages_<label>twap_present.npy`
+(one entry per episode, both saved). `buy_base`/`sell_base` are single-side with
+the TWAP present every episode, so their arrays do align and the numbers above
+are safe. `episode_metrics_<label>.json` is immune — every record carries its
+own episode index and side.
 
 ## 1b. The alternating-side runs show the bias is side-independent
 
@@ -365,8 +402,29 @@ carries bug 1 (archival).
 
 **Prior ablation (2026-08-08)** — read from `avg_inv_trajectories_ep76.png`:
 explo_gae correct on both sides; exploration-only correct on buy, wrong on sell;
-gae_lambda-only correct on sell, weak on buy. **Now suspect**: all single-side,
-so §1 applies.
+gae_lambda-only correct on sell, weak on buy. **Discard it.** Two independent
+reasons: it is all single-side and mis-baselined, so §1 applies; and an
+independent review of `exploration_bonus` found **no side or sign asymmetry
+anywhere in the implementation**, so the claimed "exploration owns buy,
+gae_lambda owns sell" split has no mechanism either.
+
+**Independent review (2026-09-12).** Commissioned this session; the previous
+handoff noted two earlier reviewer attempts delivered nothing. Verified from the
+loaded pickle: exactly **36 of 144** kernel entries inhibitory, and — stronger
+than claimed — *every* parameter matrix is exactly mirror-symmetric under
+i→11−i (`max|M − M[::-1,::-1]| = 0`). The `sample_dimension()` fix is correct
+(normalisation exact; negative per-dimension intensities are clipped upstream at
+`Arrival_Models.py:330` before both the sum and the draw) **and sufficient** —
+the residual event-*timing* bug is side-symmetric by construction and leaves
+P(Ask)=0.49996, which closes the previous handoff's open worry that timing could
+undermine the symmetry result. Also verified: the RL agent's starting cash is
+2500, the episode-boundary idiom is sound (time monotonicity is asserted), and
+the with-TWAP window is exactly [250,400] with no contamination. One correction
+to the previous handoff: the old thinning rule's bias is real but its
+**magnitude is over-attributed** (recomputed exactly over 39,586 events on 8
+generator paths). One latent nit: if `lamb == 0` exactly, the sampler's walk
+lands deterministically on k=11 — unreachable with positive baselines, but
+unguarded.
 
 **Running things.** `ssh peacock`; repo `~/lobSimulations`, sync is `git pull`.
 `qsub` from inside the run's own directory (`#$ -cwd`). A `RUN_LABEL` containing
@@ -399,6 +457,13 @@ out the scale of a reward term before choosing it, not after.
 **(b) I first estimated the front-running prize at $2.50 by reading the TWAP's
 starting inventory (500) as its order size.** It is 150 shares, so the prize is
 $0.75 and every ratio in §2 is ~3× worse than I first wrote.
+
+**(d) I reported a correlation as evidence for a claim it cannot support.**
+r=0.936/0.961 between in-window and out-of-window level does not show the level
+is "90% bias" — a constant bias has zero variance and is invisible to a
+correlation. An independent reviewer caught it. The conclusion survives on
+different and simpler evidence (§1a), but the statistic was the wrong one and I
+presented it as the headline.
 
 **(c) The side-contrast numbers in §1b are read off plots, not computed.** The
 alternating runs only write `inventorydists_*` on completion, so the numerical
