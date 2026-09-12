@@ -125,6 +125,27 @@ rather than at a loss. It also explains criterion 1: the front-running prize is
 This was §7.3 of the previous handoff — its own highest-ranked untested
 hypothesis. It is now tested and it holds.
 
+**The obvious objection fails: there is no advantage normalisation.** Both
+lines in `compute_gae` that would normalise the advantages are commented out
+(`ICRLAgent.py:2013-2014`), so the shaping terms enter the PPO surrogate loss at
+full magnitude rather than being rescaled to unit variance. Even with
+normalisation the *ratio* of PnL to shaping in the gradient would be unchanged;
+without it, the raw magnitudes are what the optimiser sees.
+
+**Which network each term biases** — this matters for which criterion it
+breaks, and the answer is not the same for all three:
+
+| term | acts on | consequence |
+|---|---|---|
+| action bonus 0.5 | mainly the **decision** net (act vs no-op) | over-trading. At `tc=1e-4` an extra 100 shares/episode of churn costs $1 — more than the whole $0.75 prize. **Breaks criterion 2.** |
+| exploration bonus λ/√N | the **utility** net — it is state *and action* dependent, so it differentiates *which side to quote* | at 33× the prize it swamps the directional signal. **This, not the action bonus, is the term that most directly breaks criterion 1.** |
+| terminal inv penalty | both, but only near the episode end, through ~2,483 steps of γ=0.999 and 64-step LSTM chunks | pushes toward flat at the close; credit assignment back to the TWAP window is very weak |
+
+Note the action bonus is constant across the four utility actions, so it does
+not *directly* prefer one side — but it is not cancelled either, because GAE
+computes the u-advantage from the same realised reward stream, so an action
+followed by a high-activity stretch inherits that stretch's bonuses.
+
 **Careful with the running inventory penalty.** 1e-4·inv² costs $42 to hold the
 limit through the TWAP window — 56× the prize. It is not a mild "inventory
 control"; it forbids precisely the inventory-holding criterion 1 requires. The
@@ -231,7 +252,7 @@ which is how they all silently ran on the wrong arm.
 
 ---
 
-# 6. WHAT IS RUNNING (2026-09-12, 18 jobs)
+# 6. WHAT IS RUNNING (2026-09-12, 19 jobs)
 
 Config travels in each `trainer.sh` env block; runs cannot cross-contaminate.
 All use `SEED_MODE=vary SEED_BASE=1000`, so **runs pair episode-by-episode**.
@@ -253,7 +274,10 @@ running 2e-7, terminal 1.2e-3):
 `ps_ls` (legacy 4-action space, 120 eps, normal — isolates reward scaling from
 the action-space change), `ps_fs` (full 12-action space + symmetric gating,
 120 eps, normal), `ps_ff` (same, fast), `ps_af` (same but exploration also
-scaled to 3e-3 — tests whether exploration survives being put in dollar units).
+scaled to 3e-3 — tests whether exploration survives being put in dollar units),
+`ps_as` (the same all-scaled arm in the normal regime, 120 eps — added once it
+became clear the exploration bonus, not the action bonus, is the term that most
+directly breaks criterion 1, so it deserves a full-regime run).
 
 **`twap_alone_control/` — the criterion-3 denominator:** `ctl_n` (60 eps,
 normal), `ctl_f` (90 eps, fast). `RL_DISABLED=true`.
