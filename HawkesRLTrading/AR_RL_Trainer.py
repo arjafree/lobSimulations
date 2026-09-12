@@ -114,6 +114,17 @@ SYMMETRIC_MO_GATING = os.environ.get("SYMMETRIC_MO_GATING", "false").strip().low
 # silently make the control a different market.
 RL_DISABLED = os.environ.get("RL_DISABLED", "false").strip().lower() in ("1", "true", "yes")
 
+# --- CEM self-imitation. `get_CEM_data` pools elite segments from EVERY episode
+# in the buffer into one cross-entropy target with no split on side, so
+# buy-episode behaviour is imitated on sell episodes and vice versa. That smears
+# side-specific policy and shrinks the criterion-1 side contrast toward zero --
+# and it fires on 3 of every 4 training sessions. Compounding it, the elite
+# selector picks the segments with the highest summed reward, which under the
+# default ACTION_BONUS=0.5 means the segments where the agent ACTED MOST, not
+# where it traded well. USE_CEM=false turns it off so the contrast can be
+# measured without that channel. Default true = today's behaviour.
+USE_CEM = os.environ.get("USE_CEM", "true").strip().lower() in ("1", "true", "yes")
+
 # --- The remaining two shaping terms, for the same reason as ACTION_BONUS.
 # Scale reference, all in dollars per EPISODE (2,483 steps, 677 of them inside
 # the 150s TWAP window), against the economic prize a successful front-run is
@@ -370,7 +381,14 @@ print(f"  symmetric_mo_gating= {SYMMETRIC_MO_GATING}", flush=True)
 print(f"  RL_DISABLED        = {RL_DISABLED}", flush=True)
 print(f"  terminal_invpenalty= {TERMINAL_INVPENALTY}", flush=True)
 print(f"  first_visit_bonus  = {FIRST_VISIT_BONUS}", flush=True)
-print(f"  eta/rewardpenalty  = {eta}/{j['rewardpenalty']}", flush=True)
+# rewardpenalty/eta are INERT in the live objective: the running quadratic
+# inventory penalty is commented out (ICRLAgent.py), and the only two other
+# sites are guarded by `not alt_state` (we pass alt_state=True) and
+# `two_sided_reward` (we pass False). eta reaches the reward ONLY through
+# terminal_invpenalty. Printed with that label so nobody reads it as a knob.
+print(f"  eta (INERT except via terminal_invpenalty) = {eta}", flush=True)
+print(f"  rewardpenalty (INERT) = {j['rewardpenalty']}", flush=True)
+print(f"  use_CEM            = {USE_CEM}", flush=True)
 print(f"  inventorylimit     = {j['inventorylimit']}", flush=True)
 print("=" * 72, flush=True)
 
@@ -435,6 +453,7 @@ def _save_episode_metrics():
                    "action_space_config": ACTION_SPACE_CONFIG,
                    "symmetric_mo_gating": SYMMETRIC_MO_GATING,
                    "rl_disabled": RL_DISABLED,
+                   "use_cem": USE_CEM,
                    "terminal_invpenalty": TERMINAL_INVPENALTY,
                    "first_visit_bonus": FIRST_VISIT_BONUS,
                    "twap_on": TWAP_ON, "twap_off": TWAP_OFF,
@@ -778,7 +797,7 @@ for episode in range(N_EPISODES):
         if (not RL_DISABLED) and ('test' not in label) and ((checkpoint_params is None) or (episode >= 0)):
             for epoch in range(1):
                 start_time = time.time()
-                d_policy_loss, d_value_loss, d_entropy_loss, u_policy_loss, u_value_loss, u_entropy_loss = agent.train(train_logger, use_CEM = bool((episode) % 8) and (episode >= 10))
+                d_policy_loss, d_value_loss, d_entropy_loss, u_policy_loss, u_value_loss, u_entropy_loss = agent.train(train_logger, use_CEM = USE_CEM and bool((episode) % 8) and (episode >= 10))
                 train_time = time.time() - start_time
                 # store timing on the train_logger (create list if necessary)
                 print(f"Agent.train took {train_time:.4f}s for episode {episode}")
