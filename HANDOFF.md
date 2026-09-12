@@ -409,22 +409,62 @@ anywhere in the implementation**, so the claimed "exploration owns buy,
 gae_lambda owns sell" split has no mechanism either.
 
 **Independent review (2026-09-12).** Commissioned this session; the previous
-handoff noted two earlier reviewer attempts delivered nothing. Verified from the
-loaded pickle: exactly **36 of 144** kernel entries inhibitory, and — stronger
-than claimed — *every* parameter matrix is exactly mirror-symmetric under
-i→11−i (`max|M − M[::-1,::-1]| = 0`). The `sample_dimension()` fix is correct
-(normalisation exact; negative per-dimension intensities are clipped upstream at
-`Arrival_Models.py:330` before both the sum and the draw) **and sufficient** —
-the residual event-*timing* bug is side-symmetric by construction and leaves
-P(Ask)=0.49996, which closes the previous handoff's open worry that timing could
-undermine the symmetry result. Also verified: the RL agent's starting cash is
-2500, the episode-boundary idiom is sound (time monotonicity is asserted), and
-the with-TWAP window is exactly [250,400] with no contamination. One correction
-to the previous handoff: the old thinning rule's bias is real but its
-**magnitude is over-attributed** (recomputed exactly over 39,586 events on 8
-generator paths). One latent nit: if `lamb == 0` exactly, the sampler's walk
-lands deterministically on k=11 — unreachable with positive baselines, but
-unguarded.
+handoff noted two earlier reviewer attempts delivered nothing. Findings, grouped
+by whether they confirm or correct.
+
+*Confirmed.* Exactly **36 of 144** kernel entries inhibitory, verified from the
+loaded pickle — and stronger than claimed, *every* parameter matrix is exactly
+mirror-symmetric under i→11−i (`max|M − M[::-1,::-1]| = 0`). The bound-breach
+rate survives: **6.53%** measured over 118,447 accepted events on 20 paths
+(6.49% on an independent 8-seed run) against the handoff's 6.2%. The
+`sample_dimension()` fix is correct (normalisation exact; negative per-dimension
+intensities are clipped upstream at `Arrival_Models.py:330` before both the sum
+and the draw) **and sufficient** — the residual event-*timing* bias is
+side-symmetric by construction and leaves P(Ask)=0.49996. That closes the
+previous handoff's open worry that timing could undermine the symmetry result.
+Also confirmed: RL starting cash is 2500, the episode-boundary idiom is sound
+(time monotonicity is asserted), and the with-TWAP window is exactly [250,400]
+with no contamination.
+
+*Corrected — the drift shift needs a different test.* The handoff argues
+−4.48 → +0.58 bps from two separate one-sample tests (p=0.002 vs p=0.65), which
+is the "significant versus not significant" fallacy, and the two reported CIs
+overlap in [−1.92,−1.74]. Reconstructed as a proper two-sample test from those
+CIs: **Δ = +5.06 bps [+1.40, +8.72], t≈2.75, p≈0.007**. The conclusion survives;
+**report it as a difference with a CI**, not as two one-sample p-values.
+
+*Corrected — and still open. The magnitude is over-attributed.* An exact,
+noise-free paired computation of the two assignment rules on identical realised
+states gives a bias of **+0.243 pp in P(Ask) = +0.49% Ask excess**, identical on
+all 20 seeds. The handoff attributes **+1.29 pp** of Ask-excess removal to the
+fix (+1.77% → +0.48%) — about **2.6× more than the rule can produce per step**.
+The residual ~0.8 pp needs an explanation. Either the near-critical cascade
+amplifies it (spectral radius is forced to 0.99 at `Arrival_Models.py:278-280`)
+or part of the improvement belongs to the still-unlocated exchange-side
+asymmetry, which this fix cannot have touched. **The discriminating experiment
+is cheap and is set up**: `HAWKES_LEGACY_DIMENSION_RULE=1` (`44f2adc`) runs the
+buggy rule from the current checkout, so both generators can be run in isolation
+at matched seeds. ~0.49 pp means rule only and the drift study over-attributes;
+~1.3 pp means the cascade carries it and the attribution stands. Note this does
+**not** threaten the conclusion that the *current* simulator is symmetric — that
+was verified independently — only the account of how much this fix contributed.
+
+*Corrected — the exploration-bonus arm story has no mechanism.* No side or sign
+asymmetry exists anywhere in the `exploration_bonus` implementation, so the
+prior ablation's "exploration owns buy, gae_lambda owns sell" has no candidate
+cause, on top of resting on single-side mis-baselined runs.
+
+*On the metrics.* SHIFT subtracts a baseline that contains the signal, so it is
+**actively destructive**; LEVEL subtracts nothing, so it is merely uninformative
+about ordering. That asymmetry is why the same runs read "correct" on LEVEL and
+wrong-signed on SHIFT. The **side contrast differences across episodes rather
+than across time windows within an episode, so the signal is never subtracted
+from itself** — the reviewer calls it the best of the three and judged the
+cancellation argument sound. It also refuted a worry of mine: nothing stateful
+leaks across episodes except network weights, the visit counter and the
+trajectory buffer — `AR_RL_Trainer.py:791-802` resets `last_state` (which
+triggers `reset_hidden_state` on both actor-critics), `breach`, cash, inventory,
+positions, profit and `statelog` every episode.
 
 **Running things.** `ssh peacock`; repo `~/lobSimulations`, sync is `git pull`.
 `qsub` from inside the run's own directory (`#$ -cwd`). A `RUN_LABEL` containing
