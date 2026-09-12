@@ -443,25 +443,34 @@ amplifies it (spectral radius is forced to 0.99 at `Arrival_Models.py:278-280`)
 or part of the improvement belongs to the still-unlocated exchange-side
 asymmetry, which this fix cannot have touched. **The discriminating experiment has now been run**
 (`HAWKES_LEGACY_DIMENSION_RULE=1`, `44f2adc`, both generators in isolation,
-n=200 paths per arm, 1,983,459 events):
+n=200 paths per arm, 1,983,459 events).
 
-| arm | Ask fraction | excess over 0.5 |
+**Units, because they are easy to get wrong and I got them wrong once.** The
+plan's "Ask excess %" is `(Ask − Bid)/total`, which is **twice** the excess of
+`P(Ask)` over 0.5 expressed in percentage points. The reviewer's
+"+0.243 pp in P(Ask) = +0.49% Ask excess" uses the same relation. Everything
+below is in the plan's units.
+
+| arm | Ask fraction | Ask excess (plan units) |
 |---|---|---|
-| legacy rule | 0.50320 | **+0.320 pp** [+0.084, +0.555] |
-| fixed rule | 0.50058 | **+0.058 pp** [−0.167, +0.283] |
-| **difference** | | **+0.262 pp** [−0.057, +0.581] |
+| legacy rule | 0.50320 | +0.64% |
+| fixed rule | 0.50058 | +0.12% |
+| **difference** | | **+0.524%** [−0.115, +1.162] |
 
-Testing the two predictions against that difference:
+Against the two predictions:
 
-* **+0.49 pp (rule only):** t=−1.40, **p=0.16 — cannot reject.**
-* **+1.29 pp (full attribution):** t=−6.31, **p<0.0001 — REJECTED.**
+* **+0.49% (rule only):** t=+0.10, **p=0.92 — cannot reject.** The measurement
+  reproduces the reviewer's exact per-step figure almost exactly.
+* **+1.29% (full attribution):** t=−2.35, **p=0.019 — rejected**, though only
+  at the 5% level, not overwhelmingly.
 
 So the reviewer is right and there is **no cascade amplification** — the
-realised generator difference is if anything *smaller* than the per-step rule
-bias, not 2.6× larger. Roughly 0.8–1.0 pp of the +1.29 pp Ask-excess improvement
-credited to this fix comes from **something else**: the two other bugs fixed in
-the same window, or the still-unlocated exchange-side asymmetry (which is
-visible with kernels nulled and therefore cannot be a generator effect).
+realised generator difference matches the per-step rule bias rather than
+exceeding it. Roughly 0.77% of the +1.29% Ask-excess improvement credited to
+this fix comes from **something else**: the two other bugs fixed in the same
+window, or the still-unlocated exchange-side asymmetry (visible with kernels
+nulled, and therefore not a generator effect). That residual is the largest
+unexplained quantity left in the simulator and is now attributed to nothing.
 
 Two things this does **not** overturn. The fixed arm's excess is +0.058 pp,
 statistically indistinguishable from zero, which independently corroborates
@@ -605,6 +614,16 @@ out the scale of a reward term before choosing it, not after.
 **(b) I first estimated the front-running prize at $2.50 by reading the TWAP's
 starting inventory (500) as its order size.** It is 150 shares, so the prize is
 $0.75 and every ratio in §2 is ~3× worse than I first wrote.
+
+**(e) I compared the generator-attribution result against the predictions in
+the wrong units.** The plan's "Ask excess %" is `(Ask − Bid)/total`, twice the
+`P(Ask)` percentage-point figure my script reported. I tested the raw pp value
+against 0.49 and 1.29 as though those were pp, and reported p<0.0001 for
+rejecting the full attribution. Correctly converted it is **p=0.019** — same
+direction, four orders of magnitude weaker, and the rule-only prediction goes
+from "inside the CI" to "matched almost exactly" (p=0.92). Corrected in §8; the
+commit message of the first write-up (`p<1e-4`) is wrong and stands only in
+history.
 
 **(d) I reported a correlation as evidence for a claim it cannot support.**
 r=0.936/0.961 between in-window and out-of-window level does not show the level
