@@ -167,7 +167,7 @@ def report(d, last=None, control=None):
                 line += "   (no paired control episodes)"
         print(line)
     ex = [e["twap_total_executed"] for e in present]
-    print("     twap executed (of 500): %s" % _fmt(_mean(ex), None))
+    print("     twap executed (order=150): %s" % _fmt(_mean(ex), None))
 
 
 def main():

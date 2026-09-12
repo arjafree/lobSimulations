@@ -114,6 +114,30 @@ SYMMETRIC_MO_GATING = os.environ.get("SYMMETRIC_MO_GATING", "false").strip().low
 # silently make the control a different market.
 RL_DISABLED = os.environ.get("RL_DISABLED", "false").strip().lower() in ("1", "true", "yes")
 
+# --- The remaining two shaping terms, for the same reason as ACTION_BONUS.
+# Scale reference, all in dollars per EPISODE (2,483 steps, 677 of them inside
+# the 150s TWAP window), against the economic prize a successful front-run is
+# worth -- 25 shares (the inventory limit) of a 150-share meta-order that moves
+# the price ~3 bps, i.e. $0.75:
+#
+#   action bonus 0.5, 30% act        $372      497x the prize
+#   exploration 0.1/sqrt(N), N=100    $25       33x
+#   running inv penalty 1e-4 @inv=25  $42       56x
+#   terminal inv penalty 25*inv^2   $15625   20833x  (undiscounted)
+#   ---- at the prize's own scale ----
+#   action bonus 1e-3                  $0.74     1x
+#   running inv penalty 2e-7 @inv=25   $0.08     0.1x
+#   terminal inv penalty 1.2e-3        $0.75     1x
+#
+# Note the meta-order is 150 shares; the TWAP's 500 is its starting INVENTORY,
+# not its order size. Every shaping term is one to four orders of magnitude
+# above the signal the agent is supposed to be learning.
+# A running penalty of 1e-4 costs $42 to hold the limit through the window
+# against a $0.75 prize, so it forbids precisely the inventory-holding that
+# criterion 1 requires -- do not use it as an "inventory control" default.
+TERMINAL_INVPENALTY = float(os.environ.get("TERMINAL_INVPENALTY", 5 * 5))
+FIRST_VISIT_BONUS = float(os.environ.get("FIRST_VISIT_BONUS", 0.2))
+
 #the time that the TWAP agent will kick in:
 twap_start_time = 150 + start_trading_lag
 
@@ -319,7 +343,7 @@ RLagentInstance = AdversarialPPOAgent( seed=1, log_events=True, log_to_file=True
                           wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"], cashlimit=j["cashlimit"],inventorylimit=j['inventorylimit'], batch_size=512,
                           layer_widths=layer_widths, n_layers =n_layers, buffer_capacity = 100000, rewardpenalty = j["rewardpenalty"], epochs = 100, transaction_cost=1e-4, start_trading_lag = j['start_trading_lag'],
                           gae_lambda=GAE_LAMBDA, gamma=0.999, truncation_enabled=False, action_space_config = ACTION_SPACE_CONFIG, alt_state=True, enhance_state=True, include_time=True, optim_type='ADAM',entropy_coef=ENTROPY_COEF, exploration_bonus = EXPLORATION_BONUS, hidden_activation='sigmoid',
-                          typeNN = "LSTM", lr = 3e-4, chunk_length=64, TWAPPresent=0, cem_full_episode=True, terminal_invpenalty=5*eta, two_sided_reward=False,
+                          typeNN = "LSTM", lr = 3e-4, chunk_length=64, TWAPPresent=0, cem_full_episode=True, terminal_invpenalty=TERMINAL_INVPENALTY, first_visit_bonus=FIRST_VISIT_BONUS, two_sided_reward=False,
                           action_bonus=ACTION_BONUS, running_invpenalty=RUNNING_INVPENALTY,
                           symmetric_mo_gating=SYMMETRIC_MO_GATING)
 
@@ -344,6 +368,8 @@ print(f"  entropy_coef       = {ENTROPY_COEF}", flush=True)
 print(f"  action_space_config= {ACTION_SPACE_CONFIG}", flush=True)
 print(f"  symmetric_mo_gating= {SYMMETRIC_MO_GATING}", flush=True)
 print(f"  RL_DISABLED        = {RL_DISABLED}", flush=True)
+print(f"  terminal_invpenalty= {TERMINAL_INVPENALTY}", flush=True)
+print(f"  first_visit_bonus  = {FIRST_VISIT_BONUS}", flush=True)
 print(f"  eta/rewardpenalty  = {eta}/{j['rewardpenalty']}", flush=True)
 print(f"  inventorylimit     = {j['inventorylimit']}", flush=True)
 print("=" * 72, flush=True)
@@ -409,6 +435,8 @@ def _save_episode_metrics():
                    "action_space_config": ACTION_SPACE_CONFIG,
                    "symmetric_mo_gating": SYMMETRIC_MO_GATING,
                    "rl_disabled": RL_DISABLED,
+                   "terminal_invpenalty": TERMINAL_INVPENALTY,
+                   "first_visit_bonus": FIRST_VISIT_BONUS,
                    "twap_on": TWAP_ON, "twap_off": TWAP_OFF,
                    "twap_side_mode": TWAP_SIDE_MODE,
                    "seed_mode": SEED_MODE, "seed_base": SEED_BASE,

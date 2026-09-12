@@ -15,7 +15,8 @@ TRAINER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "AR_RL_
 
 _NAMES = ("EXPLORATION_BONUS", "GAE_LAMBDA", "EXP_APPROX",
           "ACTION_BONUS", "RUNNING_INVPENALTY", "ENTROPY_COEF",
-          "ACTION_SPACE_CONFIG", "SYMMETRIC_MO_GATING", "RL_DISABLED")
+          "ACTION_SPACE_CONFIG", "SYMMETRIC_MO_GATING", "RL_DISABLED",
+          "TERMINAL_INVPENALTY", "FIRST_VISIT_BONUS")
 
 
 def _config_lines():
@@ -68,6 +69,8 @@ def test_every_other_default_reproduces_historical_behaviour():
     assert v["ACTION_SPACE_CONFIG"] == 1, v
     assert v["SYMMETRIC_MO_GATING"] is False, v
     assert v["RL_DISABLED"] is False, v
+    assert v["TERMINAL_INVPENALTY"] == 25.0, v   # 5 * eta
+    assert v["FIRST_VISIT_BONUS"] == 0.2, v
 
 
 def test_boolean_arms_reject_the_naive_parse():
@@ -125,10 +128,13 @@ def test_arm_params_are_actually_wired_into_the_agent():
     src = open(TRAINER).read()
     assert "exploration_bonus = EXPLORATION_BONUS" in src
     assert "gae_lambda=GAE_LAMBDA" in src
+    assert "terminal_invpenalty=TERMINAL_INVPENALTY" in src
+    assert "first_visit_bonus=FIRST_VISIT_BONUS" in src
     assert "'expApprox' : EXP_APPROX" in src
     # and no stale hardcoded copy left behind
     assert "exploration_bonus = 0," not in src
     assert "gae_lambda=0.95" not in src
+    assert "terminal_invpenalty=5*eta" not in src
     assert "'expApprox' : False" not in src
 
 
