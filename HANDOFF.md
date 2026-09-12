@@ -441,49 +441,51 @@ fix (+1.77% → +0.48%) — about **2.6× more than the rule can produce per ste
 The residual ~0.8 pp needs an explanation. Either the near-critical cascade
 amplifies it (spectral radius is forced to 0.99 at `Arrival_Models.py:278-280`)
 or part of the improvement belongs to the still-unlocated exchange-side
-asymmetry, which this fix cannot have touched. **The discriminating experiment has now been run**
-(`HAWKES_LEGACY_DIMENSION_RULE=1`, `44f2adc`, both generators in isolation,
-n=200 paths per arm, 1,983,459 events).
+asymmetry, which this fix cannot have touched. **The discriminating experiment was run — and it does NOT support the
+over-attribution claim.** (`HAWKES_LEGACY_DIMENSION_RULE=1`, `44f2adc`, both
+generators in isolation, n=200 paths per arm, 1,983,459 events.)
 
-**Units, because they are easy to get wrong and I got them wrong once.** The
-plan's "Ask excess %" is `(Ask − Bid)/total`, which is **twice** the excess of
-`P(Ask)` over 0.5 expressed in percentage points. The reviewer's
-"+0.243 pp in P(Ask) = +0.49% Ask excess" uses the same relation. Everything
-below is in the plan's units.
+**Units first, because they caused two wrong write-ups before this one.** The
+plan's `%` column is **`(A − B)/mean(A,B)` = 4·(P(Ask) − 0.5)**, not
+`(A − B)/total`. Verified three independent ways: the six per-pair denominators
+implied by the n=48 table sum to 12,243 against the TOTAL row's 12,226
+(additive, so they are the same kind of quantity); the plan's own quoted counts
+(`mo` 282, `lo_top` 4926) are **one-side** counts, since as pair totals they
+would imply half the events; and the implied event rate settles it — factor 4
+implies 44.5 events/s against the 49.7/s I measure in the same
+isolated-generator, spread-pinned configuration, while factor 2 implies 22.2/s,
+off by 55%. **Standardise on ΔP(Ask) in pp and convert once at the end.**
 
-| arm | Ask fraction | Ask excess (plan units) |
-|---|---|---|
-| legacy rule | 0.50320 | +0.64% |
-| fixed rule | 0.50058 | +0.12% |
-| **difference** | | **+0.524%** [−0.115, +1.162] |
+On the correct scale:
 
-Against the two predictions:
+| quantity | plan % |
+|---|---|
+| legacy arm | +1.28% |
+| fixed arm | +0.23% |
+| **measured difference** | **+1.05%**, SE 0.65, CI [−0.23, +2.32] |
+| exact per-step rule prediction | +0.97% |
+| handoff's attributed difference | +1.29% |
 
-* **+0.49% (rule only):** t=+0.10, **p=0.92 — cannot reject.** The measurement
-  reproduces the reviewer's exact per-step figure almost exactly.
-* **+1.29% (full attribution):** t=−2.35, **p=0.019 — rejected**, though only
-  at the 5% level, not overwhelmingly.
+* H0 = +0.97% (rule only): t=+0.12, **p=0.90 — cannot reject.**
+* H0 = +1.29% (full attribution): t=−0.37, **p=0.71 — cannot reject.**
 
-So the reviewer is right and there is **no cascade amplification** — the
-realised generator difference matches the per-step rule bias rather than
-exceeding it. Roughly 0.77% of the +1.29% Ask-excess improvement credited to
-this fix comes from **something else**: the two other bugs fixed in the same
-window, or the still-unlocated exchange-side asymmetry (visible with kernels
-nulled, and therefore not a generator effect). That residual is the largest
-unexplained quantity left in the simulator and is now attributed to nothing.
+**Neither hypothesis is rejected, so the over-attribution claim is withdrawn.**
+The residual is 1.29 − 0.97 = 0.32% against an SE of 0.65% — indistinguishable
+from zero, and about a quarter of the attributed effect rather than 60% of it.
+Resolving a 0.32% gap at 80% power needs SE ≈ 0.115%, roughly 6,400 paths per
+arm. Not worth running.
 
-Two things this does **not** overturn. The fixed arm's excess is +0.058 pp,
-statistically indistinguishable from zero, which independently corroborates
-"the generator is now symmetric" and the reviewer's P(Ask)=0.49996. And the
-drift conclusion survives its own properly specified test (above). It is the
-causal *story* — "this fix removed the drift" — that needs rewriting, not the
-finding that the drift is gone.
+What the experiment *does* establish, and these stand: the isolated-generator
+arms reproduce the handoff's cluster arms to within noise (legacy +1.28% vs
++1.77%; fixed +0.23% vs +0.48%), and **the fixed arm is statistically
+indistinguishable from zero**, independently corroborating "the generator is now
+symmetric" and the reviewer's P(Ask)=0.49996.
 
-Caveat on comparability: the +1.77%/+0.48% figures are from the **full
-simulation**; this is the **isolated generator**, with spread pinned at 0.03 and
-a flat time-of-day multiplier. The comparison holds because the fix only touches
-the generator, so it cannot produce more effect downstream than it produces at
-source — but the two numbers are not the same measurement.
+**Consequence for what to work on: there is no orphaned residual, so the
+exchange-side asymmetry is not implied by this evidence and should not be
+chased on its account.** The predecessors' "`lo_deep` asymmetry visible with
+kernels nulled" was reported in this same `%` convention — re-derive it as
+ΔP(Ask) from raw counts before treating it as a lead.
 
 *Corrected — the exploration-bonus arm story has no mechanism.* No side or sign
 asymmetry exists anywhere in the `exploration_bonus` implementation, so the
@@ -522,6 +524,41 @@ leaks across episodes except network weights, the visit counter and the
 trajectory buffer — `AR_RL_Trainer.py:791-802` resets `last_state` (which
 triggers `reset_hidden_state` on both actor-critics), `breach`, cash, inventory,
 positions, profit and `statelog` every episode.
+
+**Exchange defects found while chasing a residual that turned out not to exist.**
+Recorded because they are real, not because they explain anything.
+
+* **`Exchange.py:588` — a genuine non-mirror defect.** The ask branch of
+  `regeneratequeuedepletion` assigns `self.askprice = self.askprices["Ask_L1"]`
+  (scalar); the bid branch assigns `self.bidprice = [self.bidprices["Bid_L1"]]`
+  — a **list**. It is in the cancel-depletion path. Most operations on it
+  silently broadcast rather than raising (`np.float64 - list` → `array([0.03])`,
+  `list + np.float64` → array, because `ticksize` is `np.float64` not a Python
+  float), but **`:554`'s `del self.bids[self.bidprice]` raises
+  `TypeError: unhashable type: 'list'`** — a hard crash. Since the six
+  production runs had zero errors, that branch never fired; by generator
+  symmetry neither did the ask branch, so the whole cancel-depletion promotion
+  path is **dead in this configuration** and cannot have biased anything. It
+  will crash on the first bid-L1 cancel depletion under any thinner-queue config
+  (smaller `Pi_Q0`, fewer `numOrdersPerLevel`). Pinned in
+  `tests/test_exchange_side_symmetry.py`, deliberately not fixed while 15 jobs
+  are mid-flight.
+* **`Exchange.py:601` — the spread-consistency check is disabled.**
+  `condition5=(self.spread==np.round(abs(self.askprice-self.bidprice)), 2)` has
+  the `, 2` outside the `np.round` call, so it builds the tuple `(bool, 2)`,
+  which is always truthy. `checkLOBValidity` therefore never tests the spread.
+  Symmetric, so not a bias source — but it is the guard that would have caught
+  the item above. Even with the paren fixed it would be wrong: `np.round(0.02)`
+  with no decimals is `0.0`.
+* Ranked LOW with reasons, not merely asserted: price rounding (all prices sit
+  on the 0.01 grid by repeated `±ticksize` from 100, float error ~1e-15, so
+  round-half-to-even never has a tie to break); cancel selection at `:473`
+  (side resolved into a local `queue` above, identical code both sides);
+  `Pis`/`Pi_Q0` (symmetric in this config, though **by aliasing** — the trainer
+  assigns the same list objects to both sides, so a future config that sets
+  them independently could break it silently). The mirrored blocks — MO
+  depletion, level promotion, in-spread placement, crossed-book checks — are
+  exact reflections token for token.
 
 **New issues from the review, with their status.**
 
@@ -615,15 +652,30 @@ out the scale of a reward term before choosing it, not after.
 starting inventory (500) as its order size.** It is 150 shares, so the prize is
 $0.75 and every ratio in §2 is ~3× worse than I first wrote.
 
-**(e) I compared the generator-attribution result against the predictions in
-the wrong units.** The plan's "Ask excess %" is `(Ask − Bid)/total`, twice the
-`P(Ask)` percentage-point figure my script reported. I tested the raw pp value
-against 0.49 and 1.29 as though those were pp, and reported p<0.0001 for
-rejecting the full attribution. Correctly converted it is **p=0.019** — same
-direction, four orders of magnitude weaker, and the rule-only prediction goes
-from "inside the CI" to "matched almost exactly" (p=0.92). Corrected in §8; the
-commit message of the first write-up (`p<1e-4`) is wrong and stands only in
+**(e) I published a rejection of the drift study's attribution three times, in
+three different wrong units, and the correct answer is that nothing is
+rejected.** First I tested the raw ΔP(Ask) figure against 0.49 and 1.29 as
+though those were percentage points and reported **p<0.0001**. Then I decided
+the plan's convention was `(A−B)/total` (factor 2) and reported **p=0.019**.
+The convention is actually `(A−B)/mean(A,B)` — **factor 4** — under which the
+measured difference is +1.05% ± 0.65 and **neither** the rule-only prediction
+(+0.97%, p=0.90) nor the full attribution (+1.29%, p=0.71) can be rejected.
+The over-attribution claim is withdrawn entirely.
+
+Three lessons, in order of how much time each would have saved: (i) derive a
+unit convention from the source's own numbers before using it — the plan's
+quoted counts and its own additivity settle it in five minutes; (ii) a
+cross-check that is independent of the convention, like the implied event rate,
+catches this immediately; (iii) I took a collaborator's prose figure as
+authoritative over their own script's output, and it was their slip. Both
+earlier commit messages (`p<1e-4`, `p=0.019`) are wrong and stand only in
 history.
+
+**(f) I chased the exchange-side asymmetry on the strength of a residual that
+does not exist.** The hunt was motivated by "0.8–1.0 pp attributed to nothing",
+which was an artifact of (e). The two defects it turned up (§8, exchange
+issues) are real and worth recording, but the campaign was not justified by the
+evidence I had, and I started it before the unit question was settled.
 
 **(d) I reported a correlation as evidence for a claim it cannot support.**
 r=0.936/0.961 between in-window and out-of-window level does not show the level
