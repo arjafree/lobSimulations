@@ -65,6 +65,25 @@ EXPLORATION_BONUS = float(os.environ.get("EXPLORATION_BONUS", 0.1))
 GAE_LAMBDA = float(os.environ.get("GAE_LAMBDA", 0.95))
 EXP_APPROX = os.environ.get("EXP_APPROX", "false").strip().lower() in ("1", "true", "yes")
 
+# --- Reward-shaping arm. Measured on the 2026-09-07 runs: per-step PnL change
+# has median EXACTLY 0 (85-88% of steps move no money), mean |dW| 0.006-0.018,
+# and an episode terminal PnL of +-0.2 dollars over ~2,480 steps. Against that,
+# ACTION_BONUS=0.5 per acted step is worth hundreds per episode and is
+# deterministic and always positive, while PnL is near-zero-mean noise. The
+# count-based exploration bonus (0.2 first visit, 0.1/sqrt(N) after) beats the
+# mean PnL signal until a state-action pair has been seen ~132 times, which
+# most never are. So the objective being maximised is "act often, visit novel
+# states"; PnL is a rounding error, which is why no arm has ever produced
+# positive standalone PnL.
+#   ACTION_BONUS: 0.5 reproduces every run to date. ~1e-3 puts the episode
+#     total near 0.25, an order of magnitude under the ~2.5 dollars a
+#     successful front-run of a 500-share meta-order is worth at 10 bps.
+#   RUNNING_INVPENALTY: per-step lambda*inv**2. 0 reproduces today's behaviour,
+#     where the ONLY inventory control is a terminal penalty ~2,480 steps away.
+ACTION_BONUS = float(os.environ.get("ACTION_BONUS", 0.5))
+RUNNING_INVPENALTY = float(os.environ.get("RUNNING_INVPENALTY", 0.0))
+ENTROPY_COEF = float(os.environ.get("ENTROPY_COEF", 0.0))
+
 #the time that the TWAP agent will kick in:
 twap_start_time = 150 + start_trading_lag
 
@@ -269,8 +288,9 @@ tc = 0.0001
 RLagentInstance = AdversarialPPOAgent( seed=1, log_events=True, log_to_file=True, strategy=j["strategy"], Inventory=j["Inventory"], cash=j["cash"], action_freq=j["action_freq"],
                           wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"], cashlimit=j["cashlimit"],inventorylimit=j['inventorylimit'], batch_size=512,
                           layer_widths=layer_widths, n_layers =n_layers, buffer_capacity = 100000, rewardpenalty = j["rewardpenalty"], epochs = 100, transaction_cost=1e-4, start_trading_lag = j['start_trading_lag'],
-                          gae_lambda=GAE_LAMBDA, gamma=0.999, truncation_enabled=False, action_space_config = 1, alt_state=True, enhance_state=True, include_time=True, optim_type='ADAM',entropy_coef=0, exploration_bonus = EXPLORATION_BONUS, hidden_activation='sigmoid',
-                          typeNN = "LSTM", lr = 3e-4, chunk_length=64, TWAPPresent=0, cem_full_episode=True, terminal_invpenalty=5*eta, two_sided_reward=False)
+                          gae_lambda=GAE_LAMBDA, gamma=0.999, truncation_enabled=False, action_space_config = 1, alt_state=True, enhance_state=True, include_time=True, optim_type='ADAM',entropy_coef=ENTROPY_COEF, exploration_bonus = EXPLORATION_BONUS, hidden_activation='sigmoid',
+                          typeNN = "LSTM", lr = 3e-4, chunk_length=64, TWAPPresent=0, cem_full_episode=True, terminal_invpenalty=5*eta, two_sided_reward=False,
+                          action_bonus=ACTION_BONUS, running_invpenalty=RUNNING_INVPENALTY)
 
 # Config banner. The six 2026-09-07 runs could not be told apart from their .o
 # files because nothing recorded which arm they were on; this makes every job
@@ -287,6 +307,9 @@ print(f"  SEED_MODE/BASE     = {SEED_MODE}/{SEED_BASE}", flush=True)
 print(f"  exploration_bonus  = {EXPLORATION_BONUS}", flush=True)
 print(f"  gae_lambda         = {GAE_LAMBDA}", flush=True)
 print(f"  expApprox          = {EXP_APPROX}", flush=True)
+print(f"  action_bonus       = {ACTION_BONUS}", flush=True)
+print(f"  running_invpenalty = {RUNNING_INVPENALTY}", flush=True)
+print(f"  entropy_coef       = {ENTROPY_COEF}", flush=True)
 print(f"  eta/rewardpenalty  = {eta}/{j['rewardpenalty']}", flush=True)
 print(f"  inventorylimit     = {j['inventorylimit']}", flush=True)
 print("=" * 72, flush=True)
@@ -346,6 +369,9 @@ def _save_episode_metrics():
                    "exploration_bonus": EXPLORATION_BONUS,
                    "gae_lambda": GAE_LAMBDA,
                    "expApprox": EXP_APPROX,
+                   "action_bonus": ACTION_BONUS,
+                   "running_invpenalty": RUNNING_INVPENALTY,
+                   "entropy_coef": ENTROPY_COEF,
                    "twap_on": TWAP_ON, "twap_off": TWAP_OFF,
                    "twap_side_mode": TWAP_SIDE_MODE,
                    "seed_mode": SEED_MODE, "seed_base": SEED_BASE,

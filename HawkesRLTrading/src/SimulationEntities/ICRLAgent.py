@@ -1413,7 +1413,7 @@ class PPOAgent(GymTradingAgent):
                  buffer_capacity=10000, batch_size=64, epochs=1000, layer_widths = 128, n_layers = 3, clip_ratio=0.2,
                  value_loss_coef=0.5, entropy_coef=10, max_grad_norm=0.5, gae_lambda=0.95, gamma=0.99, rewardpenalty = 0.1, hidden_activation='leaky_relu',
                  transaction_cost = 0.01, start_trading_lag=0, truncation_enabled=True, action_space_config = 0, include_time = False, alt_state=False, enhance_state=False,
-                 policy_loss_coef = 1, optim_type = 'ADAM',lr=1e-3, exploration_bonus = 0, first_visit_bonus = 0.2, two_sided_reward = True, ablation_params= {}, typeNN = "dense", chunk_length=64, terminal_invpenalty=0, cem_full_episode=False, phase_a_refresh_every=25):
+                 policy_loss_coef = 1, optim_type = 'ADAM',lr=1e-3, exploration_bonus = 0, first_visit_bonus = 0.2, two_sided_reward = True, ablation_params= {}, typeNN = "dense", chunk_length=64, terminal_invpenalty=0, cem_full_episode=False, phase_a_refresh_every=25, action_bonus=0.5, running_invpenalty=0.0):
         """
         PPO Agent with Generalized Advantage Estimation (GAE)
         Maintains two networks: one for decision (d) and one for utility (u)
@@ -1488,6 +1488,22 @@ class PPOAgent(GymTradingAgent):
         self._twap_seen = False          # before/during/after-TWAP state machine (exploration key)
         self.last_intensity_bucket = 0   # cached Hawkes net-flow-imbalance bucket (exploration key)
         self.two_sided_reward = two_sided_reward
+        # Flat per-step bonus for taking any non-no-op action. Measured against
+        # the thing it competes with: on the 2026-09-07 runs the per-step PnL
+        # change had median EXACTLY 0 (85-88% of steps move no money) and mean
+        # |dW| of 0.006-0.018 dollars, so the default 0.5 is 30-90x the typical
+        # PnL signal and, unlike PnL, it is deterministic and always positive.
+        # Summed over ~2,480 steps/episode it is worth hundreds against a
+        # terminal PnL of +-0.2. Kept at 0.5 by default so existing runs are
+        # unchanged; lower it to make PnL the dominant term.
+        self.action_bonus = action_bonus
+        # Per-step inventory penalty, lambda*inv**2. Off by default, which is
+        # the status quo -- the running penalty is commented out in
+        # calculaterewards and the only inventory control is the TERMINAL
+        # penalty, one event ~2,480 steps away through 64-step LSTM chunks.
+        # With nothing opposing it, inventory drifts to a per-run direction that
+        # does not depend on the TWAP side at all.
+        self.running_invpenalty = running_invpenalty
         # State scaler
         self.mmscaler = MinMaxScaler()
         self.ablation_params = ablation_params
@@ -1664,7 +1680,9 @@ class PPOAgent(GymTradingAgent):
         if self.istruncated:
             penalty += 100
         if self.last_action != 12:
-            penalty -= 0.5 # small fixed bonus for acting vs no-op; kept tiny so it doesn't drown out the PnL/inventory signal (was rewardpenalty*10 = 50 with eta=5)
+            penalty -= self.action_bonus # flat bonus for acting vs no-op (see __init__ for the scale it competes with)
+        if self.running_invpenalty:
+            penalty += self.running_invpenalty * (self.countInventory()**2)
         if self.terminal_invpenalty and termination: 
             penalty += self.terminal_invpenalty * (self.countInventory()**2) # terminal inventory penalty (kappa)
 
