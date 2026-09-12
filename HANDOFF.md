@@ -433,7 +433,7 @@ overlap in [−1.92,−1.74]. Reconstructed as a proper two-sample test from tho
 CIs: **Δ = +5.06 bps [+1.40, +8.72], t≈2.75, p≈0.007**. The conclusion survives;
 **report it as a difference with a CI**, not as two one-sample p-values.
 
-*Corrected — and still open. The magnitude is over-attributed.* An exact,
+*Corrected — RESOLVED BY EXPERIMENT. The magnitude is over-attributed.* An exact,
 noise-free paired computation of the two assignment rules on identical realised
 states gives a bias of **+0.243 pp in P(Ask) = +0.49% Ask excess**, identical on
 all 20 seeds. The handoff attributes **+1.29 pp** of Ask-excess removal to the
@@ -441,13 +441,40 @@ fix (+1.77% → +0.48%) — about **2.6× more than the rule can produce per ste
 The residual ~0.8 pp needs an explanation. Either the near-critical cascade
 amplifies it (spectral radius is forced to 0.99 at `Arrival_Models.py:278-280`)
 or part of the improvement belongs to the still-unlocated exchange-side
-asymmetry, which this fix cannot have touched. **The discriminating experiment
-is cheap and is set up**: `HAWKES_LEGACY_DIMENSION_RULE=1` (`44f2adc`) runs the
-buggy rule from the current checkout, so both generators can be run in isolation
-at matched seeds. ~0.49 pp means rule only and the drift study over-attributes;
-~1.3 pp means the cascade carries it and the attribution stands. Note this does
-**not** threaten the conclusion that the *current* simulator is symmetric — that
-was verified independently — only the account of how much this fix contributed.
+asymmetry, which this fix cannot have touched. **The discriminating experiment has now been run**
+(`HAWKES_LEGACY_DIMENSION_RULE=1`, `44f2adc`, both generators in isolation,
+n=200 paths per arm, 1,983,459 events):
+
+| arm | Ask fraction | excess over 0.5 |
+|---|---|---|
+| legacy rule | 0.50320 | **+0.320 pp** [+0.084, +0.555] |
+| fixed rule | 0.50058 | **+0.058 pp** [−0.167, +0.283] |
+| **difference** | | **+0.262 pp** [−0.057, +0.581] |
+
+Testing the two predictions against that difference:
+
+* **+0.49 pp (rule only):** t=−1.40, **p=0.16 — cannot reject.**
+* **+1.29 pp (full attribution):** t=−6.31, **p<0.0001 — REJECTED.**
+
+So the reviewer is right and there is **no cascade amplification** — the
+realised generator difference is if anything *smaller* than the per-step rule
+bias, not 2.6× larger. Roughly 0.8–1.0 pp of the +1.29 pp Ask-excess improvement
+credited to this fix comes from **something else**: the two other bugs fixed in
+the same window, or the still-unlocated exchange-side asymmetry (which is
+visible with kernels nulled and therefore cannot be a generator effect).
+
+Two things this does **not** overturn. The fixed arm's excess is +0.058 pp,
+statistically indistinguishable from zero, which independently corroborates
+"the generator is now symmetric" and the reviewer's P(Ask)=0.49996. And the
+drift conclusion survives its own properly specified test (above). It is the
+causal *story* — "this fix removed the drift" — that needs rewriting, not the
+finding that the drift is gone.
+
+Caveat on comparability: the +1.77%/+0.48% figures are from the **full
+simulation**; this is the **isolated generator**, with spread pinned at 0.03 and
+a flat time-of-day multiplier. The comparison holds because the fix only touches
+the generator, so it cannot produce more effect downstream than it produces at
+source — but the two numbers are not the same measurement.
 
 *Corrected — the exploration-bonus arm story has no mechanism.* No side or sign
 asymmetry exists anywhere in the `exploration_bonus` implementation, so the
