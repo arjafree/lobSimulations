@@ -114,12 +114,30 @@ def test_default_is_legacy():
 
 
 def test_gates_are_dormant_under_the_default_action_space():
-    """config 1 emits only u in {2,3,8,9}; u=4 (mo_Ask) and u=7 (mo_Bid) are
-    unreachable, which is why the legacy asymmetry has not affected any run."""
+    """Why the legacy asymmetry has not affected any run.
+
+    Two separate things have to hold, and only the first is about convert_dict:
+
+      1. The POLICY path under config 1 maps u through {0:2, 1:3, 2:8, 3:9}, so
+         it can never emit u=4 (mo_Ask) or u=7 (mo_Bid), and the gates are never
+         consulted.
+      2. Market orders ARE still submitted under config 1 -- the inventory-breach
+         path issues `mo = 4 if inv > 0 else 7` when |inv| >= inventorylimit --
+         but it `return`s BEFORE any gating, so those orders do not pass through
+         the gates either. They are forced liquidations, symmetric by
+         construction (sell when long, buy when short), not position-taking.
+
+    If the breach path is ever moved below the gates, the legacy asymmetry stops
+    being dormant, so this test pins the ordering too."""
     src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
                             "src", "SimulationEntities", "ICRLAgent.py")).read()
     assert "self.convert_dict = {0:2, 1:3, 2:8, 3:9}" in src
     assert 4 not in {2, 3, 8, 9} and 7 not in {2, 3, 8, 9}
+    # the breach early-return must precede the first gate call
+    i = src.index("mo = 4 if self.countInventory() > 0 else 7")
+    j = src.index("_mo_ask_blocked", i)
+    between = src[i:j]
+    assert "return" in between, "breach path no longer returns before the gates"
 
 
 if __name__ == "__main__":

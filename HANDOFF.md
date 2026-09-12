@@ -190,6 +190,13 @@ the agent ends up **short into a rising market**: run over, not in front. Going
 long instead needs other participants to sell into its bid, which is what is
 scarce while a buy meta-order works.
 
+Market orders *are* still submitted under config 1, but only by the
+inventory-breach path (`mo = 4 if inv > 0 else 7` when `|inv| >= inventorylimit`),
+which `return`s before any gating. Those are forced liquidations, symmetric by
+construction, not position-taking — the policy still has no way to *choose* to
+take a position. It also means the plots' many trajectories pinned at ±23–24 are
+the agent riding the limit and being force-liquidated.
+
 (CLAUDE.md documents a 13-choice action space. That is config 0 plus the no-op
 — not what any run has used. Worth correcting.)
 
@@ -209,7 +216,9 @@ very long — is absent, so nothing in this gate bounds inventory from above. Th
 exploration branch is looser still: no limit clause on the sell, no bid clause
 at all.
 
-**Dormant in every run to date**, because config 1 never emits u=4 or u=7, so it
+**Dormant in every run to date.** Two things have to hold for that and both do:
+the policy path under config 1 can never emit u=4 or u=7, and the breach path,
+which does emit them, returns before the gates are consulted. So the asymmetry
 explains nothing about current results. It would corrupt any config-0 run.
 `SYMMETRIC_MO_GATING=true` fixes it; default is legacy so nothing in flight
 changes. The separate "no shorting via market order" rule (`inv < 1`) is left
