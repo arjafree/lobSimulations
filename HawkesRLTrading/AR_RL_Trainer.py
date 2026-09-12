@@ -52,6 +52,19 @@ SEED_BASE = int(os.environ.get("SEED_BASE", 1000))
 # validate a new config before committing a multi-day job to it.
 N_EPISODES = int(os.environ.get("N_EPISODES", 80))
 
+# --- Arm parameters. Previously hardcoded, which is how all six of the
+# 2026-09-07 runs silently launched on the gae_lambda arm (exploration_bonus=0)
+# when the plan called for the combined explo_gae arm. Making them env-overridable
+# means the arm is explicit per job and travels with the submission script.
+#   EXPLORATION_BONUS: explo_gae arm = 0.1, gae_lambda-only arm = 0.
+#   GAE_LAMBDA: 0.95 in every arm run to date.
+#   EXP_APPROX: exponential-approximation simulator regime (TAU=10 vs 500).
+#     ~13x faster but a DIFFERENT simulator regime -- fast iteration only,
+#     never mix with expApprox=False results.
+EXPLORATION_BONUS = float(os.environ.get("EXPLORATION_BONUS", 0.1))
+GAE_LAMBDA = float(os.environ.get("GAE_LAMBDA", 0.95))
+EXP_APPROX = os.environ.get("EXP_APPROX", "false").strip().lower() in ("1", "true", "yes")
+
 #the time that the TWAP agent will kick in:
 twap_start_time = 150 + start_trading_lag
 
@@ -247,7 +260,7 @@ kwargs={
                                      "beta": 0.941,
                                      "avgSpread": 0.0101,
                                      "Pi_Q0": Pi_Q0,
-                                     'expApprox' : False}} #one with true, one with false
+                                     'expApprox' : EXP_APPROX}}
 }
 
 agents = kwargs['GymTradingAgent']
@@ -256,8 +269,27 @@ tc = 0.0001
 RLagentInstance = AdversarialPPOAgent( seed=1, log_events=True, log_to_file=True, strategy=j["strategy"], Inventory=j["Inventory"], cash=j["cash"], action_freq=j["action_freq"],
                           wake_on_MO=j["wake_on_MO"], wake_on_Spread=j["wake_on_Spread"], cashlimit=j["cashlimit"],inventorylimit=j['inventorylimit'], batch_size=512,
                           layer_widths=layer_widths, n_layers =n_layers, buffer_capacity = 100000, rewardpenalty = j["rewardpenalty"], epochs = 100, transaction_cost=1e-4, start_trading_lag = j['start_trading_lag'],
-                          gae_lambda=0.95, gamma=0.999, truncation_enabled=False, action_space_config = 1, alt_state=True, enhance_state=True, include_time=True, optim_type='ADAM',entropy_coef=0, exploration_bonus = 0, hidden_activation='sigmoid',
+                          gae_lambda=GAE_LAMBDA, gamma=0.999, truncation_enabled=False, action_space_config = 1, alt_state=True, enhance_state=True, include_time=True, optim_type='ADAM',entropy_coef=0, exploration_bonus = EXPLORATION_BONUS, hidden_activation='sigmoid',
                           typeNN = "LSTM", lr = 3e-4, chunk_length=64, TWAPPresent=0, cem_full_episode=True, terminal_invpenalty=5*eta, two_sided_reward=False)
+
+# Config banner. The six 2026-09-07 runs could not be told apart from their .o
+# files because nothing recorded which arm they were on; this makes every job
+# self-documenting.
+print("=" * 72, flush=True)
+print("RUN CONFIG", flush=True)
+print(f"  label              = {label}", flush=True)
+print(f"  log_dir            = {log_dir}", flush=True)
+print(f"  model_dir          = {model_dir}", flush=True)
+print(f"  N_EPISODES         = {N_EPISODES}", flush=True)
+print(f"  TWAP_SIDE_MODE     = {TWAP_SIDE_MODE}", flush=True)
+print(f"  TWAP_ON/TWAP_OFF   = {TWAP_ON}/{TWAP_OFF}", flush=True)
+print(f"  SEED_MODE/BASE     = {SEED_MODE}/{SEED_BASE}", flush=True)
+print(f"  exploration_bonus  = {EXPLORATION_BONUS}", flush=True)
+print(f"  gae_lambda         = {GAE_LAMBDA}", flush=True)
+print(f"  expApprox          = {EXP_APPROX}", flush=True)
+print(f"  eta/rewardpenalty  = {eta}/{j['rewardpenalty']}", flush=True)
+print(f"  inventorylimit     = {j['inventorylimit']}", flush=True)
+print("=" * 72, flush=True)
 
 inventories_with_twap_buy = []
 inventories_with_twap_sell = []
@@ -297,6 +329,52 @@ final_cashs = []
 total_executeds = []
 episode_inv_trajectories_buy = []
 episode_inv_trajectories_sell = []
+# Per-episode scalar metrics, rewritten every episode. The arrays that carry the
+# primary metric (inventory level inside the TWAP window) are only written when
+# the run FINISHES, which is why every in-flight run to date could only be
+# judged by eyeballing the avg_inv_trajectories PNGs. This file makes the three
+# criteria readable numerically while a job is still running, and keeps
+# TWAP-absent episodes separated from the out-of-window parts of present
+# episodes -- `profit_without_twap` mixes the two and is not a clean readout.
+episode_metrics = []
+
+
+def _save_episode_metrics():
+    import json
+    with open(log_dir + "episode_metrics_" + label + ".json", "w") as fh:
+        json.dump({"label": label,
+                   "exploration_bonus": EXPLORATION_BONUS,
+                   "gae_lambda": GAE_LAMBDA,
+                   "expApprox": EXP_APPROX,
+                   "twap_on": TWAP_ON, "twap_off": TWAP_OFF,
+                   "twap_side_mode": TWAP_SIDE_MODE,
+                   "seed_mode": SEED_MODE, "seed_base": SEED_BASE,
+                   "n_episodes_planned": N_EPISODES,
+                   "inventorylimit": j["inventorylimit"],
+                   "rewardpenalty": j["rewardpenalty"],
+                   "episodes": episode_metrics}, fh, indent=1)
+
+
+def _twap_slippage_bps(side, twap_final_cash, executed, start_mid):
+    """TWAP execution cost in bps vs the arrival midprice. Positive = the
+    meta-order paid more (buy) or received less (sell) than the arrival mid,
+    i.e. higher transaction cost. Criterion 3 wants this to go UP versus the
+    TWAP-alone baseline. Same convention as AR_RL_runner.py:605-613."""
+    # np.nan is the sentinel total_executed carries on TWAP-absent episodes, and
+    # `not nan` is False -- guard on non-finiteness explicitly or nan propagates
+    # into every downstream mean.
+    if executed is None or start_mid is None:
+        return None
+    if not (np.isfinite(executed) and np.isfinite(start_mid)):
+        return None
+    benchmark = start_mid * executed
+    if benchmark <= 0:
+        return None
+    if side == "sell":
+        return (benchmark - (twap_final_cash - 1000000)) * 10000 / benchmark
+    return ((1000000 - twap_final_cash) - benchmark) * 10000 / benchmark
+
+
 for episode in range(N_EPISODES):
     inventory_with_twap_buy = []
     inventory_with_twap_sell = []
@@ -536,6 +614,36 @@ for episode in range(N_EPISODES):
 
     final_cashs.append(final_cash)
     total_executeds.append(total_executed)
+    start_midprices.append(starting_midprice)
+
+    # Terminal PnL straight off this episode's last sample, so no episode
+    # boundary has to be reconstructed from non-monotonic time downstream.
+    _term_pnl = (finalcash2[-1] - j["cash"]) if len(finalcash2) else None
+    _inw = inventory_with_twap_sell if twap_side == "sell" else inventory_with_twap_buy
+    episode_metrics.append({
+        "episode": episode,
+        "twap_present": bool(twap_present),
+        "side": twap_side if twap_present else "none",
+        "seed": episode_seed,
+        # PRIMARY metric for criterion 1: mean inventory LEVEL inside the TWAP
+        # window. Want > 0 for a buying TWAP, < 0 for a selling TWAP. Level, not
+        # the paired shift -- they disagree and level is the one that asks
+        # whether the agent actually HOLDS the profitable position.
+        "inv_level_in_window": float(np.mean(_inw)) if (twap_present and len(_inw)) else None,
+        "n_in_window": int(len(_inw)) if twap_present else 0,
+        "inv_level_out_window": float(np.mean(inventory_without_twap)) if len(inventory_without_twap) else None,
+        "n_out_window": int(len(inventory_without_twap)),
+        "inv_terminal": float(inventory_without_twap[-1]) if len(inventory_without_twap) else None,
+        # Criterion 2: terminal PnL. On a TWAP-absent episode this is the clean
+        # standalone-market-maker readout.
+        "terminal_pnl": float(_term_pnl) if _term_pnl is not None else None,
+        # Criterion 3: TWAP execution cost. None on absent episodes.
+        "twap_slippage_bps": _twap_slippage_bps(twap_side, final_cash, total_executed, starting_midprice)
+            if twap_present else None,
+        "twap_total_executed": float(total_executed) if twap_present else None,
+        "start_midprice": float(starting_midprice) if starting_midprice else None,
+        "episode_seconds": None,
+    })
 
     if termination:
         print("Termination condition reached.")
@@ -545,6 +653,9 @@ for episode in range(N_EPISODES):
         pass
     episode_total_time = time.time() - episode_start_time
     print(f"Episode took {episode_total_time} seconds to run")
+    if episode_metrics:
+        episode_metrics[-1]["episode_seconds"] = float(episode_total_time)
+    _save_episode_metrics()
 
     if ((episode) % 4 == 0):
         if ('test' not in label) and ((checkpoint_params is None) or (episode >= 0)):
@@ -636,4 +747,5 @@ np.save(log_dir + "slippages_"+label+"twap_present.npy", np.array(twap_presents)
 np.save(log_dir + "slippages_"+label+"sides.npy", np.array(sides))
 np.save(log_dir + "slippages_"+label+"total_executed.npy", np.array(total_executeds, dtype=float))
 np.save(log_dir + "slippages_"+label+"final_cash.npy", np.array(final_cashs))
+np.save(log_dir + "slippages_"+label+"start_midprice.npy", np.array(start_midprices, dtype=float))
 np.save(log_dir+label+"RL_observations.npy", np.array(total_RL_obsv, dtype=object), allow_pickle=True)
