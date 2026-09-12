@@ -26,6 +26,7 @@ The separate "no shorting via market order" rule (inv < 1) is a modelling
 choice, not a bug, and is deliberately kept in BOTH modes.
 """
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")))
@@ -105,7 +106,9 @@ def test_no_shorting_rule_survives_in_both_modes():
 def test_default_is_legacy():
     src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
                             "src", "SimulationEntities", "ICRLAgent.py")).read()
-    assert "symmetric_mo_gating=False):" in src, \
+    # match the parameter default, not its position in the signature -- keying
+    # on a trailing "):" breaks the moment another kwarg is appended
+    assert re.search(r"symmetric_mo_gating\s*=\s*False\s*[,)]", src), \
         "default must stay legacy so runs in flight stay comparable"
     tr = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
                            "AR_RL_Trainer.py")).read()

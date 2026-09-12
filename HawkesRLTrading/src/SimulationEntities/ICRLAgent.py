@@ -1413,7 +1413,7 @@ class PPOAgent(GymTradingAgent):
                  buffer_capacity=10000, batch_size=64, epochs=1000, layer_widths = 128, n_layers = 3, clip_ratio=0.2,
                  value_loss_coef=0.5, entropy_coef=10, max_grad_norm=0.5, gae_lambda=0.95, gamma=0.99, rewardpenalty = 0.1, hidden_activation='leaky_relu',
                  transaction_cost = 0.01, start_trading_lag=0, truncation_enabled=True, action_space_config = 0, include_time = False, alt_state=False, enhance_state=False,
-                 policy_loss_coef = 1, optim_type = 'ADAM',lr=1e-3, exploration_bonus = 0, first_visit_bonus = 0.2, two_sided_reward = True, ablation_params= {}, typeNN = "dense", chunk_length=64, terminal_invpenalty=0, cem_full_episode=False, phase_a_refresh_every=25, action_bonus=0.5, running_invpenalty=0.0, symmetric_mo_gating=False):
+                 policy_loss_coef = 1, optim_type = 'ADAM',lr=1e-3, exploration_bonus = 0, first_visit_bonus = 0.2, two_sided_reward = True, ablation_params= {}, typeNN = "dense", chunk_length=64, terminal_invpenalty=0, cem_full_episode=False, phase_a_refresh_every=25, action_bonus=0.5, running_invpenalty=0.0, symmetric_mo_gating=False, cem_elite_floor=0.0):
         """
         PPO Agent with Generalized Advantage Estimation (GAE)
         Maintains two networks: one for decision (d) and one for utility (u)
@@ -1519,6 +1519,7 @@ class PPOAgent(GymTradingAgent):
         # market order" rule (inv < 1) is a modelling choice, not a bug, and is
         # left in place in both modes.
         self.symmetric_mo_gating = symmetric_mo_gating
+        self.cem_elite_floor = cem_elite_floor  # see get_max_contiguous_rewards
         # State scaler
         self.mmscaler = MinMaxScaler()
         self.ablation_params = ablation_params
@@ -2533,15 +2534,43 @@ class PPOAgent(GymTradingAgent):
 
             buy_eps  = [e for e in episode_totals if self.episode_sides.get(e, 0) > 0]
             sell_eps = [e for e in episode_totals if self.episode_sides.get(e, 0) < 0]
-            if buy_eps and sell_eps:
-                # Two-sided training: balance elites across regimes
-                top_buys  = sorted(buy_eps,  key=episode_totals.get, reverse=True)[:3]
-                top_sells = sorted(sell_eps, key=episode_totals.get, reverse=True)[:3]
-                top_eps = set(top_buys + top_sells)
+            # THREE regimes, not two. On a TWAP-absent episode TWAPPresent is
+            # pinned to 0 all the way through, so episode_sides[ep] == 0 and the
+            # episode falls into neither pool. In an alternating run both buy
+            # and sell pools are always non-empty, so the global fallback below
+            # never fires and absent episodes could never be elites -- meaning
+            # self-imitation never reinforced a single standalone
+            # market-making episode, in exactly the runs that exist to test
+            # criterion 2 (profitable when the TWAP is absent).
+            none_eps = [e for e in episode_totals if self.episode_sides.get(e, 0) == 0]
+            pools = [p for p in (buy_eps, sell_eps, none_eps) if p]
+            if len(pools) > 1:
+                # Multi-regime training: balance elites across regimes so no
+                # regime is starved, and so a regime with systematically higher
+                # total reward cannot monopolise the elite set.
+                top_eps = set()
+                for pool in pools:
+                    top_eps.update(sorted(pool, key=episode_totals.get, reverse=True)[:3])
             else:
-                # One-sided (or untagged) training: original global top-5
+                # Single-regime (or untagged) training: original global top-5
                 sorted_eps = sorted(episode_totals, key=episode_totals.get, reverse=True)
                 top_eps = set(sorted_eps[:5])
+
+            if self.cem_elite_floor:
+                # `sorted(...)[:3]` returns three episodes regardless of quality.
+                # Once the reward is PnL-dominated, episode totals are near
+                # zero-mean noise (+-0.2 over ~2,480 steps, 85-88% of which move
+                # no money), so the top-3 of ~40 buffered episodes is roughly the
+                # +1.7 sigma tail -- mostly luck. Cross-entropy toward the
+                # luckiest trajectories turns CEM from a bias into a variance
+                # injector. Require elites to clear the buffer mean by this many
+                # SDs, and skip them otherwise. Standard CEM practice.
+                vals = list(episode_totals.values())
+                if len(vals) > 1:
+                    mu = sum(vals) / len(vals)
+                    sd = (sum((v - mu) ** 2 for v in vals) / (len(vals) - 1)) ** 0.5
+                    thresh = mu + self.cem_elite_floor * sd
+                    top_eps = {e for e in top_eps if episode_totals[e] > thresh}
 
             results = {}
             for ep, transitions in episodes.items():
