@@ -146,6 +146,24 @@ not *directly* prefer one side — but it is not cancelled either, because GAE
 computes the u-advantage from the same realised reward stream, so an action
 followed by a high-activity stretch inherits that stretch's bonuses.
 
+## 2a. The signal is small but NOT below the noise floor
+
+A competing explanation would be that front-running is simply undetectable here.
+It is not. Per-episode terminal PnL standard deviation, measured across the six
+runs, is 0.75–1.37 dollars, so against the $0.75 prize:
+
+| run | n | sd of episode PnL | SNR (prize/sd) | episodes to detect at 2σ |
+|---|---|---|---|---|
+| `buy_base` | 80 | 1.36 | 0.55 | 13 |
+| `sell_base` | 80 | 0.75 | 1.00 | 4 |
+| `both_base` | 70 | 1.37 | 0.55 | 13 |
+| `both_onoff` | 84 | 1.10 | 0.68 | 9 |
+
+Roughly 4–13 episodes of evidence, well inside a 120–160 episode run. So the
+edge is learnable in principle, and the reason it has not been learned is the
+shaping, not the measurability. This rules out "make the meta-order bigger" as a
+necessary fix — though it would still help, and see §7.7.
+
 **Careful with the running inventory penalty.** 1e-4·inv² costs $42 to hold the
 limit through the TWAP window — 56× the prize. It is not a mild "inventory
 control"; it forbids precisely the inventory-holding criterion 1 requires. The
@@ -310,6 +328,12 @@ only, never mix the two in one comparison.
 5. **Re-examine the prior ablation's arm conclusions (§8).** They rest on
    single-side runs and therefore on the metric §1 shows is ~90% confound.
 6. Ask the user whether "no shorting via market order" (§3b) is intended.
+7. **Optional, a research-design question for the user, not an implementation
+   detail:** the meta-order is 150 shares over 150 s. Making it larger or more
+   aggressive (e.g. same size over 50 s) raises its price impact and therefore
+   the prize, improving SNR roughly with impact. §2a says this is not *needed*,
+   so it should be a deliberate choice about what market is being studied rather
+   than a knob turned to make training easier.
 
 ---
 
