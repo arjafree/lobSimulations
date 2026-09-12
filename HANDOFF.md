@@ -505,13 +505,37 @@ is structurally safe, and it is pinned in `tests/test_schedule_aliasing.py`
 alongside the failing schedule. Fixes for a period-2 run: `TWAP_SIDE_MODE=random`
 or any side period coprime with 4 and 8.
 
-*A real channel that shrinks the contrast: CEM pooling.* `get_CEM_data` pools
-elite segments from **every episode in the buffer** into one cross-entropy
-target with **no split on side**, so buy-episode behaviour is imitated on sell
-episodes and vice versa. Compounding it, the elite selector takes the segments
-with the highest summed reward — which under `ACTION_BONUS=0.5` means the
-segments where the agent **acted most**, not where it traded well. `USE_CEM`
-(default true = unchanged) now lets this be measured; `ps_nc` is that arm.
+*CEM: one claim withdrawn, one real defect found, one trap flagged.* The
+reviewer initially reported that CEM pools elites with no split on side and then
+**retracted it** — side balancing was already implemented. It also retracted its
+account of the selector: `cem_full_episode=True` means the live path ranks
+**whole episodes by total episode reward**, top 3 per side, and
+`get_max_contiguous_rewards`'s subarray search is dead code in every run.
+
+What is real:
+
+* **TWAP-absent episodes could never be elites.** The pools were
+  `episode_sides > 0` and `< 0` only; on an absent episode `TWAPPresent` is
+  pinned to 0 all the way through, so `episode_sides[ep] == 0` and the episode
+  fell into neither. In an alternating run both signed pools are always
+  non-empty, so the global-top-5 fallback never fired either. **Self-imitation
+  never reinforced a single standalone market-making episode — in exactly the
+  on/off runs that exist to test criterion 2.** Fixed (`eccb871`): three
+  regimes, top 3 of each non-empty pool.
+* **Lowering `ACTION_BONUS` hands the elite criterion to the terminal penalty,
+  not to PnL.** The ranking key is total episode reward, so at the default
+  `terminal_invpenalty=25` one unit of terminal inventory costs −25 against an
+  episode PnL of ±0.2: elites become "ended closest to flat". `TERMINAL_INVPENALTY`
+  must come down with `ACTION_BONUS`. The `pnl_scaled` arms already do (1.2e-3);
+  `reward_scale/bonus` did not and was corrected.
+* **No elite floor.** `sorted(...)[:3]` returns three episodes however bad they
+  are. Harmless while a deterministic action bonus dominated; once PnL
+  dominates, episode totals are near zero-mean noise, so the top 3 of the ~40
+  buffered episodes is roughly the +1.7σ tail — mostly luck, and CEM turns from
+  a bias into a variance injector. `CEM_ELITE_FLOOR` (default 0 = unchanged)
+  requires elites to clear the buffer mean by N SDs.
+
+`USE_CEM` (default true) also exists now; `ps_nc` is the CEM-off arm.
 
 *On the metrics.* SHIFT subtracts a baseline that contains the signal, so it is
 **actively destructive**; LEVEL subtracts nothing, so it is merely uninformative
