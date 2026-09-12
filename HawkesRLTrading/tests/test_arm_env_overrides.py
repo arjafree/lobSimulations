@@ -13,7 +13,9 @@ import sys
 
 TRAINER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "AR_RL_Trainer.py")
 
-_NAMES = ("EXPLORATION_BONUS", "GAE_LAMBDA", "EXP_APPROX")
+_NAMES = ("EXPLORATION_BONUS", "GAE_LAMBDA", "EXP_APPROX",
+          "ACTION_BONUS", "RUNNING_INVPENALTY", "ENTROPY_COEF",
+          "ACTION_SPACE_CONFIG", "SYMMETRIC_MO_GATING", "RL_DISABLED")
 
 
 def _config_lines():
@@ -53,6 +55,50 @@ def test_defaults_are_the_combined_arm():
     assert v["EXPLORATION_BONUS"] == 0.1, v
     assert v["GAE_LAMBDA"] == 0.95, v
     assert v["EXP_APPROX"] is False, v
+
+
+def test_every_other_default_reproduces_historical_behaviour():
+    """Only the arm defaults above are allowed to differ from the six runs on
+    the cluster. Everything else must be bit-identical to them, or new runs
+    cannot be compared with old ones."""
+    v = _evaluate({})
+    assert v["ACTION_BONUS"] == 0.5, v
+    assert v["RUNNING_INVPENALTY"] == 0.0, v
+    assert v["ENTROPY_COEF"] == 0.0, v
+    assert v["ACTION_SPACE_CONFIG"] == 1, v
+    assert v["SYMMETRIC_MO_GATING"] is False, v
+    assert v["RL_DISABLED"] is False, v
+
+
+def test_boolean_arms_reject_the_naive_parse():
+    """bool("False") is True for SYMMETRIC_MO_GATING and RL_DISABLED too."""
+    for name in ("SYMMETRIC_MO_GATING", "RL_DISABLED"):
+        for spelling in ("false", "False", "0", "no", ""):
+            assert _evaluate({name: spelling})[name] is False, (name, spelling)
+        for spelling in ("true", "True", "1", "yes"):
+            assert _evaluate({name: spelling})[name] is True, (name, spelling)
+
+
+def test_control_arm_skips_the_policy_call_not_just_its_result():
+    """get_action draws from the stdlib RNG the exchange also uses. Calling it
+    and discarding the answer would desynchronise the background order flow and
+    make the control a different market, which would invalidate criterion 3."""
+    src = open(TRAINER).read()
+    assert "if RL_DISABLED:" in src
+    i = src.index("if RL_DISABLED:")
+    # the control branch runs up to its matching `else:` at the same indent
+    j = src.index("\n                else:", i)
+    block = src[i:j]
+    assert "get_action" not in block, \
+        "the control arm must not call get_action at all"
+    assert "(agent.id, (12, 1))" in block, "control arm must submit the no-op"
+    # and the treatment branch on the other side of the else must still call it
+    assert "agent.get_action" in src[j:j + 400]
+
+
+def test_control_arm_does_not_train():
+    src = open(TRAINER).read()
+    assert "if (not RL_DISABLED) and ('test' not in label)" in src
 
 
 def test_gae_lambda_only_arm_is_reachable():

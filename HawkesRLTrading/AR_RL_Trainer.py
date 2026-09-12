@@ -102,6 +102,18 @@ ACTION_SPACE_CONFIG = int(os.environ.get("ACTION_SPACE_CONFIG", 1))
 # which never emits a market order, but it must be on for any config-0 run.
 SYMMETRIC_MO_GATING = os.environ.get("SYMMETRIC_MO_GATING", "false").strip().lower() in ("1", "true", "yes")
 
+# --- TWAP-alone control. Criterion 3 ("the agent raises the TWAP's transaction
+# costs") is a COMPARISON, and its denominator -- what the same meta-order costs
+# with no RL agent interfering -- has never been measured on this simulator, on
+# these seeds, with this timing. RL_DISABLED runs the identical episode loop
+# with the RL agent never acting, so the control differs from the treatment in
+# exactly one thing: whether the RL agent submits orders.
+# get_action is skipped entirely rather than having its result overridden,
+# because it draws from the stdlib RNG that the exchange also uses -- calling it
+# and discarding the answer would desynchronise the background order flow and
+# silently make the control a different market.
+RL_DISABLED = os.environ.get("RL_DISABLED", "false").strip().lower() in ("1", "true", "yes")
+
 #the time that the TWAP agent will kick in:
 twap_start_time = 150 + start_trading_lag
 
@@ -331,6 +343,7 @@ print(f"  running_invpenalty = {RUNNING_INVPENALTY}", flush=True)
 print(f"  entropy_coef       = {ENTROPY_COEF}", flush=True)
 print(f"  action_space_config= {ACTION_SPACE_CONFIG}", flush=True)
 print(f"  symmetric_mo_gating= {SYMMETRIC_MO_GATING}", flush=True)
+print(f"  RL_DISABLED        = {RL_DISABLED}", flush=True)
 print(f"  eta/rewardpenalty  = {eta}/{j['rewardpenalty']}", flush=True)
 print(f"  inventorylimit     = {j['inventorylimit']}", flush=True)
 print("=" * 72, flush=True)
@@ -395,6 +408,7 @@ def _save_episode_metrics():
                    "entropy_coef": ENTROPY_COEF,
                    "action_space_config": ACTION_SPACE_CONFIG,
                    "symmetric_mo_gating": SYMMETRIC_MO_GATING,
+                   "rl_disabled": RL_DISABLED,
                    "twap_on": TWAP_ON, "twap_off": TWAP_OFF,
                    "twap_side_mode": TWAP_SIDE_MODE,
                    "seed_mode": SEED_MODE, "seed_base": SEED_BASE,
@@ -532,12 +546,18 @@ for episode in range(N_EPISODES):
                 print(f"Twap present: {RLagentInstance.TWAPPresent}")
                 action_num+=1
                 RLagentID = agent.id
-                agentAction:Tuple[int, int] = agent.get_action(data=env.getobservations(agentID=agent.id), epsilon = 0.5 if i_eps < 100 else 0.1)
-                # Snapshot the state the action was actually chosen from (set inside get_action).
-                # Using this instead of prev_readData ensures the stored (s, a) pair is aligned —
-                # critical when other agents (TWAP) act between RL steps and shift env state.
-                state_at_action = agent.last_state.clone() if agent.last_state is not None else None
-                action = (agent.id, (agentAction[0],1))
+                if RL_DISABLED:
+                    # Control arm: no policy call at all (see RL_DISABLED above).
+                    agentAction = (12, (0, 0), 0, 0, 0, 0)
+                    state_at_action = None
+                    action = (agent.id, (12, 1))
+                else:
+                    agentAction:Tuple[int, int] = agent.get_action(data=env.getobservations(agentID=agent.id), epsilon = 0.5 if i_eps < 100 else 0.1)
+                    # Snapshot the state the action was actually chosen from (set inside get_action).
+                    # Using this instead of prev_readData ensures the stored (s, a) pair is aligned —
+                    # critical when other agents (TWAP) act between RL steps and shift env state.
+                    state_at_action = agent.last_state.clone() if agent.last_state is not None else None
+                    action = (agent.id, (agentAction[0],1))
                 Simstate, observations, termination, truncation=env.step(action=action) #do not try and use this data before this line in the loop
                 episode_times_rl.append(Simstate['TimeCode'])
                 episode_invs_rl.append(observations["Inventory"])
@@ -707,7 +727,7 @@ for episode in range(N_EPISODES):
     _save_episode_metrics()
 
     if ((episode) % 4 == 0):
-        if ('test' not in label) and ((checkpoint_params is None) or (episode >= 0)):
+        if (not RL_DISABLED) and ('test' not in label) and ((checkpoint_params is None) or (episode >= 0)):
             for epoch in range(1):
                 start_time = time.time()
                 d_policy_loss, d_value_loss, d_entropy_loss, u_policy_loss, u_value_loss, u_entropy_loss = agent.train(train_logger, use_CEM = bool((episode) % 8) and (episode >= 10))
