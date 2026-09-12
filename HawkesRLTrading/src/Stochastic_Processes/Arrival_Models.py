@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import os
 import numpy as np
 from HawkesRLTrading.src.Stochastic_Processes.Stochastic_Models import StochasticModel
 from typing import Any, List, Dict, Optional, Tuple, ClassVar
@@ -343,7 +344,7 @@ class HawkesArrival(ArrivalModel):
                 pointcount+=1
                 self.current_intensity = decays.copy()
                 """Accepted so assign candidate point to a process by a ratio of intensities"""
-                k=sample_dimension(decays, self.lamb)
+                k=sample_dimension(decays, self.lamb, D*lamb_bar)
                 """dimension is cols[k]"""   
                 """Update values of lambda for next simulation loop and append point to Ts"""
                 
@@ -510,7 +511,18 @@ class HawkesArrival(ArrivalModel):
     def seed(self):
         return super().seed()
 
-def sample_dimension(decays, lamb):
+# Set HAWKES_LEGACY_DIMENSION_RULE=1 to restore the pre-6e94941 assignment rule.
+# This exists so the buggy arm of a controlled comparison can be run from the
+# CURRENT code at matched seeds, instead of cloning an old commit -- the drift
+# study's own lesson was that a buggy-code control arm is mandatory, and its
+# round-1 null would have read as "the market is symmetric" without one.
+# Read once at import. Default off, and when off the code path below is
+# byte-for-byte what it was, including the number of RNG draws.
+_LEGACY_DIMENSION_RULE = os.environ.get(
+    "HAWKES_LEGACY_DIMENSION_RULE", "0").strip().lower() in ("1", "true", "yes")
+
+
+def sample_dimension(decays, lamb, thinning_variate=None):
     """Draw which of the 12 dimensions fired, proportional to `decays`.
 
     Uses a FRESH uniform over the realised total intensity `lamb`, rather than
@@ -533,6 +545,17 @@ def sample_dimension(decays, lamb):
     a downward midprice drift. See PLAN_drift_study.md.
     """
     d = np.asarray(decays, dtype=float).reshape(-1)
+    if _LEGACY_DIMENSION_RULE and thinning_variate is not None:
+        # Reproduce the pre-6e94941 rule exactly, for controlled comparisons.
+        # It reuses the thinning variate and walks WITHOUT the len-1 cap, which
+        # is what made the tail unreachable when the bound was breached. Draws
+        # no random number, so the RNG stream also matches the old code.
+        k = 0
+        total = d[0]
+        while thinning_variate >= total:
+            k += 1
+            total += d[k]
+        return k
     V = np.random.uniform(0, 1) * lamb
     k = 0
     total = d[0]
