@@ -12,11 +12,23 @@ attributed to nothing -- and this is the leading suspect.
 The concrete defect these tests pin is in `regeneratequeuedepletion`: the Ask
 branch assigns `self.askprice = self.askprices["Ask_L1"]` (a scalar) while the
 Bid branch assigns `self.bidprice = [self.bidprices["Bid_L1"]]` -- a LIST. It
-does not raise, because `askprice - bidprice` then yields a 1-element numpy
-array rather than a scalar, and size-1 arrays are truthy and round and compare
-without complaint. It propagates: `Exchange` assigns that difference to
+is silent -- it never raises -- and the reason is worth stating precisely,
+because it is a coincidence rather than a design. Every operation the corrupted
+value flows through happens to be numpy-compatible: `askprice - bidprice` is
+`np.float64 - list`, which broadcasts to `array([0.03])`; `np.round(bidprice, 2)`
+gives `array([99.98])`; and `self.bidprice + self.ticksize`
+(`Exchange.py:299`, validating a bid in-spread order) is `list + np.float64`,
+which also broadcasts. Size-1 arrays are truthy, so every downstream guard
+still works. Had `ticksize` been a plain Python float rather than
+`np.float64`, that last one would be list concatenation and would raise
+`TypeError` -- so the silence is one type-declaration away from a crash.
+
+It propagates: `Exchange` assigns `askprice - bidprice` to
 `Arrival_model.spread`, which the generator uses to scale the in-spread
-intensities.
+intensities. But it scales dimensions 5 and 6 identically, so the array-ness
+alone does not obviously produce a SIDE bias, and this defect is therefore not
+yet established as the source of the `lo_deep` excess. It is a genuine Ask/Bid
+asymmetry in the code and should be fixed regardless.
 
 These tests DOCUMENT current behaviour rather than assert the fix, because 15
 training jobs are mid-flight against this simulator and changing it would break
@@ -101,9 +113,9 @@ def _bid_branch_should_leave_bidprice_a_scalar():
 
 
 def test_the_list_silently_turns_the_spread_into_an_array():
-    """The reason this is not caught at runtime: it does not raise. The spread
-    becomes a 1-element array, which is truthy, roundable and comparable, and
-    Exchange assigns it to Arrival_model.spread."""
+    """One consequence is silent: the spread becomes a 1-element array, which is
+    truthy, roundable and comparable, and Exchange assigns it straight to
+    Arrival_model.spread."""
     e = _deplete("Bid_L1")
     e.regeneratequeuedepletion()
     spread = e.askprice - e.bidprice
@@ -135,6 +147,26 @@ def test_l2_branches_are_symmetric():
     e = _deplete("Ask_L2")
     e.regeneratequeuedepletion()
     assert not isinstance(e.bidprice, list)
+
+
+def test_the_bid_inspread_path_is_silent_only_because_ticksize_is_numpy():
+    """Exchange.py:299 validates a bid in-spread order with
+    `self.bidprice + self.ticksize`. With the list on the left of the `+` that
+    would be list concatenation and would raise -- but `ticksize` is
+    `np.float64`, so numpy broadcasts instead and it returns an array. The
+    defect is silent by coincidence of types, one declaration away from a
+    crash."""
+    e = _deplete("Bid_L1")
+    e.regeneratequeuedepletion()
+    out = e.bidprice + e.ticksize          # list + np.float64 -> broadcasts
+    assert isinstance(out, np.ndarray), type(out)
+    # ...but only because ticksize is a numpy scalar. With a Python float this
+    # is list concatenation and raises, which is the fragility worth pinning.
+    try:
+        e.bidprice + float(e.ticksize)
+    except TypeError:
+        return
+    raise AssertionError("list + python float no longer raises; re-derive this note")
 
 
 if __name__ == "__main__":
