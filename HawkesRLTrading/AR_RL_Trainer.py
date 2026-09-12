@@ -798,16 +798,21 @@ for episode in range(N_EPISODES):
     plt.savefig(log_dir + label+'_policy.png')
     episodic_rewards = []
     r=0
-    tmp = agent.trajectory_buffer[0][0]
-    for ij in agent.trajectory_buffer:
-        if ij[0] == tmp:
-            r+=ij[1][3]
-        else:
-            episodic_rewards.append(r)
-            r = ij[1][3]
-            tmp=ij[0]
-    avgEpisodicRewards.append(np.mean(episodic_rewards[-4:]))
-    stdEpisodicRewards.append(np.std(episodic_rewards[-4:]))
+    # The control arm (RL_DISABLED) stores no transitions, so the buffer is
+    # empty and there are no episodic rewards to summarise. Guard rather than
+    # crash: this block is reporting only, and the criterion-3 numbers the
+    # control exists for are already written to episode_metrics.
+    if len(agent.trajectory_buffer) > 0:
+        tmp = agent.trajectory_buffer[0][0]
+        for ij in agent.trajectory_buffer:
+            if ij[0] == tmp:
+                r+=ij[1][3]
+            else:
+                episodic_rewards.append(r)
+                r = ij[1][3]
+                tmp=ij[0]
+    avgEpisodicRewards.append(np.mean(episodic_rewards[-4:]) if episodic_rewards else np.nan)
+    stdEpisodicRewards.append(np.std(episodic_rewards[-4:]) if episodic_rewards else np.nan)
     finalcash.append(cashs[(RLagentID)][-1] + inventories[(RLagentID)][-1]*agent.mid )
     pft = np.array(finalcash) - j["cash"]
     ma = np.convolve(pft, np.ones(5)/5, mode='valid')

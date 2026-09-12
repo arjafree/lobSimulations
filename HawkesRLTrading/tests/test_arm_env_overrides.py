@@ -104,6 +104,23 @@ def test_control_arm_does_not_train():
     assert "if (not RL_DISABLED) and ('test' not in label)" in src
 
 
+def test_reporting_survives_an_empty_trajectory_buffer():
+    """The control arm stores no transitions, so every per-episode reporting
+    path that indexes the buffer must be guarded. An unguarded
+    `agent.trajectory_buffer[0][0]` crashed the first control run at the end of
+    its first episode."""
+    src = open(TRAINER).read()
+    i = src.index("episodic_rewards = []")
+    block = src[i:i + 900]
+    assert "if len(agent.trajectory_buffer) > 0:" in block, \
+        "trajectory_buffer is indexed without a length check"
+    j = block.index("if len(agent.trajectory_buffer) > 0:")
+    k = block.index("agent.trajectory_buffer[0][0]")
+    assert j < k, "the length check must precede the indexing"
+    assert "if episodic_rewards else np.nan" in block, \
+        "np.mean/np.std over an empty episodic_rewards list"
+
+
 def test_gae_lambda_only_arm_is_reachable():
     v = _evaluate({"EXPLORATION_BONUS": "0"})
     assert v["EXPLORATION_BONUS"] == 0.0, v
