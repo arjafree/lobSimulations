@@ -1,22 +1,59 @@
 # Handoff — why no agent meets the three criteria, and what is now running
 
-Written 2026-09-12 (second session that day). Repo `arjafree/lobSimulations`,
-branch `trying_to_avoid_localoptima`. Supersedes the earlier 2026-09-12 handoff,
-whose §1 (simulator fixes) and §4 (prior ablation) still stand and are preserved
-below in condensed form. §2's "which arm are the six runs on" question is
-settled: they are the gae_lambda arm, they were left running, and the combined
-arm is now running alongside them.
+Written 2026-09-13. Repo `arjafree/lobSimulations`, branch
+`trying_to_avoid_localoptima`. Supersedes the two 2026-09-12 handoffs, whose
+simulator fixes and prior-ablation notes are preserved condensed in §8. The
+"which arm are the six runs on" question is settled: they were the gae_lambda
+arm; three are now killed (§6) and the combined arm runs alongside the survivor.
 
 ---
 
-# 0. THE GOAL (unchanged)
+# 0. THE THREE HARD GATES
 
-An RL agent that satisfies **all three**:
+The user's instruction is explicit: **treat these as hard gates, not as goals to
+optimise toward.** An agent passes only if it clears **all three**. Two out of
+three is a failure, and a run that clears two is not "nearly there" — it is a
+run that has not passed.
 
-1. **Front-runs correctly.** TWAP buying → agent long ahead of it. TWAP selling
-   → agent short ahead of it.
-2. **Stays profitable when TWAP is absent.**
-3. **Increases the TWAP's transaction costs when present.**
+| # | Gate | How it is measured | Status |
+|---|---|---|---|
+| **1** | **Front-runs correctly.** TWAP buying → agent goes **long** ahead of it; TWAP selling → **short**. | **Side contrast** within one alternating-side run: mean(response \| buy) − mean(response \| sell), where response is in-window level minus **PRE-window** level. Must be positive and clear its CI. | **FAILED on every run to date.** `buy_base` −4.01 [−5.58,−2.45] (wrong sign, significant); `sell_base` +1.10 [−0.12,+2.32] (wrong sign, not significant). |
+| **2** | **Stays profitable when TWAP is absent.** | Mean terminal PnL over **TWAP-absent episodes only**. Must be > 0 and clear its CI. | **FAILED.** Every arm ever run lands at PnL ≈ 0 (±0.2 per episode). |
+| **3** | **Increases the TWAP's transaction costs when present.** | **Paired** per-episode slippage in bps against an `RL_DISABLED` control on matched seeds. Must be positive and clear its CI. | **NEVER TESTED before this session.** The denominator did not exist. `ctl_n`/`ctl_f` are now producing it. |
+
+Three things follow from treating these as gates, and all three have been
+violated at some point in this project's history:
+
+* **A gate that has never been measured is not passed, it is unknown.** Gate 3
+  was reported as an open question for months while the code could not compute
+  it at all (`start_midprices` was assigned but never appended, so the slippage
+  denominator never reached disk).
+* **A gate needs a metric that can fail.** Gate 1 was assessed for two sessions
+  with metrics that could not distinguish front-running from a standing
+  directional position (§1). A metric that returns "correct" for the wrong
+  reason is worse than no metric.
+* **Do not relax a gate to make it reachable.** The meta-order can be made
+  larger or faster, which raises the prize and makes gate 1 easier to detect
+  (§7.7). §2a shows this is **not necessary** — the signal is already above the
+  noise floor — so it is a question about what market is being modelled, for the
+  user, not a knob to turn when results disappoint.
+
+## 0b. Standing instructions from the user
+
+* **Extensive work goes on the cluster, never local.** Local is for analysis of
+  copied-down artefacts and for unit tests only. (Violated twice this session:
+  two local sim runs were killed by the laptop's OOM killer.)
+* **`expApprox` is allowed for speed, but never alone** — always run the normal
+  regime alongside. It is a different simulator regime (TAU 10 vs 500), so fast
+  and normal results must never be mixed in one comparison. Every arm in §6
+  that has a fast variant also has a normal one.
+* **GAE and the exploration bonus should both be ON** in the arms under test.
+  They are: `EXPLORATION_BONUS` defaults to 0.1 and `GAE_LAMBDA` to 0.95.
+* **Investigate live results while models are training** — hence the
+  per-episode `episode_metrics_<label>.json` (§5), which exists because nothing
+  before it could be read until a run completed.
+* **Other approaches are in scope.** The plan is not fixed and has been wrong
+  before.
 
 ---
 
@@ -340,70 +377,106 @@ which is how they all silently ran on the wrong arm.
 
 ---
 
-# 6. WHAT IS RUNNING (2026-09-12, 19 jobs)
+# 6. WHAT IS RUNNING (2026-09-13, 12 jobs, all started)
 
-Config travels in each `trainer.sh` env block; runs cannot cross-contaminate.
-All use `SEED_MODE=vary SEED_BASE=1000`, so **runs pair episode-by-episode**.
+Config travels in each `trainer.sh` env block. All use `SEED_MODE=vary
+SEED_BASE=1000`, so runs pair episode-by-episode with each other and with the
+control.
 
-**Pre-existing, gae_lambda arm (`exploration_bonus=0`), left alone:**
-`dfx_bot_b` (both_base), `dfx_buy_o`, `dfx_sel_o`, `dfx_bot_o`.
+| dir | job | regime | eps | what it isolates |
+|---|---|---|---|---|
+| `pnl_scaled/full_space` | `ps_fs` | normal | 120 | all shaping at the PnL scale, 12-action space |
+| `pnl_scaled/legacy_space` | `ps_ls` | normal | 120 | same reward, 4-action space — isolates the action space from the reward scale |
+| `pnl_scaled/all_scaled` | `ps_as` | normal | 120 | exploration also scaled to 3e-3 |
+| `pnl_scaled/full_fast` | `ps_ff` | expApprox | 160 | fast counterpart of `ps_fs` |
+| `pnl_scaled/all_scaled_fast` | `ps_af` | expApprox | 160 | fast counterpart of `ps_as` |
+| `pnl_scaled/no_cem_fast` | `ps_nc` | expApprox | 160 | CEM off |
+| `reward_scale/bonus` | `rw_b` | normal | 120 | action bonus only, legacy action space |
+| `explo_gae_dfx/both_onoff` | `eg_bot_o` | normal | 160 | the combined arm at HISTORICAL shaping — the control for "the shaping fix caused it" |
+| `explo_gae_dfx/both_onoff_fast` | `eg_bot_f` | expApprox | 160 | fast counterpart |
+| `twap_alone_control/normal` | `ctl_n` | normal | 60 | criterion-3 denominator |
+| `twap_alone_control/fast` | `ctl_f` | expApprox | 90 | criterion-3 denominator |
+| `drift_fixed/both_onoff` | `dfx_bot_o` | normal | 160 | the 2026-09-07 gae_lambda arm, 83+ eps in |
 
-**`explo_gae_dfx/` — the combined arm the plan always called for** (bonus=0.1):
-`eg_buy`, `eg_sell` (single-side, 80 eps, pair with `buy_base`/`sell_base`),
-`eg_bot_o` (alternate 2on/1off, 160), `eg_bot_f` (same, expApprox), `eg_smoke`.
+**Three of the 2026-09-07 runs were killed** (`both_base` 75 eps, `buy_onoff`
+76, `sell_onoff` 86) to free GPU slots. Their data was unusable for criterion 1
+regardless: `both_base` is on the period-2 side schedule, so its contrast is
+confounded with training phase and **unreadable even if it had finished**; the
+other two are single-side, so they cannot produce a contrast at all.
+`dfx_bot_o` was **kept** — it is period-3, alternating, and therefore the only
+old-shaping run that can give a valid side contrast.
 
-**`reward_scale/` — action bonus at the PnL scale:**
-`rw_b` (bonus=1e-3, 120 eps, normal), `rw_bf` (fast), `rw_bif` (fast, with the
-**56×-too-strong** 1e-4 inventory penalty — kept deliberately as an
-"inventory crushed" contrast, do not read it as the intended arm).
+**Killing a run mid-flight destroys its criterion-1 data.** `inventordists_*`
+is written only on completion. `episode_metrics_<label>.json` is per-episode and
+survives, but the runs launched on 2026-09-07 predate it.
 
-**`pnl_scaled/` — every shaping term at the prize's scale** (bonus 1e-3,
-running 2e-7, terminal 1.2e-3):
-`ps_ls` (legacy 4-action space, 120 eps, normal — isolates reward scaling from
-the action-space change), `ps_fs` (full 12-action space + symmetric gating,
-120 eps, normal), `ps_ff` (same, fast), `ps_af` (same but exploration also
-scaled to 3e-3 — tests whether exploration survives being put in dollar units),
-`ps_as` (the same all-scaled arm in the normal regime, 120 eps — added once it
-became clear the exploration bonus, not the action bonus, is the term that most
-directly breaks criterion 1, so it deserves a full-regime run).
-
-**`twap_alone_control/` — the criterion-3 denominator:** `ctl_n` (60 eps,
-normal), `ctl_f` (90 eps, fast). `RL_DISABLED=true`.
-
-Four jobs launched earlier this session were retired with `qdel` (7380749,
-7380752, 7380770, 7380771): they carried `RUNNING_INVPENALTY=1e-4` before that
-was recognised as 56× the prize. `pnl_scaled/` replaces them.
-
-Timings: expApprox=False ≈ 4,200–6,300 s/episode; expApprox=True ≈ 550 s/episode
-(~9 min) but a **different simulator regime** (TAU 10 vs 500) — fast iteration
-only, never mix the two in one comparison.
-
----
+Timings, measured: expApprox ≈ 500 s/episode (8 min); normal ≈ 3,800 s/episode
+(63 min), against 4,850–5,000 s on the two finished 2026-09-07 runs. So a fast
+arm is ~22 h and a normal arm ~5.3 days of compute. Criterion 1 needs roughly
+80 episodes before the side contrast clears noise, and 2-on/1-off gives only a
+third of episodes per side.
 
 # 7. WHAT TO DO NEXT
 
-1. **Wait for the side contrast.** `eg_bot_f`, `ps_ff`, `ps_af` are the fast
-   alternating runs and will have ~40 TWAP-present episodes within a day.
-   Criterion 1 is decided by whether the contrast becomes positive and
-   significant. Nothing before that is evidence.
-2. **`ps_fs` vs `ps_ls`** isolates whether the action space or the reward scale
-   is the binding constraint. If `ps_ls` (passive-only, scaled reward) still
-   shows no contrast, §3a is confirmed as the obstacle.
-3. **`ps_af` vs `ps_ff`** says whether the exploration bonus can be put in
-   dollar units without exploration collapsing. If `ps_af` degenerates to
-   no-op, the intrinsic reward is load-bearing and needs decaying rather than
-   shrinking, or reward normalisation instead.
-4. **Criterion 3 needs `ctl_n`/`ctl_f` finished** before any slippage number
-   means anything. Do not compare against the paper's 7.05/10.36.
-5. **Re-examine the prior ablation's arm conclusions (§8).** They rest on
-   single-side runs and therefore on the metric §1 shows is ~90% confound.
-6. Ask the user whether "no shorting via market order" (§3b) is intended.
-7. **Optional, a research-design question for the user, not an implementation
-   detail:** the meta-order is 150 shares over 150 s. Making it larger or more
-   aggressive (e.g. same size over 50 s) raises its price impact and therefore
-   the prize, improving SNR roughly with impact. §2a says this is not *needed*,
-   so it should be a deliberate choice about what market is being studied rather
-   than a knob turned to make training easier.
+Ordered by which gate they decide. **Nothing here is evidence until the run it
+depends on has enough episodes** — roughly 80 for a side contrast, and 2-on/1-off
+gives only a third of episodes per side.
+
+**Gate 1 — front-running**
+
+1. **Read the side contrast on the fast alternating arms** (`eg_bot_f`, `ps_ff`,
+   `ps_af`) as they accumulate, then confirm on their normal-regime twins
+   (`eg_bot_o`, `ps_fs`, `ps_as`). Fast alone decides nothing — different
+   simulator regime.
+2. **`ps_fs` vs `ps_ls`** isolates the binding constraint: 12-action space vs
+   4-action space at identical reward scaling. If `ps_ls` (passive-only) still
+   shows no contrast, §3a is confirmed — the agent cannot take a position, so no
+   amount of reward shaping will produce front-running.
+3. **`eg_bot_o` vs `ps_fs`** is the control for "the shaping fix caused it":
+   same alternating schedule, historical shaping vs PnL-scaled.
+
+**Gate 2 — standalone profitability**
+
+4. **`ps_nc` vs `ps_ff`** says whether CEM helps or injects variance. Related:
+   the PnL-scaled arms are running with `CEM_ELITE_FLOOR=0`, and §8's CEM notes
+   argue they need it set — that is a gap I left open, and one floor arm would
+   close it.
+5. **`ps_af` vs `ps_ff`** says whether the exploration bonus survives being put
+   in dollar units. If `ps_af` degenerates to no-op, the intrinsic reward is
+   load-bearing and needs *decaying* rather than shrinking.
+
+**Gate 3 — TWAP cost**
+
+6. **Wait for `ctl_n`/`ctl_f`**, then use `criteria_report.py --control`, which
+   pairs on **seed**. Do not compare against the paper's 7.05/10.36 — different
+   setup. Unpaired CIs are wide and are not the intended comparison.
+7. **Free bonus from the control:** with no agent at all, the TWAP's buy and
+   sell slippage should match. If they do not at n≈100, that is an
+   exchange-side asymmetry with the excitation on — better powered than the
+   kernels-nulled event-count route.
+
+**Blocked on the user**
+
+8. **Breach-step deletion (§8, new issue 3).** Confirmed and measured;
+   `buy_base`'s at-limit fraction grows 0.015 → 0.089 while its inventory
+   diverges. The fix touches reward attribution that the supervisor has marked
+   by-design, so it was not changed. Three options are listed there.
+9. **Is `inv < 1` (no shorting via market order) intended?** It makes gate 1's
+   sell side structurally harder than its buy side.
+10. **Meta-order size/duration** — 150 shares over 150 s. Larger or faster
+    raises the prize and the SNR. §2a says it is not needed; it is a question
+    about the market being modelled, not a training knob.
+
+**Abandoned, deliberately**
+
+* **How often `regeneratequeuedepletion`'s bid branch fires: UNMEASURED.** Four
+  attempts, all failed — local OOM, then `MemoryError` on a 1.1 kB allocation at
+  8G, at 32G, and with BLAS threads pinned. The last is unexplained. It decides
+  only whether a dead-code branch is dead, on a line already dropped, and the
+  defect's status (`Exchange.py:588`, real, unfixed, pinned in tests) is the
+  same either way. Do not restart it without a reason better than tidiness.
+* **The exchange-side asymmetry hunt**, and **the generator-attribution
+  re-test** — both closed, see §8.
 
 ---
 
@@ -724,6 +797,45 @@ untracked and intentionally left alone: `.gitignore`, `CLAUDE.md`,
 
 ---
 
+# 8b. TOOLING AND BOOKKEEPING (2026-09-13)
+
+A second independent audit reviewed this session's own infrastructure diff and
+found seven defects in it. Two were corrupting data as it was written:
+
+* `frac_at_inventory_limit` was computed from pre + in-window + post. Nothing
+  populates the in-window list on a TWAP-**absent** episode, and the pre/post
+  split is `t <= 250` / `t >= 400`, so the (250,400) stretch — a third of every
+  absent episode — was dropped. Now `inventory_without_twap + _inw`, which is
+  the complete episode either way. **The breach-step numbers in §8 are
+  unaffected**: they were computed from the raw arrays of `buy_base`/`sell_base`,
+  which have the TWAP present every episode.
+* `CEM_N_ELITES` defaulted to a flat 6, silently raising every single-regime arm
+  from the legacy 5. Default is now legacy-preserving: 6 multi-regime, 5 single.
+
+Four more in the resume path, and one in the analysis tool: `RESUME_EPOCH=-1`
+resolved to `START_EPISODE=0` and redid the whole run; `load_models` picked an
+arbitrary run when two shared a label, and its label filter was a suffix match
+(`base` also matched `sell_base`); its failure paths returned a list where
+success returns a dict, so a bad timestamp raised `TypeError` rather than
+anything diagnosable; a resumed run's tail `.npy` files would have overwritten
+the original's; and `criteria_report.py`'s control pairing keyed on episode
+index rather than **seed**, which silently compares different market paths.
+All fixed in `6b196cc`.
+
+**Resume now works** (`RESUME_EPOCH`, `RESUME_TIMESTAMP`, `START_EPISODE`,
+default 0 = unchanged). It restores weights and the episode index, so seeds, the
+TWAP cycle, side alternation and the training/CEM cadences continue in phase. It
+does **not** restore the trajectory buffer, the visit counter, or the in-memory
+arrays behind the end-of-run `.npy` files. Prefer it to a cold restart.
+
+**Per-episode inventory-distribution plots are back.** `graphInventories` had
+been dead code since `1f6f7f5` — the call was dropped, the function left behind.
+`DIST_PLOT_EVERY` (default 1) and `TRAJ_PLOT_EVERY` (default 4) now control the
+two plot cadences independently; the trajectory plot used to be nested in the
+`episode % 4 == 0` checkpoint block.
+
+---
+
 # 9. MY ERRORS THIS SESSION
 
 **(a) I launched five jobs with `RUNNING_INVPENALTY=1e-4` before working out
@@ -735,6 +847,19 @@ out the scale of a reward term before choosing it, not after.
 **(b) I first estimated the front-running prize at $2.50 by reading the TWAP's
 starting inventory (500) as its order size.** It is 150 shares, so the prize is
 $0.75 and every ratio in §2 is ~3× worse than I first wrote.
+
+**(c) The side-contrast numbers in §1b are read off plots, not computed.** The
+alternating runs only write `inventorydists_*` on completion, so the numerical
+contrast for `both_base`/`both_onoff` is not available until they finish. The
+correlation analysis in §1a *is* computed, on finished runs, and is the stronger
+evidence. New runs write the numbers from episode 1.
+
+**(d) I reported a correlation as evidence for a claim it cannot support.**
+r=0.936/0.961 between in-window and out-of-window level does not show the level
+is "90% bias" — a constant bias has zero variance and is invisible to a
+correlation. An independent reviewer caught it. The conclusion survives on
+different and simpler evidence (§1a), but the statistic was the wrong one and I
+presented it as the headline.
 
 **(e) I published a rejection of the drift study's attribution three times, in
 three different wrong units, and the correct answer is that nothing is
@@ -761,15 +886,30 @@ which was an artifact of (e). The two defects it turned up (§8, exchange
 issues) are real and worth recording, but the campaign was not justified by the
 evidence I had, and I started it before the unit question was settled.
 
-**(d) I reported a correlation as evidence for a claim it cannot support.**
-r=0.936/0.961 between in-window and out-of-window level does not show the level
-is "90% bias" — a constant bias has zero variance and is invisible to a
-correlation. An independent reviewer caught it. The conclusion survives on
-different and simpler evidence (§1a), but the statistic was the wrong one and I
-presented it as the headline.
+**(g) I "fixed" a convention I had not checked, and broke a working call path.**
+I appended `self.label` to the checkpoint path in `ModelManager.load_models`,
+believing it was missing. It was not: callers pass the timestamp with the label
+already concatenated (`AR_RL_runner.py:44`). My change produced a double-label
+filename that would have broken every checkpoint load the runner does.
+Reverted, with the convention now written at the line.
 
-**(c) The side-contrast numbers in §1b are read off plots, not computed.** The
-alternating runs only write `inventorydists_*` on completion, so the numerical
-contrast for `both_base`/`both_onoff` is not available until they finish. The
-correlation analysis in §1a *is* computed, on finished runs, and is the stronger
-evidence. New runs write the numbers from episode 1.
+**(h) I invented a resume bug and then took credit for fixing it.** I claimed
+`if episode == 0:` never fires on a resume, so the networks would never be
+built. It fires fine — the established workflow restarts the loop at 0 with
+weights loaded and renames the outputs. That failure mode exists only because I
+changed the loop start.
+
+**(i) I spent four attempts on a measurement I had already decided was
+secondary.** Counting how often `regeneratequeuedepletion`'s bid branch fires
+failed on local memory, then 8G, then 32G, then with BLAS threads pinned. Each
+diagnosis was wrong and the last one is still unexplained. **Recorded as
+UNMEASURED and abandoned** — it decides only whether a dead-code branch is dead,
+on a line already dropped, and the defect's status is unchanged either way.
+
+**(j) Six of my tests were theatre, and a second audit had to tell me.** They
+asserted on source text rather than behaviour, compared a generator expression
+to a for-loop written in the same test, asserted `150==150==150` on their own
+literals, and one papered over the list-vs-dict return bug it was supposedly
+testing. Rewritten behaviourally. Several source-text tests remain
+(`test_action_space.py`, `test_schedule_aliasing.py`, `test_plot_cadence.py`) —
+treat them as documentation, not as guards.
