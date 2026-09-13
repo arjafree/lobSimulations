@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
 import json
+import re
 from datetime import datetime
 import os
 from collections import OrderedDict
@@ -238,23 +239,41 @@ class ModelManager:
         """
         # Find latest model if timestamp not provided
         if timestamp is None:
-            # List all metadata files and find the latest one
-            meta_files = [f for f in os.listdir(self.model_dir) if f.startswith("model_metadata")]
+            # Only this label's checkpoints, or a shared model_dir returns
+            # another run's weights.
+            tail = f"_{self.label}.json"
+            meta_files = [f for f in os.listdir(self.model_dir)
+                          if f.startswith("model_metadata") and f.endswith(tail)]
             if not meta_files:
                 print("No saved models found.")
                 return [None]*len(models.keys())
 
-            # Get the latest timestamp
-            meta_files.sort(reverse=True)
-            latest_meta = meta_files[0]
+            def _epoch_of(fname):
+                """Sort by epoch NUMERICALLY. A reverse string sort puts
+                `_epoch_8_` ahead of `_epoch_76_`, so the old code silently
+                loaded epoch 8 of an 80-episode run."""
+                m = re.search(r"model_metadata_epoch_(\d+)_", fname)
+                if m:
+                    return int(m.group(1))
+                return float("inf") if "_final_" in fname else -1
+
+            if epoch >= 0:
+                wanted = [f for f in meta_files if _epoch_of(f) == epoch]
+                if not wanted:
+                    print(f"No saved model for epoch {epoch}.")
+                    return [None]*len(models.keys())
+                latest_meta = wanted[0]
+            else:
+                latest_meta = max(meta_files, key=_epoch_of)
             meta_path = os.path.join(self.model_dir, latest_meta)
         else:
-            # Use specified timestamp
+            # Use specified timestamp. The label is part of the name that
+            # save_models writes, so it must be part of the name we look for --
+            # without it this raised FileNotFoundError for every labelled run.
             suffix = f"_epoch_{epoch}" if epoch >= 0 else "_final"
             meta_path = os.path.join(
                 self.model_dir,
-                f"model_metadata{suffix}_{timestamp}.json"
-                # f"models\\model_metadata{suffix}_{timestamp}.json"
+                f"model_metadata{suffix}_{timestamp}_{self.label}.json"
             )
 
         # Load metadata

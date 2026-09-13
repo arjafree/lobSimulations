@@ -148,6 +148,29 @@ CEM_N_ELITES = int(os.environ.get("CEM_N_ELITES", 6))
 DIST_PLOT_EVERY = int(os.environ.get("DIST_PLOT_EVERY", 1))
 TRAJ_PLOT_EVERY = int(os.environ.get("TRAJ_PLOT_EVERY", 4))
 
+# --- Resume. Models are checkpointed every 4 episodes, but nothing wired that
+# to a restart: `checkpoint_params` was hardcoded to None, so a job could not
+# ask to resume, and even with weights loaded the loop still ran
+# `range(N_EPISODES)` from 0 and redid every episode.
+#   RESUME_EPOCH: the checkpoint epoch to load. -1 = the final save.
+#   RESUME_TIMESTAMP: which run's checkpoints. Unset = the newest for this
+#     label in RUN_MODEL_DIR.
+#   START_EPISODE: where the loop restarts. Defaults to RESUME_EPOCH + 1.
+# What resume DOES restore: the d and u network weights, and the episode index,
+# so seeds (SEED_BASE + episode), the TWAP presence cycle, the buy/sell
+# alternation and the training/CEM cadences all continue in phase.
+# What it does NOT restore: the trajectory buffer, the exploration visit
+# counter, and the in-memory arrays behind the end-of-run .npy files -- those
+# will cover post-resume episodes only. Weights are the expensive part; the
+# rest is a known and accepted loss.
+_RESUME_EPOCH_RAW = os.environ.get("RESUME_EPOCH")
+RESUME_EPOCH = int(_RESUME_EPOCH_RAW) if _RESUME_EPOCH_RAW not in (None, "") else None
+RESUME_TIMESTAMP = os.environ.get("RESUME_TIMESTAMP") or None
+if RESUME_EPOCH is None:
+    START_EPISODE = int(os.environ.get("START_EPISODE", 0))
+else:
+    START_EPISODE = int(os.environ.get("START_EPISODE", RESUME_EPOCH + 1))
+
 # --- The remaining two shaping terms, for the same reason as ACTION_BONUS.
 # Scale reference, all in dollars per EPISODE (2,483 steps, 677 of them inside
 # the 150s TWAP window), against the economic prize a successful front-run is
@@ -182,7 +205,7 @@ layer_widths=100
 n_layers=3
 eta = 5
 
-checkpoint_params = None
+checkpoint_params = None if RESUME_EPOCH is None else (RESUME_TIMESTAMP, RESUME_EPOCH)
 
 def graphInventories(beforetwap, withtwap_buy, withtwap_sell, episode_num):
     plt.figure(figsize=(12, 8))
@@ -415,6 +438,8 @@ print(f"  use_CEM            = {USE_CEM}", flush=True)
 print(f"  cem_elite_floor    = {CEM_ELITE_FLOOR}", flush=True)
 print(f"  cem_n_elites       = {CEM_N_ELITES}", flush=True)
 print(f"  dist/traj_plot_every = {DIST_PLOT_EVERY}/{TRAJ_PLOT_EVERY}", flush=True)
+print(f"  START_EPISODE      = {START_EPISODE}", flush=True)
+print(f"  resume             = {checkpoint_params}", flush=True)
 print(f"  inventorylimit     = {j['inventorylimit']}", flush=True)
 print("=" * 72, flush=True)
 
@@ -445,7 +470,10 @@ RL_obsv = []
 sides = []
 twap_presents = []
 episode_seeds = []
-n_twap_present = 0
+# Count the TWAP-present episodes we are skipping, so `alternate` resumes on
+# the correct side. Left at 0, a resume would restart the cycle on buy.
+n_twap_present = sum(1 for _e in range(START_EPISODE)
+                     if (_e % (TWAP_ON + TWAP_OFF)) < TWAP_ON)
 
 eps_with_buy = []
 eps_with_sell = []
@@ -464,6 +492,19 @@ episode_inv_trajectories_sell = []
 # TWAP-absent episodes separated from the out-of-window parts of present
 # episodes -- `profit_without_twap` mixes the two and is not a clean readout.
 episode_metrics = []
+if START_EPISODE > 0:
+    # Keep the episodes recorded before the interruption, or the live metrics
+    # file is truncated to the post-resume tail and the run looks like it
+    # started at START_EPISODE.
+    try:
+        import json as _json
+        with open(log_dir + "episode_metrics_" + label + ".json") as _fh:
+            episode_metrics = [e for e in _json.load(_fh).get("episodes", [])
+                               if e.get("episode", 0) < START_EPISODE]
+        print(f"resume: kept {len(episode_metrics)} episode metrics from before "
+              f"episode {START_EPISODE}", flush=True)
+    except (IOError, OSError, ValueError) as _e:
+        print(f"resume: no prior episode metrics to keep ({_e})", flush=True)
 
 
 def _save_episode_metrics():
@@ -513,7 +554,7 @@ def _twap_slippage_bps(side, twap_final_cash, executed, start_mid):
     return ((1000000 - twap_final_cash) - benchmark) * 10000 / benchmark
 
 
-for episode in range(N_EPISODES):
+for episode in range(START_EPISODE, N_EPISODES):
     inventory_with_twap_buy = []
     inventory_with_twap_sell = []
     inventory_without_twap = []
@@ -566,7 +607,7 @@ for episode in range(N_EPISODES):
     AgentsIDs=[k for k,v in Simstate["Infos"].items() if v==True]
     agents:List[GymTradingAgent] = [env.getAgent(ID=agentid) for agentid in AgentsIDs]
     observationsDict:Dict[int, Dict] = {agentid: {"Inventory": agent.Inventory, "Positions": []} for agent, agentid in zip(agents, AgentsIDs)}
-    if episode == 0:
+    if episode == START_EPISODE:
         for agent in agents:
             if isinstance(agent, PPOAgent):
                 agent.setupNNs(observations)
