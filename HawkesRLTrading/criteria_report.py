@@ -180,11 +180,15 @@ def report(d, last=None, control=None):
         sl = [e["twap_slippage_bps"] for e in grp]
         line = "     %-4s n=%-3d %s" % (name, len(grp), _fmt(_mean(sl), _stderr(sl)))
         if control is not None:
-            cmap = {e["episode"]: e["twap_slippage_bps"] for e in control["episodes"]
-                    if e["twap_present"] and e["side"] == name}
-            pairs = [(e["twap_slippage_bps"], cmap[e["episode"]]) for e in grp
-                     if e["episode"] in cmap and e["twap_slippage_bps"] is not None
-                     and cmap[e["episode"]] is not None]
+            # Pair on SEED, not episode index. Episode index only lines up if
+            # both runs used the same seed base, side mode and presence cycle;
+            # pairing on it blindly would silently compare different market
+            # paths and call the difference an effect of the agent.
+            cmap = {e.get("seed"): e["twap_slippage_bps"] for e in control["episodes"]
+                    if e["twap_present"] and e["side"] == name and e.get("seed") is not None}
+            pairs = [(e["twap_slippage_bps"], cmap[e.get("seed")]) for e in grp
+                     if e.get("seed") in cmap and e["twap_slippage_bps"] is not None
+                     and cmap[e.get("seed")] is not None]
             if pairs:
                 diffs = [a - b for a, b in pairs]
                 m, se = _mean(diffs), _stderr(diffs)
@@ -195,6 +199,13 @@ def report(d, last=None, control=None):
             else:
                 line += "   (no paired control episodes)"
         print(line)
+    if control is not None:
+        mismatch = [k for k in ("twap_on", "twap_off", "twap_side_mode",
+                                "seed_base", "seed_mode", "expApprox")
+                    if control.get(k) != d.get(k)]
+        if mismatch:
+            print("     !! control differs from this run in: %s" % ", ".join(mismatch))
+            print("        seeds/schedule must match for the pairing to mean anything")
     ex = [e["twap_total_executed"] for e in present]
     print("     twap executed (order=150): %s" % _fmt(_mean(ex), None))
 
@@ -213,6 +224,9 @@ def main():
         paths = find([a.control])
         if not paths:
             raise SystemExit("no episode_metrics_*.json under %s" % a.control)
+        if len(paths) > 1:
+            raise SystemExit("--control matched %d metrics files; name one:\n  %s"
+                             % (len(paths), "\n  ".join(paths)))
         control = load(paths[0])
         if not control.get("rl_disabled"):
             raise SystemExit("control run %s was NOT produced with RL_DISABLED=true; "

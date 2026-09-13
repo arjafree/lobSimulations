@@ -241,30 +241,33 @@ class ModelManager:
         if timestamp is None:
             # Only this label's checkpoints, or a shared model_dir returns
             # another run's weights.
-            tail = f"_{self.label}.json"
-            meta_files = [f for f in os.listdir(self.model_dir)
-                          if f.startswith("model_metadata") and f.endswith(tail)]
+            # Exact label match. `endswith(f"_{label}.json")` is a SUFFIX test,
+            # so label "base" also matches "..._sell_base.json".
+            pat = re.compile(r"^model_metadata_(?:epoch_(\d+)|final)_(\d{8}_\d{6})_"
+                             + re.escape(self.label) + r"\.json$")
+            meta_files = [f for f in os.listdir(self.model_dir) if pat.match(f)]
             if not meta_files:
-                print("No saved models found.")
-                return [None]*len(models.keys())
+                print(f"No saved models found for label {self.label!r} in {self.model_dir}.")
+                return {k: None for k in models}
 
-            def _epoch_of(fname):
-                """Sort by epoch NUMERICALLY. A reverse string sort puts
-                `_epoch_8_` ahead of `_epoch_76_`, so the old code silently
-                loaded epoch 8 of an 80-episode run."""
-                m = re.search(r"model_metadata_epoch_(\d+)_", fname)
-                if m:
-                    return int(m.group(1))
-                return float("inf") if "_final_" in fname else -1
+            def _key(fname):
+                """Order by (epoch, timestamp), both NUMERICALLY. A reverse
+                string sort puts `_epoch_8_` ahead of `_epoch_76_`, so the old
+                code silently loaded epoch 8 of an 80-episode run."""
+                m = pat.match(fname)
+                ep = float("inf") if m.group(1) is None else int(m.group(1))
+                return (ep, m.group(2))
 
             if epoch >= 0:
-                wanted = [f for f in meta_files if _epoch_of(f) == epoch]
+                wanted = [f for f in meta_files if _key(f)[0] == epoch]
                 if not wanted:
-                    print(f"No saved model for epoch {epoch}.")
-                    return [None]*len(models.keys())
-                latest_meta = wanted[0]
+                    print(f"No saved model for epoch {epoch} of label "
+                          f"{self.label!r} in {self.model_dir}.")
+                    return {k: None for k in models}
+                # newest RUN at that epoch, not an arbitrary listdir order
+                latest_meta = max(wanted, key=_key)
             else:
-                latest_meta = max(meta_files, key=_epoch_of)
+                latest_meta = max(meta_files, key=_key)
             meta_path = os.path.join(self.model_dir, latest_meta)
         else:
             # Use specified timestamp. By convention the caller passes the
@@ -330,10 +333,10 @@ class ModelManager:
 
         except FileNotFoundError:
             print(f"Model files not found at {meta_path}")
-            return [None]*len(models.keys())
+            return {k: None for k in models}
         except Exception as e:
             print(f"Error loading models: {e}")
-            return [None]*len(models.keys())
+            return {k: None for k in models}
 
 def get_gpu_specs():
     """Print detailed information about available CUDA devices in PyTorch."""

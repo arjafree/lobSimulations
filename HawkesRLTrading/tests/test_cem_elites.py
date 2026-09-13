@@ -25,7 +25,7 @@ K = 10
 class _Stub(PPOAgent):
     """Only the elite-selection branch is exercised."""
 
-    def __init__(self, buffer, sides, full_episode=True, floor=0.0, n_elites=6):
+    def __init__(self, buffer, sides, full_episode=True, floor=0.0, n_elites=None):
         self.trajectory_buffer = buffer
         self.episode_sides = sides
         self.cem_full_episode = full_episode
@@ -48,7 +48,7 @@ def _build(spec):
     return buf, sides
 
 
-def _elites(spec, floor=0.0, n_elites=6):
+def _elites(spec, floor=0.0, n_elites=None):
     buf, sides = _build(spec)
     res = _Stub(buf, sides, floor=floor, n_elites=n_elites).get_max_contiguous_rewards(K=K)
     return {ep for ep, v in res.items() if v is not None}
@@ -74,11 +74,12 @@ def test_each_regime_gets_its_own_elites():
     assert len({x for x in e if 30 <= x < 40}) == 2, e
 
 
-def test_total_elite_count_is_constant_across_regime_counts():
-    """Per-pool counts would give 9 elites in a three-regime arm, 6 in a
-    two-regime one and 5 in a single-regime one -- so the elite FRACTION of the
-    ~40 buffered episodes, i.e. how hard CEM pulls, would vary with the arm
-    under test and confound it."""
+def test_default_reproduces_the_legacy_elite_counts():
+    """The DEFAULT must not silently change any arm. Legacy was 6 for a
+    multi-regime buffer (top-3 of each of two pools) and 5 for a single-regime
+    one (global top-5). A flat default of 6 would have raised every
+    single-regime arm -- including the default configuration and
+    buy_base/sell_base -- from 5 to 6."""
     three = {}
     for i in range(8):
         three[10 + i] = (1, 100.0 + i)
@@ -88,7 +89,23 @@ def test_total_elite_count_is_constant_across_regime_counts():
     one = {k: v for k, v in three.items() if v[0] == 1}
     assert len(_elites(three)) == 6, _elites(three)
     assert len(_elites(two)) == 6, _elites(two)
-    assert len(_elites(one)) == 6, _elites(one)
+    assert len(_elites(one)) == 5, _elites(one)
+
+
+def test_explicit_total_is_constant_across_regime_counts():
+    """With CEM_N_ELITES set, the count must NOT vary with the regime count --
+    otherwise the elite FRACTION of the ~40 buffered episodes, i.e. how hard
+    CEM pulls, is confounded with the arm under test."""
+    three = {}
+    for i in range(8):
+        three[10 + i] = (1, 100.0 + i)
+        three[20 + i] = (-1, 50.0 + i)
+        three[30 + i] = (0, 1.0 + i)
+    two = {k: v for k, v in three.items() if v[0] != 0}
+    one = {k: v for k, v in three.items() if v[0] == 1}
+    assert len(_elites(three, n_elites=6)) == 6
+    assert len(_elites(two, n_elites=6)) == 6
+    assert len(_elites(one, n_elites=6)) == 6
 
 
 def test_elite_total_is_tunable():
@@ -123,12 +140,12 @@ def test_a_high_scoring_regime_cannot_monopolise_the_elite_set():
 
 def test_single_regime_falls_back_to_global_top_n():
     spec = {i: (1, float(i)) for i in range(9)}
-    assert _elites(spec) == {8, 7, 6, 5, 4, 3}
+    assert _elites(spec) == {8, 7, 6, 5, 4}   # legacy single-regime top-5
 
 
 def test_untagged_buffer_falls_back_to_global_top_n():
     spec = {i: (0, float(i)) for i in range(9)}
-    assert _elites(spec) == {8, 7, 6, 5, 4, 3}
+    assert _elites(spec) == {8, 7, 6, 5, 4}   # legacy single-regime top-5
 
 
 def test_short_episodes_are_ignored():

@@ -1413,7 +1413,7 @@ class PPOAgent(GymTradingAgent):
                  buffer_capacity=10000, batch_size=64, epochs=1000, layer_widths = 128, n_layers = 3, clip_ratio=0.2,
                  value_loss_coef=0.5, entropy_coef=10, max_grad_norm=0.5, gae_lambda=0.95, gamma=0.99, rewardpenalty = 0.1, hidden_activation='leaky_relu',
                  transaction_cost = 0.01, start_trading_lag=0, truncation_enabled=True, action_space_config = 0, include_time = False, alt_state=False, enhance_state=False,
-                 policy_loss_coef = 1, optim_type = 'ADAM',lr=1e-3, exploration_bonus = 0, first_visit_bonus = 0.2, two_sided_reward = True, ablation_params= {}, typeNN = "dense", chunk_length=64, terminal_invpenalty=0, cem_full_episode=False, phase_a_refresh_every=25, action_bonus=0.5, running_invpenalty=0.0, symmetric_mo_gating=False, cem_elite_floor=0.0, cem_n_elites=6):
+                 policy_loss_coef = 1, optim_type = 'ADAM',lr=1e-3, exploration_bonus = 0, first_visit_bonus = 0.2, two_sided_reward = True, ablation_params= {}, typeNN = "dense", chunk_length=64, terminal_invpenalty=0, cem_full_episode=False, phase_a_refresh_every=25, action_bonus=0.5, running_invpenalty=0.0, symmetric_mo_gating=False, cem_elite_floor=0.0, cem_n_elites=None):
         """
         PPO Agent with Generalized Advantage Estimation (GAE)
         Maintains two networks: one for decision (d) and one for utility (u)
@@ -2566,7 +2566,8 @@ class PPOAgent(GymTradingAgent):
                 # would give 5 elites, not 6, whenever one regime is thin --
                 # which is exactly the early-buffer situation.
                 top_eps = set()
-                remaining = self.cem_n_elites
+                # None = legacy multi-regime total (top-3 of each of two pools)
+                remaining = 6 if self.cem_n_elites is None else self.cem_n_elites
                 ordered = sorted(pools, key=len)
                 for i, pool in enumerate(ordered):
                     share = -(-remaining // (len(ordered) - i))   # ceil division
@@ -2576,7 +2577,9 @@ class PPOAgent(GymTradingAgent):
             else:
                 # Single regime (or untagged): global top-N.
                 sorted_eps = sorted(episode_totals, key=episode_totals.get, reverse=True)
-                top_eps = set(sorted_eps[:self.cem_n_elites])
+                # None = legacy single-regime total, which was 5, not 6
+                n = 5 if self.cem_n_elites is None else self.cem_n_elites
+                top_eps = set(sorted_eps[:n])
 
             if self.cem_elite_floor:
                 # `sorted(...)[:3]` returns three episodes regardless of quality.

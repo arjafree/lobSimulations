@@ -135,7 +135,12 @@ CEM_ELITE_FLOOR = float(os.environ.get("CEM_ELITE_FLOOR", 0.0))
 # ~40 episodes the buffer holds, i.e. the strength of the intervention -- depend
 # on how many TWAP regimes an arm has (3 regimes -> 9, 2 -> 6, 1 -> 5), which
 # would confound the very thing under test.
-CEM_N_ELITES = int(os.environ.get("CEM_N_ELITES", 6))
+_CEM_N_ELITES_RAW = os.environ.get("CEM_N_ELITES")
+# None = legacy: 6 when several regimes are present (top-3 of each of two
+# pools, as before), 5 when only one is (the old global top-5). A flat default
+# of 6 would silently raise the single-regime arms -- which includes the
+# default configuration and buy_base/sell_base -- from 5 to 6.
+CEM_N_ELITES = int(_CEM_N_ELITES_RAW) if _CEM_N_ELITES_RAW not in (None, "") else None
 
 # --- Plot cadence. The per-episode inventory-distribution plot
 # (graphInventories) was called at the end of every episode until 1f6f7f5
@@ -166,10 +171,38 @@ TRAJ_PLOT_EVERY = int(os.environ.get("TRAJ_PLOT_EVERY", 4))
 _RESUME_EPOCH_RAW = os.environ.get("RESUME_EPOCH")
 RESUME_EPOCH = int(_RESUME_EPOCH_RAW) if _RESUME_EPOCH_RAW not in (None, "") else None
 RESUME_TIMESTAMP = os.environ.get("RESUME_TIMESTAMP") or None
+def _latest_checkpoint_epoch(mdir, lbl):
+    """Highest epoch checkpointed for this label, or None."""
+    import re as _re
+    try:
+        eps = [int(m.group(1)) for m in
+               (_re.match(r"^model_metadata_epoch_(\d+)_\d{8}_\d{6}_"
+                          + _re.escape(lbl) + r"\.json$", f)
+                for f in os.listdir(mdir)) if m]
+    except (IOError, OSError):
+        return None
+    return max(eps) if eps else None
+
+
 if RESUME_EPOCH is None:
     START_EPISODE = int(os.environ.get("START_EPISODE", 0))
+elif os.environ.get("START_EPISODE") not in (None, ""):
+    START_EPISODE = int(os.environ["START_EPISODE"])
+elif RESUME_EPOCH >= 0:
+    START_EPISODE = RESUME_EPOCH + 1
 else:
-    START_EPISODE = int(os.environ.get("START_EPISODE", RESUME_EPOCH + 1))
+    # RESUME_EPOCH=-1 means "the newest checkpoint". `-1 + 1 == 0` would have
+    # restarted the loop at episode 0 and redone the whole run -- defeating the
+    # resume on the spelling a user is most likely to type. The trainer never
+    # writes a `_final` save, so resolve the real epoch off disk instead.
+    _resolved = _latest_checkpoint_epoch(model_dir, label)
+    if _resolved is None:
+        raise SystemExit(
+            f"RESUME_EPOCH=-1 but no checkpoint found for label {label!r} in "
+            f"{model_dir}. Set START_EPISODE explicitly, or check RUN_MODEL_DIR.")
+    START_EPISODE = _resolved + 1
+    print(f"resume: newest checkpoint for {label!r} is epoch {_resolved}; "
+          f"starting at episode {START_EPISODE}", flush=True)
 
 # --- The remaining two shaping terms, for the same reason as ACTION_BONUS.
 # Scale reference, all in dollars per EPISODE (2,483 steps, 677 of them inside
@@ -613,6 +646,14 @@ for episode in range(START_EPISODE, N_EPISODES):
                 agent.setupNNs(observations)
         if checkpoint_params is not None:
             loaded_models = model_manager.load_models(timestamp=checkpoint_params[0], epoch = checkpoint_params[1], d = agent.Actor_Critic_d, u = agent.Actor_Critic_u)
+            # Fail loudly. A missing checkpoint used to surface as
+            # `TypeError: list indices must be integers`, and assigning None
+            # here would leave the agent with no networks at all.
+            if not isinstance(loaded_models, dict) or loaded_models.get('d') is None \
+                    or loaded_models.get('u') is None:
+                raise SystemExit(
+                    f"resume: could not load checkpoint {checkpoint_params} for "
+                    f"label {label!r} from {model_dir}; got {loaded_models!r}")
             agent.Actor_Critic_d = loaded_models['d']
             agent.Actor_Critic_u = loaded_models['u']
     logger.debug(f"\nSimstate: {Simstate}\nObservations: {observations}\nTermination: {termination}")
@@ -856,10 +897,15 @@ for episode in range(START_EPISODE, N_EPISODES):
         # delayed. Measured on buy_base this grows 0.015 -> 0.089 over training
         # while its inventory level diverges, so it is worth tracking live.
         "frac_at_inventory_limit": (
+            # `inventory_without_twap` holds pre+post on a PRESENT episode and
+            # the WHOLE episode on an absent one, so `without + in_window` is
+            # the complete episode either way. Using pre+in+post instead drops
+            # the (250,400) stretch of every absent episode -- a third of it --
+            # because nothing populates _inw when the meta-order is off.
             float(np.mean(np.abs(np.array(
-                inventory_pre_twap + _inw + inventory_post_twap, dtype=float))
+                inventory_without_twap + _inw, dtype=float))
                 >= j["inventorylimit"]))
-            if (len(inventory_pre_twap) + len(_inw) + len(inventory_post_twap)) else None),
+            if (len(inventory_without_twap) + len(_inw)) else None),
         # Criterion 2: terminal PnL. On a TWAP-absent episode this is the clean
         # standalone-market-maker readout.
         "terminal_pnl": float(_term_pnl) if _term_pnl is not None else None,
@@ -967,17 +1013,27 @@ for episode in range(START_EPISODE, N_EPISODES):
     torch.cuda.empty_cache()
     # torch.mps.empty_cache()
 
-np.save(log_dir + "inventorydists_" + label+ "_inventory_without_twap.npy", np.array(inventories_without_twap, dtype=object), allow_pickle=True)
+# On a resume the in-memory arrays cover post-resume episodes ONLY, so writing
+# them to the usual filenames would overwrite -- and destroy -- the original
+# run's outputs. Suffix them instead; the pre-resume files stay on disk and the
+# two halves can be concatenated afterwards.
+_tail = "" if START_EPISODE == 0 else f"_from{START_EPISODE}"
+_out = label + _tail          # tail-save label only; `label` itself is unchanged
+if _tail:
+    print(f"resume: tail .npy outputs suffixed {_tail!r} so the pre-resume "
+          f"files are preserved", flush=True)
+
+np.save(log_dir + "inventorydists_" + _out+ "_inventory_without_twap.npy", np.array(inventories_without_twap, dtype=object), allow_pickle=True)
 
 if len(inventories_with_twap_sell) > 0:
-    np.save(log_dir + "inventorydists_" + label+ "_inventory_with_twap_sell.npy", np.array(inventories_with_twap_sell, dtype=object), allow_pickle=True)
+    np.save(log_dir + "inventorydists_" + _out+ "_inventory_with_twap_sell.npy", np.array(inventories_with_twap_sell, dtype=object), allow_pickle=True)
 if len(inventories_with_twap_buy) > 0:
-    np.save(log_dir + "inventorydists_" + label+ "_inventory_with_twap_buy.npy", np.array(inventories_with_twap_buy, dtype=object), allow_pickle=True)
+    np.save(log_dir + "inventorydists_" + _out+ "_inventory_with_twap_buy.npy", np.array(inventories_with_twap_buy, dtype=object), allow_pickle=True)
 
-np.save(log_dir + "slippages_"+label+"episode_seeds.npy", np.array(episode_seeds))
-np.save(log_dir + "slippages_"+label+"twap_present.npy", np.array(twap_presents))
-np.save(log_dir + "slippages_"+label+"sides.npy", np.array(sides))
-np.save(log_dir + "slippages_"+label+"total_executed.npy", np.array(total_executeds, dtype=float))
-np.save(log_dir + "slippages_"+label+"final_cash.npy", np.array(final_cashs))
-np.save(log_dir + "slippages_"+label+"start_midprice.npy", np.array(start_midprices, dtype=float))
-np.save(log_dir+label+"RL_observations.npy", np.array(total_RL_obsv, dtype=object), allow_pickle=True)
+np.save(log_dir + "slippages_"+_out+"episode_seeds.npy", np.array(episode_seeds))
+np.save(log_dir + "slippages_"+_out+"twap_present.npy", np.array(twap_presents))
+np.save(log_dir + "slippages_"+_out+"sides.npy", np.array(sides))
+np.save(log_dir + "slippages_"+_out+"total_executed.npy", np.array(total_executeds, dtype=float))
+np.save(log_dir + "slippages_"+_out+"final_cash.npy", np.array(final_cashs))
+np.save(log_dir + "slippages_"+_out+"start_midprice.npy", np.array(start_midprices, dtype=float))
+np.save(log_dir+_out+"RL_observations.npy", np.array(total_RL_obsv, dtype=object), allow_pickle=True)

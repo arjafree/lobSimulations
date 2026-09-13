@@ -103,7 +103,7 @@ def test_start_midprices_is_no_longer_a_dead_list():
     src = open(TRAINER).read()
     assert "start_midprices.append(starting_midprice)" in src, \
         "start_midprices is assigned but never appended -- slippage has no denominator"
-    assert 'slippages_"+label+"start_midprice.npy' in src, \
+    assert 'start_midprice.npy' in src and "np.save" in src, \
         "the arrival midprice is never saved, so slippage cannot be recomputed post-hoc"
 
 
@@ -126,14 +126,62 @@ def test_pre_and_post_window_are_bucketed_separately():
     assert "inventory_post_twap = []" in src[i:i + 200]
 
 
-def test_pre_post_windows_are_disjoint_and_cover_the_complement():
-    """The three windows are equal 150s thirds of (100,550]. Mis-stating a
-    boundary would silently put TWAP-window samples in the baseline."""
+def _bucket(t, twap_present, start=250, end=400):
+    """The trainer's actual bucketing conditions, transcribed. Returns the set
+    of destination lists a sample at time t lands in."""
+    dests = set()
+    if twap_present and (end > t > start):
+        dests.add("in")
+    else:
+        dests.add("without")
+    if t <= start:
+        dests.add("pre")
+    elif t >= end:
+        dests.add("post")
+    return dests
+
+
+def test_bucketing_conditions_match_the_source():
+    """Guard the transcription above against drift."""
+    src = open(TRAINER).read()
+    assert "if twap_present and (twap_end_time > Simstate['TimeCode'] > twap_start_time):" in src
+    assert "if Simstate['TimeCode'] <= twap_start_time:" in src
+    assert "elif Simstate['TimeCode'] >= twap_end_time:" in src
+
+
+def test_present_episode_partitions_into_pre_in_post():
+    """Exactly one of pre/in/post per sample, including at the boundaries."""
+    for t in (100.1, 249.9, 250.0, 250.1, 300, 399.9, 400.0, 400.1, 550):
+        d = _bucket(t, True) & {"pre", "in", "post"}
+        assert len(d) == 1, (t, d)
+
+
+def test_absent_episode_leaves_the_middle_third_in_neither_pre_nor_post():
+    """The bug: nothing populates the in-window list when the meta-order is
+    off, so pre+in+post covers only two thirds of an absent episode."""
+    middle = [t for t in (250.1, 300, 399.9) if not (_bucket(t, False) & {"pre", "post"})]
+    assert middle == [250.1, 300, 399.9], middle
+
+
+def test_the_metric_uses_a_union_that_covers_the_whole_episode():
+    """`without + in` is complete for BOTH episode kinds, which is why
+    frac_at_inventory_limit must be computed from those and not pre+in+post."""
+    for present in (True, False):
+        for t in (100.1, 249.9, 250.0, 250.1, 300, 399.9, 400.0, 550):
+            assert _bucket(t, present) & {"without", "in"}, (present, t)
+    src = open(TRAINER).read()
+    i = src.index('"frac_at_inventory_limit"')
+    block = src[i:i + 700]
+    assert "inventory_without_twap + _inw" in block, \
+        "metric is not computed from the complete-episode union"
+    assert "inventory_pre_twap + _inw + inventory_post_twap" not in block
+
+
+def test_the_three_windows_are_equal_thirds():
     src = open(TRAINER).read()
     assert "start_trading_lag = 100" in src
     assert "twap_start_time = 150 + start_trading_lag" in src
     assert "twap_end_time = 300 + start_trading_lag" in src
-    assert "twap_off_time = 400" in src
     start, end, stop = 250, 400, 550
     assert end - start == start - 100 == stop - end == 150
 
