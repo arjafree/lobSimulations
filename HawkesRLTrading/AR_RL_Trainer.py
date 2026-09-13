@@ -137,6 +137,17 @@ CEM_ELITE_FLOOR = float(os.environ.get("CEM_ELITE_FLOOR", 0.0))
 # would confound the very thing under test.
 CEM_N_ELITES = int(os.environ.get("CEM_N_ELITES", 6))
 
+# --- Plot cadence. The per-episode inventory-distribution plot
+# (graphInventories) was called at the end of every episode until 1f6f7f5
+# ("LSTM training, first push"), which dropped the CALL but left the function
+# behind as dead code -- the signature of an accidental deletion in a large
+# commit rather than a deliberate removal. Restored, with the cadence explicit.
+#   DIST_PLOT_EVERY: 1 = every episode, as before 1f6f7f5. 0 disables.
+#   TRAJ_PLOT_EVERY: the avg-inventory-trajectory plot, which was tied to the
+#     `episode % 4 == 0` checkpoint block and is now independent of it.
+DIST_PLOT_EVERY = int(os.environ.get("DIST_PLOT_EVERY", 1))
+TRAJ_PLOT_EVERY = int(os.environ.get("TRAJ_PLOT_EVERY", 4))
+
 # --- The remaining two shaping terms, for the same reason as ACTION_BONUS.
 # Scale reference, all in dollars per EPISODE (2,483 steps, 677 of them inside
 # the 150s TWAP window), against the economic prize a successful front-run is
@@ -227,7 +238,7 @@ def graphInventories(beforetwap, withtwap_buy, withtwap_sell, episode_num):
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(log_dir + f'_all_inventory_distributions_episode_{episode_num}.png', dpi=300, bbox_inches='tight')
+    plt.savefig(log_dir + label + f'_all_inventory_distributions_episode_{episode_num}.png', dpi=300, bbox_inches='tight')
     plt.close()
 
 def plot_avg_inventory_trajectories(buy_trajectories, sell_trajectories, episode_num, save_dir, label_prefix, twap_start, twap_end):
@@ -403,6 +414,7 @@ print(f"  rewardpenalty (INERT) = {j['rewardpenalty']}", flush=True)
 print(f"  use_CEM            = {USE_CEM}", flush=True)
 print(f"  cem_elite_floor    = {CEM_ELITE_FLOOR}", flush=True)
 print(f"  cem_n_elites       = {CEM_N_ELITES}", flush=True)
+print(f"  dist/traj_plot_every = {DIST_PLOT_EVERY}/{TRAJ_PLOT_EVERY}", flush=True)
 print(f"  inventorylimit     = {j['inventorylimit']}", flush=True)
 print("=" * 72, flush=True)
 
@@ -757,6 +769,14 @@ for episode in range(N_EPISODES):
         if len(episode_times_rl) > 0:
             episode_inv_trajectories_sell.append((episode, episode_times_rl, episode_invs_rl))
     inventories_without_twap.append(inventory_without_twap)
+    if DIST_PLOT_EVERY and (episode % DIST_PLOT_EVERY == 0):
+        # Restored from before 1f6f7f5. Note this plots the CUMULATIVE
+        # distribution over every episode so far, not just this one -- the
+        # episode number only names the file, giving a snapshot per episode.
+        graphInventories(withtwap_buy=inventories_with_twap_buy,
+                         withtwap_sell=inventories_with_twap_sell,
+                         beforetwap=inventories_without_twap,
+                         episode_num=episode)
 
     final_cashs.append(final_cash)
     total_executeds.append(total_executed)
@@ -834,6 +854,7 @@ for episode in range(N_EPISODES):
             train_logger.plot_losses(show=False, save=True)
 
         model_manager.save_models(epoch = episode, u = RLagentInstance.Actor_Critic_u, d= RLagentInstance.Actor_Critic_d)
+    if TRAJ_PLOT_EVERY and (episode % TRAJ_PLOT_EVERY == 0):
         plot_avg_inventory_trajectories(episode_inv_trajectories_buy, episode_inv_trajectories_sell,
                                         episode, log_dir, label, twap_start_time, twap_end_time)
     for agent in agents:
