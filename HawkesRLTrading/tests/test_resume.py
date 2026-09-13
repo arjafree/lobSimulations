@@ -6,12 +6,10 @@ Models are checkpointed every 4 episodes, but nothing could use them:
   * Even with weights loaded, the loop ran `range(N_EPISODES)` from 0 and the
     setup/load block was gated on `episode == 0`, so a resume redid every
     episode from scratch.
-  * `ModelManager.load_models(timestamp=...)` built a path WITHOUT the label,
-    while `save_models` writes one WITH it -- FileNotFoundError for every
-    labelled run, which is all of them.
   * `load_models(timestamp=None)` sorted metadata filenames as STRINGS and took
     the first, so `_epoch_8_` beat `_epoch_76_` and it silently loaded epoch 8
-    of an 80-episode run.
+    of an 80-episode run. (The explicit-timestamp path is fine: callers pass
+    the timestamp with the label already appended.)
 """
 import json
 import os
@@ -66,14 +64,18 @@ def test_latest_checkpoint_is_chosen_numerically_not_lexicographically():
         shutil.rmtree(d)
 
 
-def test_explicit_timestamp_path_includes_the_label():
-    """save_models writes ..._{timestamp}_{label}.json; the loader must look
-    for the same name."""
+def test_explicit_timestamp_carries_the_label_by_convention():
+    """The caller passes the timestamp WITH the label already appended --
+    AR_RL_runner.py:44 passes '20260630_214031_train_new_vf_explo_gae_sell'.
+    load_models must NOT append self.label again; doing so yields a
+    double-label path and breaks every existing call."""
     d = tempfile.mkdtemp()
     try:
-        mm = _populate(d, "dfx_sell_base", "20260907_085440", [76])
-        out = mm.load_models(timestamp="20260907_085440", epoch=76, d=_Net(), u=_Net())
+        mm = _populate(d, "train_new_vf_explo_gae_sell", "20260630_214031", [76])
+        out = mm.load_models(timestamp="20260630_214031_train_new_vf_explo_gae_sell",
+                             epoch=76, d=_Net(), u=_Net())
         assert isinstance(out, dict) and set(out) == {"d", "u"}, out
+        assert all(v is not None for v in out.values()), out
     finally:
         shutil.rmtree(d)
 

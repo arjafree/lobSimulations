@@ -267,13 +267,15 @@ class ModelManager:
                 latest_meta = max(meta_files, key=_epoch_of)
             meta_path = os.path.join(self.model_dir, latest_meta)
         else:
-            # Use specified timestamp. The label is part of the name that
-            # save_models writes, so it must be part of the name we look for --
-            # without it this raised FileNotFoundError for every labelled run.
+            # Use specified timestamp. By convention the caller passes the
+            # timestamp WITH the label already appended -- AR_RL_runner.py:44
+            # passes '20260630_214031_train_new_vf_explo_gae_sell' -- which
+            # matches what save_models writes. Do not append self.label here;
+            # that produces a double label and breaks every existing call.
             suffix = f"_epoch_{epoch}" if epoch >= 0 else "_final"
             meta_path = os.path.join(
                 self.model_dir,
-                f"model_metadata{suffix}_{timestamp}_{self.label}.json"
+                f"model_metadata{suffix}_{timestamp}.json"
             )
 
         # Load metadata
