@@ -295,3 +295,76 @@ I will report what it finds, including findings against my own work.
 * I will not change the reward attribution on breach steps. The supervisor has
   marked that as by design.
 * I will not quote a gate-3 number from a fast run.
+
+---
+
+## 7. Progress log
+
+### 2026-09-14 — steps 1 to 3
+
+**Step 1 done.** I stopped `dfx_bot_o`, `eg_bot_f` and `rw_b`. `ctl_f` had
+already finished by itself. I copied 2.1 GB of logs to
+`~/killed_backup_20260914/` on the cluster first. I copied the per-episode
+metrics of all 16 runs into `HawkesRLTrading/episode_metrics_snapshots/20260914/`.
+
+**The gate-3 baseline is now in git.** Commit `208dfb6`. See section 1.
+
+**A blocker was found and corrected before the full jobs started.**
+`inv_level_in_window` is `None` on every TWAP-absent episode, in every run that
+exists. I measured this: 0 of 22 absent episodes in `ps_no_cem_fast` carry it.
+The cause is in `AR_RL_Trainer.py`. The list `inventory_with_twap_<side>` is
+keyed on the meta-order being present. On an absent episode nothing fills it.
+
+This makes the present-absent contrast impossible. That contrast is step 3 of
+this plan. It is also the only gate-1 measure that a single-side run can use.
+
+The correction is commit `093bbfa`. A new list `inventory_window_clock` records
+the window (250,400) on every episode. It is keyed on the clock only. Nothing
+that exists changes meaning, because the new list is additive. On a present
+episode the new list holds the same samples as the old one. The trainer now
+asserts this on every present episode.
+
+I tested the new measure on synthetic data. The test injects a front-running
+response of +5.0 and a per-run directional bias of +20.0:
+
+| Measure | Result |
+|---|---|
+| Old LEVEL metric | +25.00 (wrong: it contains the bias) |
+| New present-absent contrast | **+5.00 +- 0.16 PASS** (correct) |
+
+The hand calculation and the tool agree to 3 decimal places.
+
+**A second error was found by the smoke test.** The first four smoke jobs failed
+after 5 seconds with `ModuleNotFoundError: No module named 'gymnasium'`. I had
+copied the environment block from the `pnl_scaled` scripts. Those scripts do not
+activate the virtual environment. The `explo_gae` scripts do. The correct order
+is:
+
+```
+source /share/apps/source_files/python/python-3.9.5.source
+source ~/myenv/bin/activate
+```
+
+The first line must come first. The virtual environment's Python cannot load
+`libpython3.9.so.1.0` without it. All eight scripts now have both lines. The
+smoke test caught this at a cost of 5 seconds of compute. Without it, four
+168-hour jobs would have failed the same way.
+
+**Step 2 in progress.** The four arms are at
+`~/LSTM_fRL/wout_expo/new_value_function/single_side/`. Each arm has an
+`env.sh`. Both `smoke.sh` and `trainer.sh` read it, so a smoke test validates
+the exact configuration of the full job.
+
+**Step 3 done.** Commit `093bbfa`.
+
+### New result from the live runs
+
+`ps_no_cem_fast` has reached 67 episodes. It now **passes gate 2**:
+
+| Arm | n absent | Solo PnL | 95% CI | Verdict |
+|---|---|---|---|---|
+| `ps_no_cem_fast` | 22 | **+0.45** | [+0.01, +0.89] | **PASS** |
+
+This is the first time any arm has passed gate 2. The arm uses the PnL-scaled
+reward. It still fails gate 1 (side contrast -4.27). This supports section 2e:
+the two good ideas are in different runs, and no run has both.
