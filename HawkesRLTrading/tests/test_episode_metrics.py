@@ -214,13 +214,63 @@ def test_the_metric_uses_a_union_that_covers_the_whole_episode():
     assert "inventory_pre_twap + _inw + inventory_post_twap" not in block
 
 
-def test_the_three_windows_are_equal_thirds():
+def _default_times():
+    """Evaluate the trainer's timing block at its DEFAULTS, without importing
+    the simulator. Behavioural, so parameterising a line cannot silently break
+    the check the way a source-text match does."""
+    import os as _os
     src = open(TRAINER).read()
-    assert "start_trading_lag = 100" in src
-    assert "twap_start_time = 150 + start_trading_lag" in src
-    assert "twap_end_time = 300 + start_trading_lag" in src
-    start, end, stop = 250, 400, 550
-    assert end - start == start - 100 == stop - end == 150
+    keep = [l for l in src.splitlines()
+            if l.startswith(("TWAP_ORDER_SIZE", "TWAP_DURATION", "TWAP_WINDOW_SIZE",
+                             "TWAP_ACTION_FREQ", "RL_INVENTORY_LIMIT", "STOP_TIME",
+                             "start_trading_lag", "twap_start_time", "twap_end_time",
+                             "twap_off_time"))]
+    ns = {"os": _os}
+    exec("\n".join(keep), ns)
+    return ns
+
+
+def test_the_three_windows_are_equal_thirds():
+    """At the defaults the episode is three equal 150s thirds. HANDOFF §1a's
+    post-hoc recovery of the pre window (`pre = out[:len(inw)]`, validated by
+    `len(out) ~ 2*len(inw)`) depends on this, so it is pinned."""
+    ns = _default_times()
+    start, end, stop = ns["twap_start_time"], ns["twap_end_time"], ns["STOP_TIME"]
+    lag = ns["start_trading_lag"]
+    assert (start, end, stop, lag) == (250, 400, 550, 100), (start, end, stop, lag)
+    assert end - start == start - lag == stop - end == 150
+    assert ns["twap_off_time"] == end, "the TWAP must switch off when it ends"
+
+
+def test_meta_order_knobs_default_to_the_historical_values():
+    """The meta-order shape is now settable, because it is what decides whether
+    in-window front-running is possible at all. Every default must reproduce
+    the hardcoded values, or every existing arm silently changes market."""
+    ns = _default_times()
+    assert ns["TWAP_ORDER_SIZE"] == 150
+    assert ns["TWAP_DURATION"] == 150
+    assert ns["TWAP_WINDOW_SIZE"] == 25
+    assert ns["TWAP_ACTION_FREQ"] == 1
+    assert ns["RL_INVENTORY_LIMIT"] == 25
+    assert ns["STOP_TIME"] == 550
+
+
+def test_a_longer_meta_order_moves_the_window_and_keeps_a_post_stretch():
+    import os as _os
+    _os.environ["TWAP_DURATION"] = "300"
+    _os.environ["STOP_TIME"] = "700"
+    try:
+        ns = _default_times()
+        assert ns["twap_start_time"] == 250
+        assert ns["twap_end_time"] == 550
+        assert ns["twap_off_time"] == 550
+        assert ns["STOP_TIME"] > ns["twap_end_time"], "no post-window stretch"
+        # and the equal-thirds assumption is now FALSE -- any analysis relying
+        # on it must not be pointed at such a run
+        assert not (ns["twap_end_time"] - ns["twap_start_time"]
+                    == ns["STOP_TIME"] - ns["twap_end_time"])
+    finally:
+        del _os.environ["TWAP_DURATION"], _os.environ["STOP_TIME"]
 
 
 def test_live_metrics_cover_all_three_criteria():

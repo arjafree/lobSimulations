@@ -22,6 +22,7 @@ log_dir = os.environ.get('RUN_LOG_DIR', _DEFAULT_RUN + '/logs/')
 model_dir = os.environ.get('RUN_MODEL_DIR', _DEFAULT_RUN + '/model')
 
 start_trading_lag = 100
+# reassigned below once TWAP_DURATION is known; kept here for import order
 twap_off_time = 400
 
 twap_side = "sell"
@@ -228,10 +229,39 @@ else:
 TERMINAL_INVPENALTY = float(os.environ.get("TERMINAL_INVPENALTY", 5 * 5))
 FIRST_VISIT_BONUS = float(os.environ.get("FIRST_VISIT_BONUS", 0.2))
 
+# --- the meta-order being modelled ---------------------------------------
+# These were hardcoded. They are the shape of the market this project studies,
+# so changing them is a modelling decision, not a training knob -- but they
+# have to be reachable to be studied at all. Every default below reproduces
+# the historical values exactly, so an arm that sets none of them is unchanged.
+#
+# Why they matter for in-window front-running. The agent cannot anticipate the
+# meta-order before it starts (TWAPPresent is 0 until twap_start_time), so the
+# only front-running available is against the order that REMAINS after t=250.
+# Two quantities bound the prize:
+#   price move  ~ sqrt(TWAP_ORDER_SIZE)      (square-root law, see the paper)
+#   shares held <= RL_INVENTORY_LIMIT        (a hard cap, linear)
+# so the prize scales as sqrt(Q) * limit. The limit is the cheaper lever of the
+# two, and neither is touched by any reward shaping.
+TWAP_ORDER_SIZE = float(os.environ.get("TWAP_ORDER_SIZE", 150))
+TWAP_DURATION = float(os.environ.get("TWAP_DURATION", 150))
+TWAP_WINDOW_SIZE = float(os.environ.get("TWAP_WINDOW_SIZE", 25))
+TWAP_ACTION_FREQ = float(os.environ.get("TWAP_ACTION_FREQ", 1))
+RL_INVENTORY_LIMIT = int(os.environ.get("RL_INVENTORY_LIMIT", 25))
+STOP_TIME = float(os.environ.get("STOP_TIME", 550))
+
 #the time that the TWAP agent will kick in:
 twap_start_time = 150 + start_trading_lag
 
-twap_end_time = 300 + start_trading_lag
+twap_end_time = twap_start_time + TWAP_DURATION
+
+# The episode must outlast the meta-order, or there is no post-window stretch
+# and `inventory_post_twap` is empty.
+assert STOP_TIME > twap_end_time, (
+    "STOP_TIME=%s does not outlast the meta-order, which ends at %s"
+    % (STOP_TIME, twap_end_time))
+
+twap_off_time = twap_end_time
 
 label = os.environ.get('RUN_LABEL', 'train_new_vf_gae_lambda_sell')
 layer_widths=100
@@ -390,7 +420,7 @@ kwargs={
                          "Inventory": {"INTC": 0},
                          "log_to_file": True,
                          "cashlimit": 5000000,
-                         "inventorylimit": 25,
+                         "inventorylimit": RL_INVENTORY_LIMIT,
                          'start_trading_lag': start_trading_lag,
                          "wake_on_MO": True,
                          "wake_on_Spread": True}
@@ -399,11 +429,11 @@ kwargs={
                           "cashlimit": 100000000000,
                           "strategy": "TWAP",
                           "on_trade":False,
-                          "total_order_size":150,
+                          "total_order_size":TWAP_ORDER_SIZE,
                           "order_target":"INTC",
-                          "total_time":150,
-                          "window_size":25, #window size, measured in seconds
-                          "action_freq":1,
+                          "total_time":TWAP_DURATION,
+                          "window_size":TWAP_WINDOW_SIZE, #window size, measured in seconds
+                          "action_freq":TWAP_ACTION_FREQ,
                           "Inventory": {"INTC":500},
                           'start_trading_lag': start_trading_lag,
                           "wake_on_MO": False,
@@ -474,6 +504,9 @@ print(f"  dist/traj_plot_every = {DIST_PLOT_EVERY}/{TRAJ_PLOT_EVERY}", flush=Tru
 print(f"  START_EPISODE      = {START_EPISODE}", flush=True)
 print(f"  resume             = {checkpoint_params}", flush=True)
 print(f"  inventorylimit     = {j['inventorylimit']}", flush=True)
+print(f"  meta-order         = {TWAP_ORDER_SIZE:g} shares over {TWAP_DURATION:g}s "
+      f"[{twap_start_time:g},{twap_end_time:g}], window {TWAP_WINDOW_SIZE:g}s, "
+      f"freq {TWAP_ACTION_FREQ:g}; episode ends {STOP_TIME:g}", flush=True)
 print("=" * 72, flush=True)
 
 inventories_with_twap_buy = []
@@ -642,7 +675,7 @@ for episode in range(START_EPISODE, N_EPISODES):
     action_num = 0
     episode_seed = (SEED_BASE + episode) if SEED_MODE == "vary" else 1
     episode_seeds.append(episode_seed)
-    env=tradingEnv(stop_time=550, wall_time_limit=23400, seed=episode_seed, **kwargs)
+    env=tradingEnv(stop_time=STOP_TIME, wall_time_limit=23400, seed=episode_seed, **kwargs)
     print(f"Start of episode {episode}. TWAP present: {twap_present}, side: "
           f"{twap_side if twap_present else 'none'}, seed: {episode_seed}")
     print("Initial Observations"+ str(env.getobservations()))

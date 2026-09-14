@@ -194,6 +194,49 @@ def report(d, last=None, control=None):
         print("     response vs PRE window: n/a (run predates inv_level_pre_window;")
         print("       recover it post-hoc from inventorydists_* -- out[:len(inw)] is")
         print("       the pre stretch, validate with len(out) ~ 2*len(inw))")
+    # ---- the user's stated goal, measured three ways ----------------------
+    # "go long when TWAP is long and short when TWAP is short, IN GENERAL, not
+    # for a specific window" -- so the headline for a single-side agent is the
+    # WHOLE-EPISODE sign, not a window contrast. A standing directional
+    # position is the target here, not an artefact.
+    #
+    # That alone is cheap: any constant bias scores on whichever side matches
+    # its sign. What makes it non-trivial is that criterion 3 must ALSO pass on
+    # the same run -- a bias unrelated to the meta-order does not raise the
+    # meta-order's cost. Read C1-whole and C3 together; neither is sufficient.
+    #
+    # BEFORE is reported separately because the agent cannot condition on the
+    # meta-order there: TWAPPresent is pinned to 0 outside [250,400]
+    # (AR_RL_Trainer.py:668-672), so pre-window state is identical on buy, sell
+    # and absent episodes. A correct sign BEFORE is therefore a prior baked
+    # into the weights, not detection. It still counts toward the goal above;
+    # it just is not evidence of anticipation.
+    def _whole(e):
+        nin, nout = e.get("n_in_window") or 0, e.get("n_out_window") or 0
+        vin, vout = e.get("inv_level_in_window"), e.get("inv_level_out_window")
+        tot = (nin if vin is not None else 0) + (nout if vout is not None else 0)
+        if not tot:
+            return None
+        acc = (vin * nin if vin is not None else 0.0) + (vout * nout if vout is not None else 0.0)
+        return acc / tot
+
+    print("     the goal, three ways (buy wants > 0, sell wants < 0):")
+    for nm, grp in (("buy", buy), ("sell", sell)):
+        if not grp:
+            continue
+        rows = []
+        for tag, vals in (("WHOLE-EPISODE", [_whole(e) for e in grp]),
+                          ("BEFORE (pre)", [e.get("inv_level_pre_window") for e in grp]),
+                          ("IN-WINDOW", [e.get("inv_level_in_window") for e in grp])):
+            vals = [v for v in vals if v is not None]
+            if not vals:
+                continue
+            m, se = _mean(vals), _stderr(vals)
+            ok = (m > 0) if nm == "buy" else (m < 0)
+            v = "PASS" if (ok and se is not None and abs(m) > 1.96 * se) else "fail"
+            rows.append("       %-4s %-13s n=%-3d %s   %s" % (nm, tag, len(vals), _fmt(m, se), v))
+        print("\n".join(rows))
+
     print("     shift vs POOLED out-window (legacy, broken by construction):")
     print("       buy  %s      sell %s"
           % (_fmt(_mean(_resp(buy, "inv_level_out_window")), None),
