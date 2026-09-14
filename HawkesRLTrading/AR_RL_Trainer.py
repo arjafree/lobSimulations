@@ -1,5 +1,6 @@
 import sys
 import os
+import tempfile
 
 # os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 # os.environ["TORCH_USE_CUDA_DSA"] = "1"  # Device-Side Assertions (even more detail)
@@ -152,6 +153,10 @@ CEM_N_ELITES = int(_CEM_N_ELITES_RAW) if _CEM_N_ELITES_RAW not in (None, "") els
 #   TRAJ_PLOT_EVERY: the avg-inventory-trajectory plot, which was tied to the
 #     `episode % 4 == 0` checkpoint block and is now independent of it.
 DIST_PLOT_EVERY = int(os.environ.get("DIST_PLOT_EVERY", 1))
+# Wall-clock cadence, independent of DIST_PLOT_EVERY. Set both to 0 to
+# disable all distribution plots. Completed episodes force a final live update.
+LIVE_DIST_PLOT_SECONDS = float(os.environ.get("LIVE_DIST_PLOT_SECONDS", 60))
+assert np.isfinite(LIVE_DIST_PLOT_SECONDS) and LIVE_DIST_PLOT_SECONDS >= 0
 TRAJ_PLOT_EVERY = int(os.environ.get("TRAJ_PLOT_EVERY", 4))
 
 # --- Resume. Models are checkpointed every 4 episodes, but nothing wired that
@@ -241,8 +246,16 @@ FIRST_VISIT_BONUS = float(os.environ.get("FIRST_VISIT_BONUS", 0.2))
 # Two quantities bound the prize:
 #   price move  ~ sqrt(TWAP_ORDER_SIZE)      (square-root law, see the paper)
 #   shares held <= RL_INVENTORY_LIMIT        (a hard cap, linear)
-# so the prize scales as sqrt(Q) * limit. The limit is the cheaper lever of the
-# two, and neither is touched by any reward shaping.
+# so the PRIZE scales as sqrt(Q) * limit.
+#
+# But prize is not detectability. Holding q shares through a move m earns q*m,
+# and the episode-PnL noise of a market maker also scales roughly with q, so
+# SNR ~ m and is largely INDEPENDENT of the limit. Raising RL_INVENTORY_LIMIT
+# raises the stakes on both sides of the ledger; it does not make the edge
+# easier to find. TWAP_ORDER_SIZE (and the participation rate Q/T it implies)
+# is the lever that moves m, and therefore the lever that moves SNR.
+# The limit's real job is to be large enough relative to Q that the agent can
+# monetise a meaningful fraction of the move at all.
 TWAP_ORDER_SIZE = float(os.environ.get("TWAP_ORDER_SIZE", 150))
 TWAP_DURATION = float(os.environ.get("TWAP_DURATION", 150))
 TWAP_WINDOW_SIZE = float(os.environ.get("TWAP_WINDOW_SIZE", 25))
@@ -270,8 +283,14 @@ eta = 5
 
 checkpoint_params = None if RESUME_EPOCH is None else (RESUME_TIMESTAMP, RESUME_EPOCH)
 
-def graphInventories(beforetwap, withtwap_buy, withtwap_sell, episode_num):
-    plt.figure(figsize=(12, 8))
+def graphInventories(beforetwap, withtwap_buy, withtwap_sell, episode_num,
+                     live=False, simulation_time=None):
+    """Cumulative observations; episode N is not an evaluation of checkpoint N.
+
+    The trainer saves checkpoint N after that episode's training update.
+    Live snapshots include the current partial episode without mutating history.
+    """
+    fig = plt.figure(figsize=(12, 8))
     
     # Flatten the lists of lists to get all inventory values
     all_before = []
@@ -294,7 +313,7 @@ def graphInventories(beforetwap, withtwap_buy, withtwap_sell, episode_num):
     # weights parameter normalizes to show ratios/proportions that sum to 1
     if all_before:
         weights_before = np.ones(len(all_before)) / len(all_before)
-        plt.hist(all_before, bins=30, alpha=0.7, label=f'Before TWAP (n={len(all_before)})', 
+        plt.hist(all_before, bins=30, alpha=0.7, label=f'Outside TWAP / absent (n={len(all_before)})',
                  color='blue', edgecolor='black', weights=weights_before)
     
     if all_buy:
@@ -310,7 +329,7 @@ def graphInventories(beforetwap, withtwap_buy, withtwap_sell, episode_num):
     # Add median lines
     if all_before:
         plt.axvline(np.median(all_before), color='blue', linestyle='--', linewidth=2, 
-                   label=f'Before Median: {np.median(all_before):.1f}')
+                   label=f'Outside / absent median: {np.median(all_before):.1f}')
     if all_buy:
         plt.axvline(np.median(all_buy), color='green', linestyle='--', linewidth=2,
                    label=f'Buy Median: {np.median(all_buy):.1f}')
@@ -320,12 +339,26 @@ def graphInventories(beforetwap, withtwap_buy, withtwap_sell, episode_num):
     
     plt.xlabel('RL Agent Inventory')
     plt.ylabel('Proportion') 
-    plt.title('RL Agent Inventory Distribution: Before vs With TWAP (Normalized)')
+    progress = f'Through episode {episode_num}'
+    if simulation_time is not None:
+        progress += f' (partial, simulation t={simulation_time:.1f}s)'
+    plt.title('RL Agent Inventory Distributions — ' + progress)
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(log_dir + label + f'_all_inventory_distributions_episode_{episode_num}.png', dpi=300, bbox_inches='tight')
-    plt.close()
+    path = (os.path.join(log_dir, label + '_all_inventory_distributions_live.png')
+            if live else log_dir + label + f'_all_inventory_distributions_episode_{episode_num}.png')
+    # Readers copying the live image must never see a half-written PNG.
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=log_dir, suffix='.png', delete=False) as fh:
+            temporary = fh.name
+        fig.savefig(temporary, dpi=150 if live else 300, bbox_inches='tight')
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None and os.path.exists(temporary):
+            os.unlink(temporary)
+        plt.close(fig)
 
 def plot_avg_inventory_trajectories(buy_trajectories, sell_trajectories, episode_num, save_dir, label_prefix, twap_start, twap_end):
     """Plot avg inventory trajectories colored by training batch (every 4 episodes), separated by buy/sell."""
@@ -500,6 +533,7 @@ print(f"  rewardpenalty (INERT) = {j['rewardpenalty']}", flush=True)
 print(f"  use_CEM            = {USE_CEM}", flush=True)
 print(f"  cem_elite_floor    = {CEM_ELITE_FLOOR}", flush=True)
 print(f"  cem_n_elites       = {CEM_N_ELITES}", flush=True)
+print(f"  live_dist_seconds  = {LIVE_DIST_PLOT_SECONDS}", flush=True)
 print(f"  dist/traj_plot_every = {DIST_PLOT_EVERY}/{TRAJ_PLOT_EVERY}", flush=True)
 print(f"  START_EPISODE      = {START_EPISODE}", flush=True)
 print(f"  resume             = {checkpoint_params}", flush=True)
@@ -620,6 +654,7 @@ def _twap_slippage_bps(side, twap_final_cash, executed, start_mid):
     return ((1000000 - twap_final_cash) - benchmark) * 10000 / benchmark
 
 
+last_live_dist_plot = float("-inf")
 for episode in range(START_EPISODE, N_EPISODES):
     inventory_with_twap_buy = []
     inventory_with_twap_sell = []
@@ -791,6 +826,14 @@ for episode in range(START_EPISODE, N_EPISODES):
                     inventory_pre_twap.append(observations["Inventory"])
                 elif Simstate['TimeCode'] >= twap_end_time:
                     inventory_post_twap.append(observations["Inventory"])
+                if LIVE_DIST_PLOT_SECONDS and (
+                        time.monotonic() - last_live_dist_plot >= LIVE_DIST_PLOT_SECONDS):
+                    graphInventories(
+                        beforetwap=inventories_without_twap + [inventory_without_twap],
+                        withtwap_buy=inventories_with_twap_buy + [inventory_with_twap_buy],
+                        withtwap_sell=inventories_with_twap_sell + [inventory_with_twap_sell],
+                        episode_num=episode, live=True, simulation_time=Simstate['TimeCode'])
+                    last_live_dist_plot = time.monotonic()
                 observationsDict.update({agent.id:observations})
                 logger.debug(f"\n Agent: {agent.id}\n Simstate: {Simstate}\nObservations: {observations}\nTermination: {termination}\nTruncation: {truncation}")
                 if len(t) > 0 and Simstate['TimeCode'] < t[-1]:
@@ -868,12 +911,14 @@ for episode in range(START_EPISODE, N_EPISODES):
                             else:
                                 plt.plot(episode_t, episode_profit, alpha=0.7)
 
-                plt.legend()
-                plt.ticklabel_format(useOffset=False, style='plain')
-                plt.xlabel('Time in seconds')
-                plt.ylabel('Profit in Dollars')
-                plt.title('Final Profit - All Episodes Overlaid')
-                plt.savefig(log_dir + label + '_profit.png')
+                    plt.legend()
+                    plt.ticklabel_format(useOffset=False, style='plain')
+                    plt.xlabel('Time in seconds')
+                    plt.ylabel('Profit in Dollars')
+                    plt.title('Final Profit - All Episodes Overlaid')
+                    plt.savefig(log_dir + label + '_profit.png')
+
+                    plt.close()
 
                 np.save(log_dir + "sharpe_" + label + '_profit', np.array([t, finalcash2]))
                 if len(t_with_twap_buy) > 0:
@@ -906,6 +951,13 @@ for episode in range(START_EPISODE, N_EPISODES):
                          withtwap_sell=inventories_with_twap_sell,
                          beforetwap=inventories_without_twap,
                          episode_num=episode)
+
+    if LIVE_DIST_PLOT_SECONDS:
+        graphInventories(beforetwap=inventories_without_twap,
+                         withtwap_buy=inventories_with_twap_buy,
+                         withtwap_sell=inventories_with_twap_sell,
+                         episode_num=episode, live=True)
+        last_live_dist_plot = time.monotonic()
 
     final_cashs.append(final_cash)
     total_executeds.append(total_executed)
