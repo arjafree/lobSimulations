@@ -38,7 +38,106 @@ violated at some point in this project's history:
   noise floor — so it is a question about what market is being modelled, for the
   user, not a knob to turn when results disappoint.
 
-## 0b. Standing instructions from the user
+## 0a. CORRECTIONS TO §0, AND THE GOAL RESTATED (2026-09-14)
+
+**Gate 3 was NOT "never tested", and the denominator DID exist.** The paper
+(`rQUFguide.tex`, "Matched TWAP Baseline" + Table `tab:advopt slippage`) reports
+a matched TWAP-alone baseline against the combined arm. It reproduces from the
+cluster arrays: buy `+0.09 ± 1.76` (paper 0.09 ± 1.70), sell `+0.36 ± 2.50`
+(paper 0.37 ± 2.42). The code is `HawkesRLTrading/twap_baseline_obs.py`, which
+§8 listed as scratch to leave alone — that mislabelling is *why* §0 called the
+gate untested. Now tracked (`208dfb6`) with its outputs.
+
+**But it is not a robust PASS, and I over-stated it in turn.** Two reasons:
+
+* **One market path.** `tradingEnv.__init__` defaults `seed=1` and reseeds every
+  episode (`HawkesRLTradingEnv.py:133`); `AR_RL_runner.py:375` defaults
+  `SEED_MODE="fixed"`, and `twap_baseline_obs.py:164-167` passes no seed unless
+  `TWAP_VARY_SEED=1`. So n=17 is 17 draws around one Hawkes path, not 17 draws.
+* **The independent-seed baseline is not ~0.** The `vary/` arms give robust
+  baselines of buy **+3.25 ± 2.89** and sell **+2.66 ± 3.47**. The paper's
+  headline treatment figure is 3.09 bps — indistinguishable from them. The
+  robust trim also does heavy lifting: raw sd is 34–55 bps, and dropping 1–3 of
+  17 episodes brings it to 1.7–2.5.
+
+Fix: gate 3 must be **paired on seed** against `ctl_n`. `criteria_report.py
+--control` does that.
+
+**Front-running before t=250 is informationally impossible.** `TWAPPresent` is
+pinned to 0 outside `[250,400]` (`AR_RL_Trainer.py:668-672`,
+`AR_RL_runner.py:404-409`) and is the only TWAP feature in the observation
+(`ICRLAgent.py:2739`). Before t=250 the meta-order has placed no order, so no
+feature carries its side: buy, sell and TWAP-absent episodes are identical to
+the policy. `_twap_phase()` (`ICRLAgent.py:1662-1666`) would distinguish before
+from after without leaking the future, but it only keys the exploration bonus
+(`:1704-1708`) and never reaches the policy.
+
+**The goal, as the user states it.** The agent should be long when the TWAP is
+long and short when it is short **in general, not inside a particular window**,
+*and* this must raise the meta-order's cost. So:
+
+* A standing directional position is the **target** for a single-side agent, not
+  the artefact §1b treats it as. §1b's reading applies to *alternating* runs,
+  where one network must serve both sides; it does not condemn a single-side run.
+* Gate 1 alone is therefore cheap — any constant bias scores on whichever side
+  matches its sign. **Gates 1 and 3 must be read together.** A bias unrelated to
+  the meta-order cannot raise its cost. Worked example: `ps_legacy_space` passes
+  all three sell measures while short on *both* sides, and its sell slippage is
+  **−9.11 bps**.
+* `criteria_report.py` now reports gate 1 three ways per side — WHOLE-EPISODE
+  (the goal), BEFORE (pre-window), IN-WINDOW — each with a CI and a verdict.
+
+**Side alternation is a HYPOTHESIS, not a finding.** All 16 metrics files have
+`twap_side_mode="alternate"`; there is no variance in the variable, so nothing
+measured to date can support or refute it. Wave 1 creates that variance.
+
+## 0a-i. What was done on 2026-09-14
+
+* Stopped `dfx_bot_o`, `eg_bot_f`, `rw_b` (`ctl_f` had finished). 2.1 GB copied
+  to `~/killed_backup_20260914/` first; all 16 runs' per-episode metrics
+  committed to `HawkesRLTrading/episode_metrics_snapshots/20260914/`.
+* **Launched wave 1** — four single-side `expApprox` arms at
+  `~/LSTM_fRL/wout_expo/new_value_function/single_side/`, jobs 7408397-400:
+
+  | label | side | reward | space | TWAP cycle | isolates |
+  |---|---|---|---|---|---|
+  | `s1_buy_f` | buy | PnL scale | 0 | 2 on / 1 off | side mode, vs the running `ps_ff` |
+  | `s1_sell_f` | sell | PnL scale | 0 | 2 on / 1 off | same, sell |
+  | `s1_sell_on_f` | sell | PnL scale | 0 | always on | whether the on/off cycle hurts |
+  | `s1_sell_leg_f` | sell | historical | 1 | always on | the paper's arm, post-fixes |
+
+  `s1_sell_f` is byte-identical to `ps_ff` except `TWAP_SIDE_MODE` — confirmed
+  against `ps_ff`'s metrics header, so side mode is the only differing variable.
+  Score them on the **present-absent** contrast, not the side contrast: a
+  between-run buy-minus-sell contrast reabsorbs the per-run bias.
+  `s1_sell_on_f`/`s1_sell_leg_f` have no absent episodes, so they are scored on
+  the three level measures instead.
+* **`inv_level_in_window` was `None` on every TWAP-absent episode in every run**
+  (0 of 22 in `ps_no_cem_fast`), so the present-absent contrast could not be
+  computed at all. Fixed (`093bbfa`): `inventory_window_clock` records the
+  window on every episode, keyed on the clock alone, asserted per episode to
+  hold the same samples as `inventory_with_twap_*` when the TWAP is present.
+  Verified on synthetic data — injected response +5.0 under a +20.0 bias reads
+  **+5.00 ± 0.16**, where the old LEVEL metric reads +25.00.
+* **The meta-order's shape is now settable** (`6e03d6b`): `TWAP_ORDER_SIZE`,
+  `TWAP_DURATION`, `TWAP_WINDOW_SIZE`, `TWAP_ACTION_FREQ`, `RL_INVENTORY_LIMIT`,
+  `STOP_TIME`. Every default reproduces the hardcoded value, verified
+  numerically; no arm in flight changes. This is what decides whether in-window
+  front-running is possible: the prize scales as `sqrt(order size) × inventory
+  limit`, and the limit is the cheaper lever. **Not launched — the shape of the
+  market is the user's decision.**
+* `ps_no_cem_fast` reached n=67 and **passes gate 2** (+0.45, CI [+0.01,+0.89]).
+  First gate-2 pass in the project. It still fails gate 1.
+* **Cluster rule, learned the hard way.** The first four smoke jobs died in 5 s
+  with `ModuleNotFoundError: No module named 'gymnasium'`: the `pnl_scaled`
+  scripts omit `source ~/myenv/bin/activate`, the `explo_gae` ones have it, and
+  it must follow the python-3.9.5 source line. Every script that ever set
+  `#$ -l h_vmem` is a probe job, and those are the ones that crashed — it caps
+  *virtual* memory, which numpy/torch reserve heavily at import. Use
+  `tmem=128G`, `gpu=true`, no `h_vmem`, and **always smoke-test 2 episodes and
+  read the banner before submitting the full job.**
+
+# 0b. Standing instructions from the user
 
 * **Extensive work goes on the cluster, never local.** Local is for analysis of
   copied-down artefacts and for unit tests only. (Violated twice this session:
