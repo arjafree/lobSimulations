@@ -368,3 +368,101 @@ the exact configuration of the full job.
 This is the first time any arm has passed gate 2. The arm uses the PnL-scaled
 reward. It still fails gate 1 (side contrast -4.27). This supports section 2e:
 the two good ideas are in different runs, and no run has both.
+
+---
+
+## 8. Correction to section 2c — the real mechanism
+
+The review agent found an error in my section 2c. I confirmed it in the code.
+Section 2c stays in this document as written, because a record of a wrong
+explanation is more useful than a silent edit. It is wrong. This section
+replaces it.
+
+### What I said
+
+I said the agent has one weak signal for the side, and that one LSTM cannot
+learn two opposite responses from one scalar.
+
+### What is true
+
+The signal is not weak in the window. It does not exist before the window.
+
+`AR_RL_Trainer.py:668-672` sets `TWAPPresent` to -1 or +1 **only** when the
+clock is inside `[twap_start_time, twap_end_time]` = [250, 400]. Outside that
+interval it sets `TWAPPresent = 0`. `AR_RL_runner.py:404-409` does the same.
+`ICRLAgent.py:2739` appends `TWAPPresent` to the observation as one scalar.
+
+So between t = 100 and t = 250 the feature is 0. It is 0 on buy episodes. It is
+0 on sell episodes. It is 0 on TWAP-absent episodes. The three cases are
+identical to the policy.
+
+**No agent in this simulator can position itself before t = 250 in a way that
+depends on the meta-order.** The information is not there. The meta-order has
+not traded, so no other feature carries it either.
+
+There is a feature that would help, and it is not used. `_twap_phase()` at
+`ICRLAgent.py:1662-1666` returns -1 before the meta-order, 0 during, and +1
+after. It is used only by `_exploration_key_state()` at `ICRLAgent.py:1704-1708`,
+which keys the exploration bonus. It never reaches the policy observation.
+
+Note that `_twap_phase()` would not leak the future. It becomes +1 only after
+`_twap_seen` is set, and `_twap_seen` is set only when `TWAPPresent` is non-zero.
+Before the window it returns -1 on every episode, present or absent.
+
+### What this means for gate 1
+
+Gate 1 says "TWAP buying, agent goes long **ahead of it**". Two readings:
+
+1. **Before the meta-order starts.** This is impossible here, for any agent and
+   any reward. An agent can only appear to do it by carrying a fixed
+   directional bias in its weights. A single-side agent does exactly that,
+   because its side never changes. That is not detection.
+2. **Ahead of the remaining child orders, inside the window.** The meta-order
+   runs for 150 seconds and trades throughout. After the first child orders the
+   side is visible, both through `TWAPPresent` and through the order flow. An
+   agent that then positions itself takes the rest of the meta-order's impact.
+
+Reading 2 is the only one that is achievable, and it is what the paper measures.
+It is also normal usage: a high-frequency trader detects a meta-order from order
+flow after it starts, and trades ahead of its remainder.
+
+**This needs a decision from the user, because gate 1 belongs to the user.**
+I recommend reading 2. I will not change the gate without an answer.
+
+The measures in this plan are correct under reading 2, and no change is needed:
+
+* Response against the PRE window = in-window level minus pre-window level.
+  Under reading 2 this is exactly the quantity of interest.
+* The present-absent contrast compares the same window with and without the
+  meta-order. Under reading 2 this is exactly the quantity of interest.
+
+### What this does NOT change
+
+Wave 1 is still the right experiment. The reviewer says wave 1 does not isolate
+side alternation, because the paper's runs differ in seeds, presence cycle,
+action space, reward, and simulator version.
+
+That is true of the paper. It is not true of my comparator. **I compare wave 1
+against `ps_ff`, which is running now**, not against the paper:
+
+| Setting | `ps_ff` (running) | `s1_sell_f` (new) |
+|---|---|---|
+| reward | PnL scale | PnL scale |
+| action space | 0 | 0 |
+| symmetric MO gating | true | true |
+| expApprox | true | true |
+| TWAP cycle | 2 on / 1 off | 2 on / 1 off |
+| seeds | vary, base 1000 | vary, base 1000 |
+| simulator | current | current |
+| **TWAP side mode** | **alternate** | **sell** |
+
+One variable differs. I have asked the reviewer to check this against the
+`ps_full_fast` metrics header and confirm.
+
+### An honest limit on the evidence
+
+The reviewer is right about one thing that I must record. Every one of the 16
+metrics files has `twap_side_mode = "alternate"`. There is no variance in the
+variable at all. So section 2c was never supported by that data, whatever the
+mechanism. Wave 1 creates the variance. Until it lands, "side alternation
+prevents front-running" is a **hypothesis**, not a finding.
