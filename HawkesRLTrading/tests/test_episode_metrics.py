@@ -120,16 +120,24 @@ def test_pre_and_post_window_are_bucketed_separately():
     # split must key on the window boundaries, not on twap_present
     assert "if Simstate['TimeCode'] <= twap_start_time:" in src
     assert "elif Simstate['TimeCode'] >= twap_end_time:" in src
-    # and both must be reset per episode, or they accumulate across the run
-    i = src.index("inventory_without_twap = []")
-    assert "inventory_pre_twap = []" in src[i:i + 200]
-    assert "inventory_post_twap = []" in src[i:i + 200]
+    # and all of them must be reset per episode, or they accumulate across the
+    # run. Check on the code with comments stripped, so that documenting one of
+    # these lists cannot push another out of a fixed character window.
+    code = "\n".join(l for l in src.splitlines()
+                     if not l.strip().startswith("#"))
+    i = code.index("inventory_without_twap = []")
+    block = code[i:i + 300]
+    for name in ("inventory_pre_twap", "inventory_post_twap",
+                 "inventory_window_clock"):
+        assert "%s = []" % name in block, "%s is not reset per episode" % name
 
 
 def _bucket(t, twap_present, start=250, end=400):
     """The trainer's actual bucketing conditions, transcribed. Returns the set
     of destination lists a sample at time t lands in."""
     dests = set()
+    if end > t > start:
+        dests.add("clock")
     if twap_present and (end > t > start):
         dests.add("in")
     else:
@@ -141,10 +149,39 @@ def _bucket(t, twap_present, start=250, end=400):
     return dests
 
 
+def test_absent_episodes_still_record_the_clock_window():
+    """The present-vs-absent contrast is the only front-running measure a
+    SINGLE-SIDE run can be scored on, and it needs the (250,400) inventory
+    level on TWAP-ABSENT episodes. `inventory_with_twap_*` is keyed on the
+    meta-order actually being present, so it is empty there. Without a separate
+    clock-window record the absent arm of the contrast does not exist."""
+    for t in (260.0, 300.0, 399.0):
+        assert "clock" in _bucket(t, twap_present=False), t
+        assert "in" not in _bucket(t, twap_present=False), t
+    # and on a present episode the two must be the same samples
+    for t in (260.0, 300.0, 399.0):
+        d = _bucket(t, twap_present=True)
+        assert "clock" in d and "in" in d, t
+    # outside the window, neither
+    for t in (100.0, 250.0, 400.0, 550.0):
+        assert "clock" not in _bucket(t, twap_present=True), t
+        assert "clock" not in _bucket(t, twap_present=False), t
+
+
+def test_the_report_scores_a_single_side_run_on_present_absent():
+    """criteria_report refused to score criterion 1 on a single-side run. That
+    refusal was too strong: the present-absent contrast differences out the
+    per-run directional bias without needing both sides."""
+    src = open(os.path.join(os.path.dirname(TRAINER), "criteria_report.py")).read()
+    assert "inv_level_window_clock" in src
+    assert "present-absent contrast" in src
+
+
 def test_bucketing_conditions_match_the_source():
     """Guard the transcription above against drift."""
     src = open(TRAINER).read()
     assert "if twap_present and (twap_end_time > Simstate['TimeCode'] > twap_start_time):" in src
+    assert "if twap_end_time > Simstate['TimeCode'] > twap_start_time:" in src
     assert "if Simstate['TimeCode'] <= twap_start_time:" in src
     assert "elif Simstate['TimeCode'] >= twap_end_time:" in src
 

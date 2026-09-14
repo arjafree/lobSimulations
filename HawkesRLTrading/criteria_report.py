@@ -130,8 +130,47 @@ def report(d, last=None, control=None):
         verdict = "PASS" if (contrast > 0 and se is not None and contrast > 1.96 * se) else "fail"
         print("     >>> SIDE CONTRAST  %s   %s" % (_fmt(contrast, se), verdict))
     elif mb is not None or ms is not None:
-        print("     >>> SIDE CONTRAST  n/a  (single-side run: cannot separate")
-        print("         front-running from a per-run directional inventory bias)")
+        print("     >>> SIDE CONTRAST  n/a  (single-side run -- scored by the")
+        print("         PRESENT-ABSENT contrast below instead)")
+
+    # PRESENT-ABSENT contrast. The only front-running measure available to a
+    # single-side run. Compares the same clock window (twap_start, twap_end) on
+    # episodes where the meta-order is there against episodes where it is not.
+    # A per-run directional inventory bias sits in BOTH arms, so it differences
+    # out -- the same cancellation that makes the side contrast work, but
+    # across the presence axis instead of the side axis, so it does not need
+    # both sides to exist. This is the measure the paper reports (+15.1 with
+    # the meta-order against +10.9 without, for the buy-trained agent).
+    wp = [e["inv_level_window_clock"] for e in present
+          if e.get("inv_level_window_clock") is not None]
+    wa = [e["inv_level_window_clock"] for e in absent
+          if e.get("inv_level_window_clock") is not None]
+    if wp and wa:
+        # Sign of the target depends on the side the meta-order works.
+        # Buying meta-order -> the agent should be MORE long when it is there.
+        # Selling meta-order -> MORE short. A run carrying both sides has no
+        # single target, so report per side.
+        print("     present-absent contrast (front-running, single-side runs):")
+        for nm, grp in (("buy", buy), ("sell", sell)):
+            gp = [e["inv_level_window_clock"] for e in grp
+                  if e.get("inv_level_window_clock") is not None]
+            if not gp:
+                continue
+            c = _mean(gp) - _mean(wa)
+            se = None
+            if _stderr(gp) is not None and _stderr(wa) is not None:
+                se = math.sqrt(_stderr(gp) ** 2 + _stderr(wa) ** 2)
+            want = "> 0" if nm == "buy" else "< 0"
+            ok = (c > 0) if nm == "buy" else (c < 0)
+            v = "PASS" if (ok and se is not None and abs(c) > 1.96 * se) else "fail"
+            print("       %-4s n=%-3d vs absent n=%-3d %s   want %s   %s"
+                  % (nm, len(gp), len(wa), _fmt(c, se), want, v))
+    elif wp and not wa:
+        print("     present-absent contrast: n/a (no TWAP-absent episodes;")
+        print("       set TWAP_OFF>0 to make criterion 1 readable on a single-side run)")
+    elif not wp and (buy or sell):
+        print("     present-absent contrast: n/a (run predates")
+        print("       inv_level_window_clock -- absent episodes recorded no window level)")
     # Response against the PRE-TWAP baseline. The pooled out-of-window baseline
     # mixes (100,250] with [400,550], and the pre stretch is exactly where
     # front-running happens -- subtracting it subtracts the signal, so a policy

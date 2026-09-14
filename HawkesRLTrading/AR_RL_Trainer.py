@@ -591,6 +591,16 @@ for episode in range(START_EPISODE, N_EPISODES):
     inventory_with_twap_buy = []
     inventory_with_twap_sell = []
     inventory_without_twap = []
+    # The CLOCK window (twap_start, twap_end), recorded on EVERY episode --
+    # present or absent. `inventory_with_twap_*` is keyed on the meta-order
+    # actually being there, so it is empty on an absent episode and the
+    # (250,400) stretch has no window-level record at all. That makes the
+    # present-vs-absent contrast -- the only front-running measure available to
+    # a SINGLE-SIDE run -- impossible to compute. This list is the
+    # counterfactual arm of that contrast. On a present episode it holds
+    # exactly the same samples as `inventory_with_twap_*` (same bounds, same
+    # strict inequalities), which is asserted below.
+    inventory_window_clock = []
     inventory_pre_twap = []
     inventory_post_twap = []
     episode_times_rl = []
@@ -725,6 +735,10 @@ for episode in range(START_EPISODE, N_EPISODES):
                 # ordinary market-making time and must not be filed as
                 # "with TWAP", which would contaminate the very comparison this
                 # design exists to make.
+                if twap_end_time > Simstate['TimeCode'] > twap_start_time:
+                    # Clock window only -- no twap_present condition. See the
+                    # declaration above for why the counterfactual is needed.
+                    inventory_window_clock.append(observations["Inventory"])
                 if twap_present and (twap_end_time > Simstate['TimeCode'] > twap_start_time):
                     if twap_side == "sell":
                         inventory_with_twap_sell.append(observations["Inventory"])
@@ -868,6 +882,15 @@ for episode in range(START_EPISODE, N_EPISODES):
     # boundary has to be reconstructed from non-monotonic time downstream.
     _term_pnl = (finalcash2[-1] - j["cash"]) if len(finalcash2) else None
     _inw = inventory_with_twap_sell if twap_side == "sell" else inventory_with_twap_buy
+    # On a PRESENT episode the clock window and the with-TWAP window are the
+    # same samples by construction (identical bounds, identical strict
+    # inequalities). Assert it, so the counterfactual arm cannot silently drift
+    # away from the arm it is compared against.
+    if twap_present:
+        assert inventory_window_clock == _inw, (
+            "clock window (%d samples) and with-TWAP window (%d) diverged on a "
+            "present episode -- the present-vs-absent contrast would compare "
+            "two different windows" % (len(inventory_window_clock), len(_inw)))
     episode_metrics.append({
         "episode": episode,
         "twap_present": bool(twap_present),
@@ -883,6 +906,13 @@ for episode in range(START_EPISODE, N_EPISODES):
         "n_out_window": int(len(inventory_without_twap)),
         # PRE window (100, 250] -- the correct baseline for criterion 1. The
         # front-running response is inv_level_in_window - inv_level_pre_window.
+        # Present-vs-absent contrast: mean(window_clock | present)
+        # - mean(window_clock | absent). A per-run directional inventory bias
+        # is in BOTH arms, so it differences out -- which is what lets a
+        # single-side run be scored for front-running at all.
+        "inv_level_window_clock": (float(np.mean(inventory_window_clock))
+                                   if len(inventory_window_clock) else None),
+        "n_window_clock": int(len(inventory_window_clock)),
         "inv_level_pre_window": float(np.mean(inventory_pre_twap)) if len(inventory_pre_twap) else None,
         "n_pre_window": int(len(inventory_pre_twap)),
         "inv_level_post_window": float(np.mean(inventory_post_twap)) if len(inventory_post_twap) else None,
