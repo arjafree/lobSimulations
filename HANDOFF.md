@@ -91,6 +91,46 @@ long and short when it is short **in general, not inside a particular window**,
 `twap_side_mode="alternate"`; there is no variance in the variable, so nothing
 measured to date can support or refute it. Wave 1 creates that variance.
 
+## 0a-ii. REFUTED: side alternation was never the problem (2026-09-15)
+
+Wave 1 answered its question early, against the hypothesis. Three single-side
+`expApprox` arms, all `ACTION_SPACE_CONFIG=0` + `SYMMETRIC_MO_GATING=true`:
+
+| arm | wants | IN-WINDOW | BEFORE | n present |
+|---|---|---|---|---|
+| `s1_buy_f` | **positive** | **−4.85 ± 3.75** | −1.98 ± 2.82 | 50 |
+| `s1_sell_f` | negative | −5.65 ± 6.42 | −4.28 ± 4.16 | 15 |
+| `s1_sell_on_f` | negative | −2.84 ± 6.68 | −3.82 ± 4.50 | 17 |
+
+**The buy arm and the sell arms sit at the same inventory level.** If the agent
+responded to the meta-order's side at all, those rows would separate. They do
+not. `s1_buy_f` is wrong-signed and significant, and drifting further negative
+(first 20 present episodes −5.24, last 20 −7.83).
+
+§1b saw this side-independent short bias in ALTERNATING runs and blamed the
+alternation. These are single-side runs, so alternation cannot be the cause.
+**The schedule was never the problem.** §2c is refuted for a second time — first
+on mechanism (§0a), now on the variable itself.
+
+Two explanations are also ruled out:
+
+* **Not the exchange or the generator.** The `RL_DISABLED` controls read exactly
+  0.00 ± 0.00 on every inventory measure. The bias is in the agent.
+* **Not §3a** ("a buying TWAP lifts the agent's resting asks, so it ends short").
+  That predicts short on buy and LONG on sell. The sell arms are short too.
+
+**Leading candidate: the market-order gates.** Across every arm in the project
+the config-0 / `SYMMETRIC_MO_GATING=true` arms are the most short (−5 to −16)
+while config-1 / legacy-gating arms sit nearer zero (0 to −7). §3b documents the
+legacy gates as long-biased — they block selling while very long and never bound
+inventory from above — so making them symmetric removes a long bias that was
+masking this. `s1_sell_leg_f` (config 1, legacy gating, started 2026-09-15) is
+the free test.
+
+**Open, and now the central question: why is the agent always short?** It is not
+"how do we make it condition on the TWAP side". Nothing should be reconfigured
+on the strength of the n=15–17 sell arms; only `s1_buy_f` is solid.
+
 ## 0a-i. What was done on 2026-09-14
 
 * Stopped `dfx_bot_o`, `eg_bot_f`, `rw_b` (`ctl_f` had finished). 2.1 GB copied
