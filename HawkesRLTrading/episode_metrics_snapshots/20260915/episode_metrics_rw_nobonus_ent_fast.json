@@ -1,0 +1,35 @@
+{
+ "label": "rw_nobonus_ent_fast",
+ "exploration_bonus": 0.1,
+ "gae_lambda": 0.95,
+ "expApprox": true,
+ "action_bonus": 0.0,
+ "running_invpenalty": 0.0001,
+ "entropy_coef": 0.01,
+ "twap_on": 2,
+ "twap_off": 1,
+ "twap_side_mode": "alternate",
+ "seed_mode": "vary",
+ "seed_base": 1000,
+ "n_episodes_planned": 160,
+ "inventorylimit": 25,
+ "rewardpenalty": 5,
+ "episodes": [
+  {
+   "episode": 0,
+   "twap_present": true,
+   "side": "buy",
+   "seed": 1000,
+   "inv_level_in_window": 8.270886075949367,
+   "n_in_window": 790,
+   "inv_level_out_window": 7.576134244872591,
+   "n_out_window": 1609,
+   "inv_terminal": 12.0,
+   "terminal_pnl": 1.5599580000007336,
+   "twap_slippage_bps": 1.6302776984846157,
+   "twap_total_executed": 154.0,
+   "start_midprice": 99.975,
+   "episode_seconds": 378.7597625255585
+  }
+ ]
+}
