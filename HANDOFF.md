@@ -131,6 +131,71 @@ the free test.
 "how do we make it condition on the TWAP side". Nothing should be reconfigured
 on the strength of the n=15–17 sell arms; only `s1_buy_f` is solid.
 
+## 0a-iii. CORRECTION to §0a-ii — "short in every arm" is FALSE (2026-09-15)
+
+§0a-ii claimed a universal short bias. That is wrong, and an independent review
+caught it. Mean in-window inventory on TWAP-present episodes, all non-control
+arms with n >= 8:
+
+| arm | space | symMO | expApprox | mean | CI95 | n |
+|---|---|---|---|---|---|---|
+| `rw_bonus` | 1 | F | **F** | −12.54 | 7.61 | 13 |
+| `ps_legacy_space` | 1 | F | **F** | −12.41 | 4.74 | 24 |
+| `ps_all_scaled_fast` | 0 | T | T | −11.99 | 3.06 | 46 |
+| `eg_both_onoff_fast` | 1 | F | T | −7.01 | 3.94 | 46 |
+| `ps_full_fast` | 0 | T | T | −5.44 | 3.14 | 45 |
+| `ps_no_cem_fast` | 0 | T | T | −3.60 | 3.91 | 45 |
+| `ps_full_space` | 0 | T | **F** | **+1.43** | 6.72 | 12 |
+| `ps_all_scaled` | 0 | T | **F** | **+4.34** | 6.37 | 13 |
+| `eg_both_onoff` | 1 | F | **F** | **+9.35** | 7.66 | 15 |
+
+**Three arms are LONG.** `ps_no_cem_fast` swings +3.90 → −11.70 → +4.00 across
+training with no trend. The sign is per-run and non-stationary — a sticky,
+sign-arbitrary walk in policy space, not a directional pull. `s1_buy_f`'s block
+means (−1.31, −9.18, −7.30, −2.89, −11.42) have the same character, so reading
+its first-20 vs last-20 as a downward *trend* was over-reading.
+
+**But one pattern survives, and it is a hole in the wave-1 design.** All four
+`expApprox=True` arms are short, all well-powered (n=45–46). The normal-regime
+arms are mixed (3 long, 2 short). **All four wave-1 arms are `expApprox=True`**,
+so their short readings are confounded with regime, and there is no
+normal-regime single-side twin. That violates §0b's standing instruction —
+expApprox never alone. **Wave 1 needs normal-regime twins before its inventory
+signs mean anything.**
+
+### The MO-gating candidate is REFUTED, and carries a real defect
+
+`ICRLAgent.py:1680-1693`: `_mo_ask_blocked` returns True when `inv < 1` **first,
+in both modes**, so under `symmetric_mo_gating=True` the clause at `:1690`
+(`inv <= 2 - inventorylimit`) is **unreachable dead code**. `_mo_bid_blocked`
+(`:1695-1702`) has no mirror of the `inv < 1` clause. Net effect under
+"symmetric" gating: SELL MO allowed only if `inv >= 1`, BUY MO allowed for
+`inv <= 22` **including from any short**. That is **long**-biased — the opposite
+sign to what a short bias needs. The docstring at `:1689` calling it "mirror of
+the sell gate" is wrong. Empirically the two families interleave completely.
+
+### CONFIRMED and large: the cash floor is an absorbing barrier on the LONG side only
+
+`TradingAgent.py:282` truncates when `cash < 0` or `|inv| > inventorylimit` or
+`cash > cashlimit`. The RL agent starts with **cash 2500**, `cashlimit`
+5,000,000, `inventorylimit` 25, at a mid near 100.
+
+* **Long:** cash ≈ 2500 − 100·q reaches 0 at **q ≈ 25** — the cash floor bites at
+  exactly the inventory limit, and *earlier* whenever the agent has lost money.
+* **Short:** cash ≈ 2500 + 100·|q|; reaching `cashlimit` needs ≈ **50,000
+  shares, 2000× the inventory limit**. Unreachable.
+
+Truncation costs `penalty += 100` (`ICRLAgent.py:1721-1723`) in
+`deltaPNL + deltaInv - penalty` (`:1741`) → **−100**, against episode PnL of
+±0.2–0.5. **One truncation is 200–500× the episode's entire PnL signal**, and it
+can only ever fire on the long side. This is the leading directional mechanism.
+
+### Also corrected: the RL_DISABLED control proves nothing here
+
+§0a-ii cited the controls reading 0.00 ± 0.00 as ruling out the exchange. With
+`RL_DISABLED=true` the agent never trades, so that is 0 **by construction**. It
+tests nothing about the background flow's long/short balance.
+
 ## 0a-i. What was done on 2026-09-14
 
 * Stopped `dfx_bot_o`, `eg_bot_f`, `rw_b` (`ctl_f` had finished). 2.1 GB copied
