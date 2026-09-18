@@ -112,7 +112,7 @@ def test_trainer_still_uses_these_periods():
     import os
     src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
                             "AR_RL_Trainer.py")).read()
-    assert "if ((episode) % 4 == 0):" in src, "training period is no longer 4"
+    assert "if not EVAL_ONLY and ((episode) % 4 == 0):" in src, "training period is no longer 4"
     assert "bool((episode) % 8)" in src, "CEM period is no longer 8"
 
 

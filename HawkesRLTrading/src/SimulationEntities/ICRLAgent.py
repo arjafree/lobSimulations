@@ -1741,13 +1741,19 @@ class PPOAgent(GymTradingAgent):
                     penalty -= self.visit_counter.get_exploration_bonus(self._exploration_key_state(), self.last_action)
         return deltaPNL + deltaInv - penalty
 
-    def get_action(self, data, epsilon=0.1):
+    def get_action(self, data, epsilon=0.1, evaluation=False):
         """
         Get action using current policy with epsilon-greedy exploration
 
         :param data: Input trading data
         :param epsilon: Exploration probability
-        :return: Chosen action and its log probabilities
+        :return: Executed action, sampled (d, u), policy log probabilities, values.
+
+        Gating changes execution, not the sampled utility used by PPO. A blocked
+        proposal must retain its utility index: index 0 is a real quote action,
+        not a no-op sentinel. last_action retains the existing execution/shaping
+        convention. For d=0 the utility index is a placeholder and is masked out
+        of the utility actor loss.
         """
         # Reset per-episode TWAP-phase tracker at episode start
         if self.last_state is None:
@@ -1757,6 +1763,23 @@ class PPOAgent(GymTradingAgent):
             self.Actor_Critic_d.reset_hidden_state(batch_size=1)
             self.Actor_Critic_u.reset_hidden_state(batch_size=1)
 
+        on_policy = getattr(self, 'on_policy', False)
+        self._behavior_epsilon = (0.0 if evaluation else
+            (1.0 if getattr(self, '_on_policy_steps', 0) < 10 else epsilon)) if on_policy else 0.0
+        if on_policy:
+            from HawkesRLTrading.src.Utils.on_policy import mixture_log_probs
+            self._on_policy_steps = getattr(self, '_on_policy_steps', 0) + 1
+            if self.breach:
+                # Forced liquidation is actor-masked, but retains reward and
+                # recurrent/critic context in the rollout.
+                state = self.readData(data)
+                self.last_state = state
+                with torch.no_grad():
+                    _, value_d = self.Actor_Critic_d(state)
+                    _, value_u = self.Actor_Critic_u(state)
+                mo = 4 if self.countInventory() > 0 else 7
+                return mo, (None, None), 0, 0, value_d.item(), value_u.item()
+
         if self.action_space_config <2:
             if self.breach:
                 mo = 4 if self.countInventory() > 0 else 7
@@ -1765,7 +1788,7 @@ class PPOAgent(GymTradingAgent):
             state = self.readData(data)
             self.last_state = state
             # Exploration
-            if (random.random() < epsilon) or (len(self.trajectory_buffer) < 10):
+            if not on_policy and not evaluation and ((random.random() < epsilon) or (len(self.trajectory_buffer) < 10)):
                 # Random decision
                 d = random.randint(0, 1)
                 u = random.randint(0, len(self.allowed_actions) - 1)
@@ -1780,28 +1803,34 @@ class PPOAgent(GymTradingAgent):
                     d_log_prob = torch.log_softmax(d_logits, dim=1)[0, d]
                     u_log_prob = torch.log_softmax(u_logits, dim=1)[0, _u]
 
+                # Both branches implement the same hierarchical decision: d=0
+                # submits no order. Still forward both LSTMs above on every step.
+                if d == 0:
+                    self.last_action = 12
+                    return 12, (d, 0), d_log_prob.item(), 0, d_value.item(), 0
+
                 # Validation checks (similar to original implementation)
                 if int(u) in [1, 3, 8, 10]:  # cancels
                     a = self.actions[int(u)]
                     lvl = self.actionsToLevels[a]
                     if len(origData['Positions'][lvl]) == 0:  # no position to cancel
                         self.last_action = 12
-                        return 12, (d, 0), d_log_prob.item(), 0, d_value.item(), 0
+                        return 12, (d, _u), d_log_prob.item(), u_log_prob.item(), d_value.item(), u_value.item()
 
                 if int(u) in [5, 6]:
                     p_a, q_a = origData['LOB0']['Ask_L1']
                     p_b, q_b = origData['LOB0']['Bid_L1']
                     if p_a - p_b < 0.015:  # reject if inspread not possible
                         self.last_action = 12
-                        return 12, (d, 0), d_log_prob.item(), 0, d_value.item(), 0
+                        return 12, (d, _u), d_log_prob.item(), u_log_prob.item(), d_value.item(), u_value.item()
 
                 if (int(u) == 4) and self._mo_ask_blocked(exploration=True):  # ask mo -> since it hits the bid
                     self.last_action = 12
-                    return 12, (d, 0), d_log_prob.item(), 0, d_value.item(), 0
+                    return 12, (d, _u), d_log_prob.item(), u_log_prob.item(), d_value.item(), u_value.item()
 
                 if (int(u) == 7) and self._mo_bid_blocked(exploration=True):  # bid mo
                     self.last_action = 12
-                    return 12, (d, 0), d_log_prob.item(), 0, d_value.item(), 0
+                    return 12, (d, _u), d_log_prob.item(), u_log_prob.item(), d_value.item(), u_value.item()
 
                 self.last_action = u
                 return u, (d, _u), d_log_prob.item(), u_log_prob.item(), d_value.item(), u_value.item()
@@ -1810,7 +1839,7 @@ class PPOAgent(GymTradingAgent):
             with torch.no_grad():
                 # Decision network
                 d_logits, d_value = self.Actor_Critic_d(state)
-                d_probs = torch.softmax(d_logits, dim=1).squeeze()
+                d_probs = (mixture_log_probs(d_logits, self._behavior_epsilon).exp() if on_policy else torch.softmax(d_logits, dim=1)).squeeze()
                 d = torch.multinomial(d_probs, 1).item()
                 d_log_prob = torch.log(d_probs[d])
 
@@ -1819,7 +1848,7 @@ class PPOAgent(GymTradingAgent):
                 # u-LSTM on every stored state regardless of d, so rollout must do the same
                 # to keep `u_log_probs_old` valid as a PPO importance-sampling baseline.
                 u_logits, u_value = self.Actor_Critic_u(state)
-                u_probs = torch.softmax(u_logits, dim=1).squeeze()
+                u_probs = (mixture_log_probs(u_logits, self._behavior_epsilon).exp() if on_policy else torch.softmax(u_logits, dim=1)).squeeze()
 
                 # If no decision to act (d=0)
                 if d == 0:
@@ -1843,22 +1872,22 @@ class PPOAgent(GymTradingAgent):
                     lvl = self.actionsToLevels[a]
                     if len(origData['Positions'][lvl]) == 0:  # no position to cancel
                         self.last_action = 12
-                        return 12, (d, 0), d_log_prob.item(), 0, d_value.item(), 0
+                        return 12, (d, _u), d_log_prob.item(), u_log_prob.item(), d_value.item(), u_value.item()
 
                 if int(u) in [5, 6]:
                     p_a, q_a = origData['LOB0']['Ask_L1']
                     p_b, q_b = origData['LOB0']['Bid_L1']
                     if p_a - p_b < 0.015:  # reject if inspread not possible
                         self.last_action = 12
-                        return 12, (d, 0), d_log_prob.item(), 0, d_value.item(), 0
+                        return 12, (d, _u), d_log_prob.item(), u_log_prob.item(), d_value.item(), u_value.item()
 
                 if (int(u) == 4) and self._mo_ask_blocked():  # ask mo -> hits the bid
                     self.last_action = 12
-                    return 12, (d, 0), d_log_prob.item(), 0, d_value.item(), 0
+                    return 12, (d, _u), d_log_prob.item(), u_log_prob.item(), d_value.item(), u_value.item()
 
                 if (int(u)==7) and self._mo_bid_blocked(): # bid mo
                     self.last_action = 12
-                    return 12, (d, 0), d_log_prob.item(), 0, d_value.item(), 0
+                    return 12, (d, _u), d_log_prob.item(), u_log_prob.item(), d_value.item(), u_value.item()
 
                 self.last_action = u
                 return u, (d, _u), d_log_prob.item(), u_log_prob.item(), d_value.item(), u_value.item()
@@ -1880,7 +1909,7 @@ class PPOAgent(GymTradingAgent):
             }
 
             # Exploration
-            if (random.random() < epsilon) or (len(self.trajectory_buffer) < 10):
+            if not on_policy and not evaluation and ((random.random() < epsilon) or (len(self.trajectory_buffer) < 10)):
                 d = random.randint(0, 1)
                 u = random.randint(0, 2)  # because u in {0, 1, 2}
 
@@ -1903,20 +1932,20 @@ class PPOAgent(GymTradingAgent):
                     lvl = self.actionsToLevels[a]
                     if len(origData['Positions'][lvl]) == 0:  # no position to cancel
                         self.last_action = 12
-                        return ((12,1),lo), (d, 0), d_log_prob.item(), 0, d_value.item(), 0
+                        return ((12,1),lo), (d, u), d_log_prob.item(), u_log_prob.item(), d_value.item(), u_value.item()
                 return action, (d, u), d_log_prob.item(), u_log_prob.item(), d_value.item(), u_value.item()
 
             # Exploitation
             with torch.no_grad():
                 d_logits, d_value = self.Actor_Critic_d(state)
-                d_probs = torch.softmax(d_logits, dim=1).squeeze()
+                d_probs = (mixture_log_probs(d_logits, self._behavior_epsilon).exp() if on_policy else torch.softmax(d_logits, dim=1)).squeeze()
                 d = torch.multinomial(d_probs, 1).item()
                 d_log_prob = torch.log(d_probs[d])
 
                 # Always forward u-network so its LSTM hidden state stays in sync with
                 # training Phase A (which sees every state regardless of d).
                 u_logits, u_value = self.Actor_Critic_u(state)
-                u_probs = torch.softmax(u_logits, dim=1).squeeze()
+                u_probs = (mixture_log_probs(u_logits, self._behavior_epsilon).exp() if on_policy else torch.softmax(u_logits, dim=1)).squeeze()
 
                 if d == 0:
                     self.last_action = 12
@@ -1934,10 +1963,10 @@ class PPOAgent(GymTradingAgent):
                 lvl = self.actionsToLevels[a]
                 if len(origData['Positions'][lvl]) == 0:  # no position to cancel
                     self.last_action = 12
-                    return ((12,1),lo), (d, 0), d_log_prob.item(), 0, d_value.item(), 0
+                    return ((12,1),lo), (d, u), d_log_prob.item(), u_log_prob.item(), d_value.item(), u_value.item()
             return action, (d, u), d_log_prob.item(), u_log_prob.item(), d_value.item(), u_value.item()
 
-    def store_transition(self, ep, state, action, reward, next_state, done):
+    def store_transition(self, ep, state, action, reward, next_state, done, rollout=None):
         """
         Store transition in trajectory buffer
 
@@ -1949,7 +1978,15 @@ class PPOAgent(GymTradingAgent):
         """
         # Unpack action components
         d, u = action
-        if d is None: return
+        on_policy = getattr(self, 'on_policy', False)
+        actor_valid = d is not None
+        if d is None and not on_policy: return
+        if on_policy:
+            if rollout is None:
+                raise ValueError('On-policy transitions require rollout likelihood/value')
+            d, u = (d, u) if actor_valid else (0, 0)
+            state = state.detach().clone()
+            next_state = next_state.detach().clone()
         # Store additional trajectory information
         transition = (
             state,       # Current state
@@ -1959,6 +1996,11 @@ class PPOAgent(GymTradingAgent):
             next_state,  # Next state
             int(done)         # Done flag
         )
+        if on_policy:
+            self._on_policy_last_account = (self.cash, self.countInventory(), self.mid)
+            transition += ({'actor': actor_valid, 'epsilon': self._behavior_epsilon,
+                            'log_prob': float(rollout[2] + (rollout[3] if d == 1 else 0)),
+                            'value': float(rollout[4])},)
         self.trajectory_buffer.append((ep, transition))
         side = getattr(self, 'TWAPPresent', 0)
         # Keep any nonzero side once seen — TWAPPresent flips 0→±1→0 across an episode
@@ -2028,6 +2070,11 @@ class PPOAgent(GymTradingAgent):
         if len(self.trajectory_buffer) < 2:
             return
 
+        if getattr(self, 'on_policy', False):
+            if use_CEM or self.typeNN != 'LSTM':
+                raise ValueError('Fresh PPO requires recurrent mode and CEM disabled')
+            from HawkesRLTrading.src.Utils.on_policy import train_fresh
+            return train_fresh(self, train_logger)
         if self.typeNN == "LSTM":
             self._train_lstm(train_logger, use_CEM)
         else:

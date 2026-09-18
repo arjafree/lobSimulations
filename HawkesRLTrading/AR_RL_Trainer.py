@@ -9,6 +9,7 @@ sys.path.append(os.path.abspath('/home/ajafree/lobSimulations'))
 # sys.path.append(os.path.abspath('/Users/alirazajafree/Documents/GitHub/lobSimulations1'))
 from HawkesRLTrading.src.Envs.HawkesRLTradingEnv import *
 from HawkesRLTrading.src.SimulationEntities.MetaOrderTradingAgents import TWAPGymTradingAgent
+from HawkesRLTrading.src.Utils.action_flow import ActionFlowAudit
 
 import torch
 import time
@@ -53,6 +54,18 @@ SEED_BASE = int(os.environ.get("SEED_BASE", 1000))
 # Number of training episodes; env-overridable so a short smoke run can
 # validate a new config before committing a multi-day job to it.
 N_EPISODES = int(os.environ.get("N_EPISODES", 80))
+ON_POLICY_PPO = os.environ.get("ON_POLICY_PPO", "false").lower() == "true"
+# Explicit frozen evaluation uses this same market/agent construction.
+EVAL_ONLY = os.environ.get("EVAL_ONLY", "false").lower() == "true"
+EVAL_CHECKPOINT = os.environ.get("EVAL_CHECKPOINT")
+EVAL_PRESENCE = os.environ.get("EVAL_PRESENCE", "present")
+eval_checkpoint_info = None
+if EVAL_ONLY:
+    assert EVAL_PRESENCE in ("present", "absent")
+    assert not os.environ.get("RESUME_EPOCH"), "Evaluation is not training resume"
+    assert int(os.environ.get("START_EPISODE", 0)) == 0
+elif EVAL_CHECKPOINT:
+    raise ValueError("EVAL_CHECKPOINT requires EVAL_ONLY=true")
 
 # --- Arm parameters. Previously hardcoded, which is how all six of the
 # 2026-09-07 runs silently launched on the gae_lambda arm (exploration_bonus=0)
@@ -284,7 +297,7 @@ eta = 5
 checkpoint_params = None if RESUME_EPOCH is None else (RESUME_TIMESTAMP, RESUME_EPOCH)
 
 def graphInventories(beforetwap, withtwap_buy, withtwap_sell, episode_num,
-                     live=False, simulation_time=None):
+                     live=False, simulation_time=None, single_episode=False):
     """Cumulative observations; episode N is not an evaluation of checkpoint N.
 
     The trainer saves checkpoint N after that episode's training update.
@@ -339,7 +352,7 @@ def graphInventories(beforetwap, withtwap_buy, withtwap_sell, episode_num,
     
     plt.xlabel('RL Agent Inventory')
     plt.ylabel('Proportion') 
-    progress = f'Through episode {episode_num}'
+    progress = f'Episode {episode_num} only' if single_episode else f'Through episode {episode_num}'
     if simulation_time is not None:
         progress += f' (partial, simulation t={simulation_time:.1f}s)'
     plt.title('RL Agent Inventory Distributions — ' + progress)
@@ -348,6 +361,9 @@ def graphInventories(beforetwap, withtwap_buy, withtwap_sell, episode_num,
     plt.tight_layout()
     path = (os.path.join(log_dir, label + '_all_inventory_distributions_live.png')
             if live else log_dir + label + f'_all_inventory_distributions_episode_{episode_num}.png')
+    if single_episode:
+        path = os.path.join(log_dir, label + ('_inventory_current_live.png' if live
+                              else f'_inventory_single_episode_{episode_num}.png'))
     # Readers copying the live image must never see a half-written PNG.
     temporary = None
     try:
@@ -500,11 +516,20 @@ RLagentInstance = AdversarialPPOAgent( seed=1, log_events=True, log_to_file=True
                           action_bonus=ACTION_BONUS, running_invpenalty=RUNNING_INVPENALTY,
                           symmetric_mo_gating=SYMMETRIC_MO_GATING, cem_elite_floor=CEM_ELITE_FLOOR, cem_n_elites=CEM_N_ELITES)
 
+RLagentInstance.on_policy = ON_POLICY_PPO
+RLagentInstance.on_policy_epochs = int(os.environ.get('ON_POLICY_EPOCHS', 4))
+RLagentInstance.on_policy_target_kl = float(os.environ.get('ON_POLICY_TARGET_KL', .02))
+if ON_POLICY_PPO:
+    assert not USE_CEM, 'On-policy arm explicitly disables CEM imitation'
+    assert ACTION_SPACE_CONFIG in (0, 1), 'On-policy pilot uses scalar actions'
+
 # Config banner. The six 2026-09-07 runs could not be told apart from their .o
 # files because nothing recorded which arm they were on; this makes every job
 # self-documenting.
 print("=" * 72, flush=True)
 print("RUN CONFIG", flush=True)
+print(f"  ON_POLICY_PPO     = {ON_POLICY_PPO}; epochs={RLagentInstance.on_policy_epochs}; target_kl={RLagentInstance.on_policy_target_kl}", flush=True)
+print(f"  MODEL_SEED        = {os.environ.get('MODEL_SEED')}", flush=True)
 print(f"  label              = {label}", flush=True)
 print(f"  log_dir            = {log_dir}", flush=True)
 print(f"  model_dir          = {model_dir}", flush=True)
@@ -611,6 +636,16 @@ def _save_episode_metrics():
     import json
     with open(log_dir + "episode_metrics_" + label + ".json", "w") as fh:
         json.dump({"label": label,
+                   "model_seed": os.environ.get("MODEL_SEED"),
+                   "on_policy_ppo": ON_POLICY_PPO,
+                   "eval_only": EVAL_ONLY,
+                   "eval_presence": EVAL_PRESENCE if EVAL_ONLY else None,
+                   "eval_checkpoint": eval_checkpoint_info,
+                   "twap_order_size": TWAP_ORDER_SIZE,
+                   "twap_duration": TWAP_DURATION,
+                   "twap_window_size": TWAP_WINDOW_SIZE,
+                   "twap_action_freq": TWAP_ACTION_FREQ,
+                   "stop_time": STOP_TIME,
                    "exploration_bonus": EXPLORATION_BONUS,
                    "gae_lambda": GAE_LAMBDA,
                    "expApprox": EXP_APPROX,
@@ -673,6 +708,7 @@ for episode in range(START_EPISODE, N_EPISODES):
     inventory_post_twap = []
     episode_times_rl = []
     episode_invs_rl = []
+    action_flow = ActionFlowAudit()
 
     RL_agent_obsv = []
     TWAP_agent_obsv = []
@@ -684,7 +720,7 @@ for episode in range(START_EPISODE, N_EPISODES):
     kwargs["GymTradingAgent"][1]["cash"] = 1000000
 
     # Is the TWAP meta-order present at all this episode?
-    twap_present = (episode % (TWAP_ON + TWAP_OFF)) < TWAP_ON
+    twap_present = (EVAL_PRESENCE == "present") if EVAL_ONLY else (episode % (TWAP_ON + TWAP_OFF)) < TWAP_ON
     if TWAP_SIDE_MODE == "alternate":
         # Indexed by how many TWAP-present episodes have already run, so the
         # buy/sell split stays exact regardless of the presence cycle.
@@ -711,6 +747,11 @@ for episode in range(START_EPISODE, N_EPISODES):
     episode_seed = (SEED_BASE + episode) if SEED_MODE == "vary" else 1
     episode_seeds.append(episode_seed)
     env=tradingEnv(stop_time=STOP_TIME, wall_time_limit=23400, seed=episode_seed, **kwargs)
+    if EVAL_ONLY:
+        # Reproducible policy sampling per held-out seed, independent of task order.
+        torch.manual_seed(episode_seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(episode_seed)
     print(f"Start of episode {episode}. TWAP present: {twap_present}, side: "
           f"{twap_side if twap_present else 'none'}, seed: {episode_seed}")
     print("Initial Observations"+ str(env.getobservations()))
@@ -719,9 +760,16 @@ for episode in range(START_EPISODE, N_EPISODES):
     agents:List[GymTradingAgent] = [env.getAgent(ID=agentid) for agentid in AgentsIDs]
     observationsDict:Dict[int, Dict] = {agentid: {"Inventory": agent.Inventory, "Positions": []} for agent, agentid in zip(agents, AgentsIDs)}
     if episode == START_EPISODE:
+        if not EVAL_ONLY and os.environ.get('MODEL_SEED'):
+            torch.manual_seed(int(os.environ['MODEL_SEED']))
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(int(os.environ['MODEL_SEED']))
         for agent in agents:
             if isinstance(agent, PPOAgent):
                 agent.setupNNs(observations)
+        if EVAL_ONLY and not RL_DISABLED:
+            from HawkesRLTrading.src.Utils.frozen_eval import load_frozen_checkpoint
+            eval_checkpoint_info = load_frozen_checkpoint(RLagentInstance, EVAL_CHECKPOINT)
         if checkpoint_params is not None:
             loaded_models = model_manager.load_models(timestamp=checkpoint_params[0], epoch = checkpoint_params[1], d = agent.Actor_Critic_d, u = agent.Actor_Critic_u)
             # Fail loudly. A missing checkpoint used to surface as
@@ -783,19 +831,26 @@ for episode in range(START_EPISODE, N_EPISODES):
                 print(f"Twap present: {RLagentInstance.TWAPPresent}")
                 action_num+=1
                 RLagentID = agent.id
+                action_time_rl = Simstate["TimeCode"]
+                inventory_before_rl = agent.countInventory()
                 if RL_DISABLED:
                     # Control arm: no policy call at all (see RL_DISABLED above).
                     agentAction = (12, (0, 0), 0, 0, 0, 0)
                     state_at_action = None
                     action = (agent.id, (12, 1))
                 else:
-                    agentAction:Tuple[int, int] = agent.get_action(data=env.getobservations(agentID=agent.id), epsilon = 0.5 if i_eps < 100 else 0.1)
+                    agentAction:Tuple[int, int] = agent.get_action(data=env.getobservations(agentID=agent.id), epsilon = 0.5 if i_eps < 100 else 0.1, evaluation=EVAL_ONLY)
                     # Snapshot the state the action was actually chosen from (set inside get_action).
                     # Using this instead of prev_readData ensures the stored (s, a) pair is aligned —
                     # critical when other agents (TWAP) act between RL steps and shift env state.
                     state_at_action = agent.last_state.clone() if agent.last_state is not None else None
                     action = (agent.id, (agentAction[0],1))
                 Simstate, observations, termination, truncation=env.step(action=action) #do not try and use this data before this line in the loop
+                action_flow.record(
+                    agentAction, action_time=action_time_rl, twap_present=twap_present,
+                    twap_start=twap_start_time, twap_end=twap_end_time,
+                    inventory_before=inventory_before_rl,
+                    inventory_after=observations["Inventory"], disabled=RL_DISABLED)
                 episode_times_rl.append(Simstate['TimeCode'])
                 episode_invs_rl.append(observations["Inventory"])
                 # Key on ACTUAL TWAP presence, not just the clock window: on a
@@ -833,6 +888,11 @@ for episode in range(START_EPISODE, N_EPISODES):
                         withtwap_buy=inventories_with_twap_buy + [inventory_with_twap_buy],
                         withtwap_sell=inventories_with_twap_sell + [inventory_with_twap_sell],
                         episode_num=episode, live=True, simulation_time=Simstate['TimeCode'])
+                    graphInventories(beforetwap=[inventory_without_twap],
+                                     withtwap_buy=[inventory_with_twap_buy],
+                                     withtwap_sell=[inventory_with_twap_sell],
+                                     episode_num=episode, live=True,
+                                     simulation_time=Simstate['TimeCode'], single_episode=True)
                     last_live_dist_plot = time.monotonic()
                 observationsDict.update({agent.id:observations})
                 logger.debug(f"\n Agent: {agent.id}\n Simstate: {Simstate}\nObservations: {observations}\nTermination: {termination}\nTruncation: {truncation}")
@@ -845,7 +905,7 @@ for episode in range(START_EPISODE, N_EPISODES):
                 t += [Simstate['TimeCode']]
                 current_readData = agent.readData(observations)
                 if state_at_action is not None:
-                    agent.store_transition(episode, state_at_action, agentAction[1], agent.calculaterewards(termination), current_readData, (termination or truncation))
+                    agent.store_transition(episode, state_at_action, agentAction[1], agent.calculaterewards(termination), current_readData, (termination or truncation), rollout=agentAction)
                 print(f'Current reward: {agent.calculaterewards(termination):0.4f}')
                 # print(f'Prev avg reward: {np.mean([r[2] for r in agent.experience_replay[-100:]]):0.4f}')
                 i_eps+=1
@@ -932,6 +992,10 @@ for episode in range(START_EPISODE, N_EPISODES):
             print(agent.current_time)
             print(f"ACTION DONE{action_num}")
     
+    if ON_POLICY_PPO and not EVAL_ONLY and not RL_DISABLED:
+        from HawkesRLTrading.src.Utils.on_policy import finalize_episode
+        tail_reward = finalize_episode(RLagentInstance, episode, termination)
+        print('TERMINAL REWARD TAIL', tail_reward, flush=True)
     total_RL_obsv.append(RL_agent_obsv)
 
     if len(inventory_with_twap_buy) > 0:
@@ -951,6 +1015,10 @@ for episode in range(START_EPISODE, N_EPISODES):
                          withtwap_sell=inventories_with_twap_sell,
                          beforetwap=inventories_without_twap,
                          episode_num=episode)
+        graphInventories(beforetwap=[inventory_without_twap],
+                         withtwap_buy=[inventory_with_twap_buy],
+                         withtwap_sell=[inventory_with_twap_sell],
+                         episode_num=episode, single_episode=True)
 
     if LIVE_DIST_PLOT_SECONDS:
         graphInventories(beforetwap=inventories_without_twap,
@@ -1030,6 +1098,7 @@ for episode in range(START_EPISODE, N_EPISODES):
         "twap_total_executed": float(total_executed) if twap_present else None,
         "start_midprice": float(starting_midprice) if starting_midprice else None,
         "episode_seconds": None,
+        "action_flow": action_flow.snapshot(),
     })
 
     if termination:
@@ -1044,7 +1113,7 @@ for episode in range(START_EPISODE, N_EPISODES):
         episode_metrics[-1]["episode_seconds"] = float(episode_total_time)
     _save_episode_metrics()
 
-    if ((episode) % 4 == 0):
+    if not EVAL_ONLY and ((episode) % 4 == 0):
         if (not RL_DISABLED) and ('test' not in label) and ((checkpoint_params is None) or (episode >= 0)):
             for epoch in range(1):
                 start_time = time.time()
@@ -1152,3 +1221,7 @@ np.save(log_dir + "slippages_"+_out+"total_executed.npy", np.array(total_execute
 np.save(log_dir + "slippages_"+_out+"final_cash.npy", np.array(final_cashs))
 np.save(log_dir + "slippages_"+_out+"start_midprice.npy", np.array(start_midprices, dtype=float))
 np.save(log_dir+_out+"RL_observations.npy", np.array(total_RL_obsv, dtype=object), allow_pickle=True)
+
+if EVAL_ONLY and not RL_DISABLED:
+    from HawkesRLTrading.src.Utils.frozen_eval import assert_frozen
+    assert_frozen(RLagentInstance, eval_checkpoint_info)
