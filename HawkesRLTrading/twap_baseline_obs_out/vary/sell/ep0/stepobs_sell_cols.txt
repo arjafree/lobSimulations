@@ -1,1 +1,0 @@
-t,bid,ask,bidQ,askQ,bidQ_L2,askQ_L2,cash,inventory,action,n_own_bids,n_own_asks
