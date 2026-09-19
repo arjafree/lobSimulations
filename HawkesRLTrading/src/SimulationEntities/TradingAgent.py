@@ -211,6 +211,8 @@ class TradingAgent(Entity):
             #update agent state
             order=message.order
             if isinstance(order, MarketOrder):
+                if order.size < 0:
+                    raise ValueError(f"Negative market execution quantity for order {order.order_id}: {order.size}")
                 if order.side=="Ask":
                     self.cash+=order.total_value
                     self.Inventory[order.symbol]-=order.size
